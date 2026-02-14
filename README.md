@@ -101,7 +101,7 @@ sudo bash deploy-interactive.sh
 
 **¡Todo de forma segura sin sobreescribir tu configuración actual!**
 
-### Opción alternativa: Script automatizado básico
+### Opción alternativa: Script básico (sin configurar Apache)
 
 ```bash
 # En tu servidor (SSH)
@@ -111,16 +111,19 @@ cd lemr-meteo
 sudo bash install-production.sh
 ```
 
-El script instalará automáticamente:
-- Dependencias del sistema (Python, Apache)
-- Entorno virtual y dependencias Python
-- Servicio systemd
-- Configurará permisos
+**Solo instala la aplicación**, NO configura Apache automáticamente:
+- ✅ Instala dependencias (Python, Apache, Gunicorn)
+- ✅ Crea entorno virtual
+- ✅ Instala servicio systemd
+- ✅ Configura permisos
+- ❌ **NO configura Apache** (lo haces tú manualmente)
 
-Después solo necesitas:
+Después necesitas:
 1. Editar el archivo `.env` con tus credenciales
-2. Configurar Apache VirtualHost manualmente (ver ejemplos abajo)
+2. **Configurar Apache VirtualHost MANUALMENTE** (ver ejemplos abajo)
 3. Iniciar el servicio: `sudo systemctl start lemr-meteo`
+
+> 💡 **Recomendación:** Usa mejor `deploy-interactive.sh` que lo hace todo automáticamente.
 
 ### Instalación manual (paso a paso)
 
