@@ -7,7 +7,8 @@ Type=simple
 User=www-data
 WorkingDirectory=/var/www/lemr-meteo
 Environment="PATH=/var/www/lemr-meteo/venv/bin"
-ExecStart=/var/www/lemr-meteo/venv/bin/python web_app.py
+EnvironmentFile=/var/www/lemr-meteo/.env
+ExecStart=/var/www/lemr-meteo/venv/bin/gunicorn --workers 2 --bind ${WEB_HOST}:${WEB_PORT} --timeout 120 --access-logfile - --error-logfile - web_app:app
 Restart=always
 RestartSec=10
 

@@ -20,9 +20,11 @@ GITHUB_TOKEN=tu_token_github
 AI_MODEL=gpt-4o
 AI_FALLBACK_MODEL=gpt-4o-mini
 WEB_HOST=127.0.0.1
-WEB_PORT=8000
+WEB_PORT=8000  # Para desarrollo local
 AEMET_API_KEY=tu_aemet_key  # Recomendado (gratis en opendata.aemet.es)
 ```
+
+> 💡 **Nota:** Puerto 8000 para desarrollo. En producción se usa 8001.
 
 ## 🔐 Seguridad de tokens
 

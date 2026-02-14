@@ -40,8 +40,10 @@ GITHUB_TOKEN=tu_token
 AI_MODEL=gpt-4o
 AI_FALLBACK_MODEL=gpt-4o-mini
 WEB_HOST=127.0.0.1
-WEB_PORT=8000
+WEB_PORT=8000  # Para desarrollo local
 ```
+
+> 💡 **Nota:** El puerto 8000 es para desarrollo local. En producción se usa 8001 por defecto.
 
 **Muy recomendado** (gratis en https://opendata.aemet.es):
 

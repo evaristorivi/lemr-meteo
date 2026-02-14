@@ -284,7 +284,10 @@ echo "📦 Instalando dependencias Python..."
 pip install --upgrade pip >/dev/null 2>&1
 pip install -r requirements.txt >/dev/null 2>&1
 
-echo -e "${GREEN}✓ Aplicación instalada${NC}"
+echo "🚀 Instalando Gunicorn (servidor de producción)..."
+pip install gunicorn==21.2.0 >/dev/null 2>&1
+
+echo -e "${GREEN}✓ Aplicación instalada con Gunicorn${NC}"
 
 # ============================================
 # PASO 4: Configurar credenciales
@@ -356,18 +359,20 @@ echo -e "${BLUE}│  Paso 5: Configurando servicio        │${NC}"
 echo -e "${BLUE}└────────────────────────────────────────┘${NC}"
 echo ""
 
-# Actualizar puerto en el archivo de servicio si es necesario
-if [ ! -f "/etc/systemd/system/lemr-meteo.service" ] || ! systemctl is-enabled lemr-meteo >/dev/null 2>&1; then
+# Actualizar el archivo de servicio systemd
+if [ ! -f "/etc/systemd/system/lemr-meteo.service" ]; then
     echo "⚙️ Instalando servicio systemd..."
     cp "$INSTALL_DIR/lemr-meteo.service" /etc/systemd/system/
     systemctl daemon-reload
     systemctl enable lemr-meteo >/dev/null 2>&1
     echo -e "${GREEN}✓ Servicio configurado${NC}"
 else
-    echo "✓ Servicio ya existe"
+    echo "⚙️ Actualizando servicio systemd..."
+    cp "$INSTALL_DIR/lemr-meteo.service" /etc/systemd/system/
+    systemctl daemon-reload
+    echo -e "${GREEN}✓ Servicio actualizado${NC}"
     
     if ask_yes_no "¿Reiniciar el servicio con la nueva configuración?" "y"; then
-        systemctl daemon-reload
         systemctl restart lemr-meteo
     fi
 fi
@@ -508,7 +513,8 @@ echo "  📁 Directorio: $INSTALL_DIR"
 echo "  🌐 Tipo: $([ "$INSTALL_TYPE" = "subdomain" ] && echo "Subdominio" || echo "Subdirectorio")"
 echo "  🔗 URL: http://$SITE_NAME$PATH_PREFIX"
 echo "  🔌 Puerto interno: $SERVICE_PORT"
-echo "  ⚙️  Servicio: lemr-meteo"
+echo "  ⚙️  Servicio: lemr-meteo (Gunicorn)"
+echo "  🚀 Servidor: Gunicorn con 2 workers"
 
 if [ -d "$BACKUP_DIR" ]; then
     echo "  💾 Backups: $BACKUP_DIR"
@@ -533,6 +539,8 @@ if [ "$APACHE_STATUS" = "active" ]; then
 else
     echo -e "  ❌ Apache: ${RED}$APACHE_STATUS${NC}"
 fi
+
+echo -e "  ℹ️  Servidor: Gunicorn (producción-ready, sin warnings)"
 
 echo ""
 echo -e "${BLUE}📝 Próximos pasos:${NC}"

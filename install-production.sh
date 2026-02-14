@@ -53,6 +53,9 @@ echo "📦 Instalando dependencias Python..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
+echo "📦 Instalando Gunicorn (servidor de producción)..."
+pip install gunicorn==21.2.0
+
 # Paso 5: Configurar .env si no existe
 if [ ! -f "$INSTALL_DIR/.env" ]; then
     echo "⚙️ Creando archivo .env..."
@@ -90,7 +93,8 @@ echo "   2. Inicia el servicio: sudo systemctl start lemr-meteo"
 echo "   3. Verifica el estado: sudo systemctl status lemr-meteo"
 echo "   4. Configura Apache VirtualHost (ver README.md)"
 echo "   5. Instala SSL: sudo certbot --apache -d tudominio.com"
-echo ""
-echo "📚 Consulta el README.md para la configuración de Apache"
+echo ""echo "📡 Nota: El servicio usa Gunicorn (servidor de producción) automáticamente"
+echo "      Ya no verás warnings sobre 'development server'"
+echo ""echo "📚 Consulta el README.md para la configuración de Apache"
 echo "   Ver ejemplo en: $INSTALL_DIR/apache-vhost.example.conf"
 echo ""
