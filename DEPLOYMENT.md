@@ -23,6 +23,8 @@ cd lemr-meteo
 sudo bash deploy-interactive.sh
 ```
 
+> 💡 **Nota:** El script detecta automáticamente si ya estás en `/var/www/lemr-meteo` (recomendado) o si necesita copiar archivos desde otra ubicación. Si ejecutas una actualización y el directorio ya existe, te dará opciones claras.
+
 **El script interactivo te preguntará todo** y configurará automáticamente:
 - ✅ Te pregunta el tipo de instalación (subdominio o subdirectorio)
 - ✅ Te pregunta el dominio/subdominio

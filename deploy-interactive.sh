@@ -83,8 +83,19 @@ check_apache_site() {
 make_backup() {
     local file=$1
     mkdir -p "$BACKUP_DIR"
-    cp "$file" "$BACKUP_DIR/"
-    echo -e "${GREEN}✓ Backup guardado: $BACKUP_DIR/$(basename $file)${NC}"
+    
+    if [ -d "$file" ]; then
+        # Es un directorio
+        cp -r "$file" "$BACKUP_DIR/"
+        echo -e "${GREEN}✓ Backup guardado: $BACKUP_DIR/$(basename $file)${NC}"
+    elif [ -f "$file" ]; then
+        # Es un archivo
+        cp "$file" "$BACKUP_DIR/"
+        echo -e "${GREEN}✓ Backup guardado: $BACKUP_DIR/$(basename $file)${NC}"
+    else
+        echo -e "${RED}❌ Error: $file no existe${NC}"
+        return 1
+    fi
 }
 
 # ============================================
@@ -215,23 +226,51 @@ echo ""
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ "$REPO_DIR" != "$INSTALL_DIR" ]; then
-    echo "📋 Copiando archivos a $INSTALL_DIR..."
+echo "📁 Ubicación actual del script: $REPO_DIR"
+echo "📁 Directorio de instalación destino: $INSTALL_DIR"
+echo ""
+
+if [ "$REPO_DIR" = "$INSTALL_DIR" ]; then
+    echo -e "${GREEN}✓ El repositorio ya está en el directorio correcto${NC}"
+    echo "  No es necesario copiar archivos."
+elif [ -d "$INSTALL_DIR" ]; then
+    echo -e "${YELLOW}⚠️  El directorio $INSTALL_DIR ya existe${NC}"
+    echo ""
+    echo "Opciones:"
+    echo "  1) Hacer backup y reemplazar con el contenido actual"
+    echo "  2) Usar el directorio existente (no copiar nada)"
+    echo "  3) Cancelar instalación"
+    echo ""
     
-    if [ -d "$INSTALL_DIR" ]; then
-        if ask_yes_no "El directorio $INSTALL_DIR ya existe. ¿Hacer backup y reemplazar?" "y"; then
+    read -p "$(echo -e ${YELLOW}"Elige una opción [1/2/3]: "${NC})" install_option
+    
+    case "$install_option" in
+        1)
+            echo "📦 Haciendo backup del directorio existente..."
             make_backup "$INSTALL_DIR"
             rm -rf "$INSTALL_DIR"
-        else
+            mkdir -p /var/www
+            echo "📋 Copiando archivos nuevos..."
+            cp -r "$REPO_DIR" "$INSTALL_DIR"
+            echo -e "${GREEN}✓ Archivos copiados${NC}"
+            ;;
+        2)
+            echo -e "${GREEN}✓ Usando directorio existente${NC}"
+            ;;
+        3)
             echo -e "${RED}❌ Instalación cancelada${NC}"
             exit 1
-        fi
-    fi
-    
+            ;;
+        *)
+            echo -e "${RED}Opción no válida. Instalación cancelada.${NC}"
+            exit 1
+            ;;
+    esac
+else
+    echo "📋 Copiando archivos a $INSTALL_DIR..."
     mkdir -p /var/www
     cp -r "$REPO_DIR" "$INSTALL_DIR"
-else
-    echo "✓ Ya estamos en el directorio de instalación"
+    echo -e "${GREEN}✓ Archivos copiados${NC}"
 fi
 
 cd "$INSTALL_DIR"

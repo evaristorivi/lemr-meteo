@@ -81,9 +81,13 @@ Además, la IA analiza el mapa para pilotos novatos y lo traduce a impacto opera
 
 ```bash
 # En tu servidor (SSH)
-cd /ruta/donde/clonaste/lemr-meteo
+cd /var/www
+sudo git clone https://github.com/tu-usuario/lemr-meteo.git
+cd lemr-meteo
 sudo bash deploy-interactive.sh
 ```
+
+> 💡 **Tip:** Si ya has clonado el repo en otra ubicación, puedes ejecutar el script desde ahí y él se encargará de copiar los archivos a `/var/www/lemr-meteo` automáticamente.
 
 **Este script te guiará paso a paso** preguntándote:
 - ✅ Dominio o subdominio
@@ -99,7 +103,9 @@ sudo bash deploy-interactive.sh
 
 ```bash
 # En tu servidor (SSH)
-cd /ruta/donde/clonaste/lemr-meteo
+cd /var/www
+sudo git clone https://github.com/tu-usuario/lemr-meteo.git
+cd lemr-meteo
 sudo bash install-production.sh
 ```
 
