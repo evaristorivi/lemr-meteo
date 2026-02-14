@@ -40,7 +40,18 @@ Abre en navegador:
 
 - http://127.0.0.1:8000
 
-## 🔁 Política de actualización
+## � Despliegue en producción
+
+Para desplegarlo en un servidor con Apache:
+
+```bash
+# Script interactivo que lo hace todo (recomendado)
+sudo bash deploy-interactive.sh
+```
+
+Ver [DEPLOYMENT.md](DEPLOYMENT.md) para más detalles.
+
+## �🔁 Política de actualización
 
 La app refresca internamente la información en ciclos:
 - 06:00

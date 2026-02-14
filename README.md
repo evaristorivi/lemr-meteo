@@ -77,7 +77,25 @@ Además, la IA analiza el mapa para pilotos novatos y lo traduce a impacto opera
 
 > 📚 **[Ver guía completa de despliegue paso a paso →](DEPLOYMENT.md)**
 
-### Opción rápida: Script automatizado
+### 🎯 Opción recomendada: Script interactivo
+
+```bash
+# En tu servidor (SSH)
+cd /ruta/donde/clonaste/lemr-meteo
+sudo bash deploy-interactive.sh
+```
+
+**Este script te guiará paso a paso** preguntándote:
+- ✅ Dominio o subdominio
+- ✅ Tipo de instalación (subdominio dedicado vs subdirectorio)
+- ✅ Puerto de la aplicación
+- ✅ Credenciales (GitHub token, AEMET API)
+- ✅ Detecta y hace backup de configuraciones Apache existentes
+- ✅ Verifica que todo funcione correctamente
+
+**¡Todo de forma segura sin sobreescribir tu configuración actual!**
+
+### Opción alternativa: Script automatizado básico
 
 ```bash
 # En tu servidor (SSH)
@@ -93,7 +111,7 @@ El script instalará automáticamente:
 
 Después solo necesitas:
 1. Editar el archivo `.env` con tus credenciales
-2. Configurar Apache VirtualHost (ver ejemplos abajo)
+2. Configurar Apache VirtualHost manualmente (ver ejemplos abajo)
 3. Iniciar el servicio: `sudo systemctl start lemr-meteo`
 
 ### Instalación manual (paso a paso)

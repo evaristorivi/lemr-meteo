@@ -11,26 +11,51 @@ Esta guía te ayudará a desplegar LEMR Meteo en tu servidor con Apache.
 - Acceso SSH con permisos sudo
 - Dominio o subdominio configurado (ej: `meteo.tudominio.com`)
 
-## 🎯 Instalación Rápida (5 pasos)
+## 🎯 Instalación Rápida con Script Interactivo (Recomendado)
 
-### 1️⃣ Clonar el repositorio en tu servidor
+### 🌟 Opción 1: Script Interactivo (¡Más fácil y seguro!)
 
 ```bash
 ssh tu-usuario@tu-servidor.com
 cd /var/www
 sudo git clone https://github.com/tu-usuario/lemr-meteo.git
 cd lemr-meteo
+sudo bash deploy-interactive.sh
 ```
 
-### 2️⃣ Ejecutar script de instalación automática
+**El script interactivo te preguntará todo** y configurará automáticamente:
+- ✅ Te pregunta el tipo de instalación (subdominio o subdirectorio)
+- ✅ Te pregunta el dominio/subdominio
+- ✅ Te pregunta el puerto
+- ✅ Te pide las credenciales (GitHub token, AEMET API)
+- ✅ **Detecta configuraciones Apache existentes y hace backup automático**
+- ✅ Instala dependencias, crea el servicio, configura Apache
+- ✅ Verifica que todo funcione
+- ✅ Te da un resumen completo al final
+
+**¡Listo en 5 minutos!** No necesitas configurar nada manualmente.
+
+---
+
+### 🔧 Opción 2: Script Automatizado Básico
+
+Si prefieres configurar Apache manualmente después:
 
 ```bash
+ssh tu-usuario@tu-servidor.com
+cd /var/www
+sudo git clone https://github.com/tu-usuario/lemr-meteo.git
+cd lemr-meteo
 sudo bash install-production.sh
 ```
 
 El script instalará todo lo necesario automáticamente.
 
+**Después necesitarás configurar Apache manualmente** (ver más abajo).
+
 ### 3️⃣ Configurar credenciales
+
+> **Nota:** Si usaste el script interactivo (`deploy-interactive.sh`), ya tienes esto configurado. Salta al paso de verificación.
 
 Edita el archivo `.env` con tus datos:
 
