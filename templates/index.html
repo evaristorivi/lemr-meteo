@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LEMR Meteo | La Morgal</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --bg2: #111a2b;
+      --card: rgba(20, 31, 49, 0.82);
+      --text: #e9f0ff;
+      --muted: #9fb2cc;
+      --accent: #66e3ff;
+      --accent2: #8d7cff;
+      --ok: #3ddc97;
+      --warn: #ffd166;
+      --danger: #ff6b6b;
+      --border: rgba(255, 255, 255, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Roboto, system-ui, sans-serif;
+      background: radial-gradient(circle at 20% 10%, #1c2c47 0%, var(--bg) 45%), linear-gradient(130deg, var(--bg), var(--bg2));
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1260px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .hero {
+      border: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(102, 227, 255, 0.11), rgba(141, 124, 255, 0.12));
+      backdrop-filter: blur(8px);
+      border-radius: 18px;
+      padding: 20px;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.4rem, 2.2vw, 2.1rem);
+    }
+
+    .muted { color: var(--muted); }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+      color: var(--accent);
+    }
+
+    h3 {
+      margin: 12px 0 6px;
+      font-size: 0.92rem;
+      color: var(--accent2);
+    }
+
+    .kv {
+      margin: 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 7px 12px;
+      font-size: 0.95rem;
+    }
+
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; font-weight: 600; }
+
+    .days {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    }
+
+    .day {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(9, 17, 32, 0.74);
+    }
+
+    .day-head {
+      padding: 12px 14px;
+      background: linear-gradient(90deg, rgba(102, 227, 255, 0.15), rgba(141, 124, 255, 0.14));
+      font-weight: 700;
+    }
+
+    .day-body {
+      padding: 12px 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .chip {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 2px 4px 2px 0;
+    }
+
+    .map-pair {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+
+    .map-slot {
+      text-align: center;
+    }
+
+    .map-slot .label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .map {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      min-height: 120px;
+      object-fit: contain;
+      background: #0c1525;
+      cursor: pointer;
+    }
+
+    .analysis-map {
+      max-width: 680px;
+      margin: 0 auto;
+      display: block;
+    }
+
+    .analysis-map.rotated {
+      transform: rotate(90deg);
+      transform-origin: center center;
+      max-width: min(85vw, 900px);
+    }
+
+    .analysis {
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-size: 0.93rem;
+      margin: 0;
+      color: #dce7ff;
+    }
+
+    .pred-text {
+      white-space: pre-wrap;
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.4;
+      margin: 4px 0 0;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--accent2);
+      font-weight: 700;
+    }
+
+    .windy-map {
+      width: 100%;
+      min-height: 360px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #0c1525;
+    }
+
+    .control-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .control-row select,
+    .control-row button {
+      background: #0f1a2d;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.88rem;
+    }
+
+    .footer {
+      font-size: 0.86rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    a { color: var(--accent); }
+
+    @media (max-width: 600px) {
+      .map-pair { grid-template-columns: 1fr; }
+      .days { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <!-- HERO -->
+    <section class="hero">
+      <h1>🛩️ LEMR Meteo · La Morgal</h1>
+      <div class="muted" id="meta-line"></div>
+      <div class="muted" id="refresh-line"></div>
+      <div class="muted" id="load-status">⏳ Cargando datos meteorológicos...</div>
+    </section>
+
+    <!-- TOP CARDS -->
+    <section class="grid">
+      <article class="card">
+        <h2>📍 Aeródromo</h2>
+        <dl class="kv" id="aerodrome-kv"></dl>
+      </article>
+
+      <article class="card">
+        <h2>🌤️ Condiciones actuales</h2>
+        <dl class="kv" id="current-kv"></dl>
+      </article>
+
+      <article class="card">
+        <h2>✈️ METAR LEAS (referencia LEMR)</h2>
+        <p id="metar-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px"></p>
+      </article>
+    </section>
+
+    <!-- WINDY POINT FORECAST -->
+    <section class="card">
+      <h2>🌬️ Windy Point Forecast (La Morgal)</h2>
+      <div class="control-row">
+        <label for="windy-model" class="muted">Modelo:</label>
+        <select id="windy-model"></select>
+      </div>
+      <p class="muted" id="windy-meta"></p>
+      <p class="analysis" id="windy-error" style="display:none;color:var(--warn)"></p>
+      <div id="windy-sdk-map" class="windy-map" style="display:none"></div>
+      <iframe id="windy-map" class="windy-map" title="Mapa Windy La Morgal" loading="lazy"></iframe>
+      <p class="muted" style="margin-top:8px">
+        Abrir en Windy: <a id="windy-map-link" href="#" target="_blank" rel="noopener noreferrer">enlace directo</a>
+      </p>
+    </section>
+
+    <!-- TRES DÍAS CON MAPAS SIGNIFICATIVOS -->
+    <section class="card">
+      <h2>📅 Pronóstico 3 días con mapas significativos AEMET</h2>
+      <div id="days" class="days"></div>
+    </section>
+
+    <!-- PREDICCIÓN AEMET TEXTUAL -->
+    <section class="grid" id="aemet-pred-section">
+      <article class="card">
+        <h2>🌦️ Predicción AEMET — Asturias hoy</h2>
+        <p id="pred-ast-hoy" class="pred-text"></p>
+      </article>
+      <article class="card">
+        <h2>🌦️ Predicción AEMET — Asturias mañana</h2>
+        <p id="pred-ast-man" class="pred-text"></p>
+      </article>
+      <article class="card">
+        <h2>🌦️ Predicción AEMET — Asturias pasado mañana</h2>
+        <p id="pred-ast-pas" class="pred-text"></p>
+      </article>
+      <article class="card">
+        <h2>🏔️ Predicción AEMET — Llanera (La Morgal)</h2>
+        <p id="pred-llanera" class="pred-text"></p>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>🧪 Veredicto final experto (IA fusión Windy + AEMET + METAR)</h2>
+      <p id="expert-final" class="analysis"></p>
+    </section>
+
+    <!-- MAPA ANÁLISIS EN SUPERFICIE -->
+    <section class="card" id="analysis-map-section" style="display:none">
+      <h2>🗺️ Mapa de análisis en superficie (isobaras + frentes)</h2>
+      <img id="analysis-map-img" class="map analysis-map" alt="Mapa de análisis AEMET" />
+    </section>
+
+    <div class="footer">
+      Datos de <a href="https://opendata.aemet.es" target="_blank">AEMET OpenData</a>,
+      <a href="https://aviationweather.gov" target="_blank">Aviation Weather</a> y
+      <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> y
+      <a href="https://www.windy.com" target="_blank">Windy</a>.
+      Actualización automática · ciclos 06:00, 10:00, 14:00, 18:00, 22:00 (Europe/Madrid).
+    </div>
+  </main>
+
+  <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
+  <script>
+    const state = {
+      data: {{ data | tojson }},
+      windyModel: null,
+      windyMapApiKey: {{ (windy_map_api_key or "") | tojson }},
+      windySdk: null,
+      windySdkReady: false,
+    };
+
+    const setLoadStatus = (text, isError = false) => {
+      const el = document.getElementById("load-status");
+      if (!el) return;
+      if (!text) {
+        el.style.display = "none";
+        return;
+      }
+      el.style.display = "";
+      el.textContent = text;
+      el.style.color = isError ? "var(--warn)" : "var(--muted)";
+    };
+
+    const normalizeWindyModel = (model) => {
+      const v = (model || "gfs").toLowerCase();
+      if (v === "iconeu") return "iconEu";
+      if (v === "arome") return "arome";
+      return "gfs";
+    };
+
+    const applyModelToWindySdk = (model) => {
+      if (!state.windySdkReady || !state.windySdk || !state.windySdk.store) return;
+      const sdkModel = normalizeWindyModel(model);
+      try {
+        state.windySdk.store.set("model", sdkModel, { forceChange: true });
+      } catch {
+        try { state.windySdk.store.set("model", sdkModel); } catch {}
+      }
+      try {
+        state.windySdk.store.set("overlay", "wind");
+      } catch {}
+    };
+
+    const initWindySdkIfPossible = (windy) => {
+      if (state.windySdkReady || !state.windyMapApiKey || typeof windyInit !== "function") return;
+
+      const lat = Number(windy?.lat);
+      const lon = Number(windy?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+      windyInit(
+        {
+          key: state.windyMapApiKey,
+          lat,
+          lon,
+          zoom: 9,
+          verbose: false,
+        },
+        (windyAPI) => {
+          state.windySdk = windyAPI;
+          state.windySdkReady = true;
+          document.getElementById("windy-sdk-map").style.display = "";
+          document.getElementById("windy-map").style.display = "none";
+          applyModelToWindySdk(state.windyModel || windy?.model || "gfs");
+        }
+      );
+    };
+
+    const fmtDateTime = (v) => {
+      if (!v) return "N/A";
+      try { return new Date(v).toLocaleString("es-ES", { hour12: false }); } catch { return v; }
+    };
+
+    const hhmm = (v) => {
+      if (!v) return "N/A";
+      const i = v.indexOf("T");
+      return i === -1 ? v : v.slice(i + 1, i + 6);
+    };
+
+    const renderKv = (id, entries) => {
+      document.getElementById(id).innerHTML = entries.map(([k,v]) => `<dt>${k}</dt><dd>${v ?? "N/A"}</dd>`).join("");
+    };
+
+    const mapImg = (b64, url, alt) => {
+      if (url) {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" /></a>`;
+      }
+      if (b64) {
+        const src = `data:image/png;base64,${b64}`;
+        return `<a href="${src}" target="_blank" rel="noopener noreferrer"><img class="map" src="${src}" alt="${alt}" loading="lazy" /></a>`;
+      }
+      return `<div class="map" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem">Mapa no disponible para este tramo</div>`;
+    };
+
+    const renderDays = (days) => {
+      document.getElementById("days").innerHTML = days.map(d => `
+        <article class="day">
+          <div class="day-head">${d.label} · ${d.date}</div>
+          <div class="day-body">
+            <div>
+              <span class="chip">${d.description}</span>
+              <span class="chip">🌡️ ${d.temp_min}°C / ${d.temp_max}°C</span>
+            </div>
+            <div>
+              <span class="chip">💨 Viento máx ${d.wind_max_kmh} km/h</span>
+              <span class="chip">🌬️ Rachas ${d.wind_gusts_max_kmh} km/h</span>
+            </div>
+            <div>
+              <span class="chip">🌅 ${hhmm(d.sunrise)}</span>
+              <span class="chip">🌇 ${hhmm(d.sunset)}</span>
+              <span class="chip">🏢 ${d.operating_hours}</span>
+            </div>
+            <div>
+              <span class="chip" style="border-color:var(--ok)">🕐 Ventana sugerida: ${d.suggested_window}</span>
+            </div>
+            ${d.show_aemet_maps ? `
+              <div>
+                <span class="chip">UTC disponibles: ${(d.available_utc_hours || []).join(" · ") || "sin publicación"}</span>
+              </div>
+              <div class="map-pair">
+                ${(d.map_slots || []).length
+                  ? d.map_slots.map(slot => `
+                      <div class="map-slot">
+                        <div class="label">${slot.slot_label || (slot.utc_hour + " UTC")}</div>
+                        ${mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`)}
+                      </div>
+                    `).join("")
+                  : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`}
+              </div>
+            ` : ""}
+          </div>
+        </article>
+      `).join("");
+    };
+
+    const renderWindy = (windy) => {
+      const selectedModel = windy.model || "gfs";
+      state.windyModel = selectedModel;
+      document.getElementById("windy-meta").textContent =
+        `${windy.provider || "Windy"} · modelo ${windy.model || "N/A"}`;
+
+      const windyModelSelect = document.getElementById("windy-model");
+      const availableModels = windy.available_models || ["gfs", "iconEu", "arome"];
+      windyModelSelect.innerHTML = availableModels
+        .map(m => `<option value="${m}" ${m === selectedModel ? "selected" : ""}>${m}</option>`)
+        .join("");
+
+      const windyError = document.getElementById("windy-error");
+      if (windy.error) {
+        windyError.style.display = "";
+        windyError.textContent = `⚠️ ${windy.error}. Revisa que la key sea de tipo Point Forecast en api.windy.com/keys.`;
+      } else {
+        windyError.style.display = "none";
+        windyError.textContent = "";
+      }
+
+      const windyMap = document.getElementById("windy-map");
+      if (windy.map_embed_url) windyMap.src = windy.map_embed_url;
+
+      initWindySdkIfPossible(windy);
+      applyModelToWindySdk(selectedModel);
+
+      const windyMapLink = document.getElementById("windy-map-link");
+      windyMapLink.href = windy.map_link || "https://www.windy.com";
+    };
+
+    const render = (data) => {
+      if (!data || !data.location || !data.current) return;
+
+      document.getElementById("meta-line").textContent =
+        `${data.location.name} · ${data.location.icao} · ${data.location.municipality}`;
+      document.getElementById("refresh-line").textContent =
+        `Última generación: ${fmtDateTime(data.generated_at)} · Ciclo ${data.cycle_id}`;
+
+      renderKv("aerodrome-kv", [
+        ["Coordenadas", data.location.coordinates],
+        ["Frecuencia", `${data.location.radio} MHz`],
+        ["Elevación", data.location.elevation],
+        ["Pista", data.location.runway],
+        ["Invierno", data.location.hours_invierno],
+        ["Verano", data.location.hours_verano],
+      ]);
+
+      renderKv("current-kv", [
+        ["Hora dato", fmtDateTime(data.current.time)],
+        ["Condición", data.current.condition],
+        ["Temperatura", `${data.current.temperature}°C (sens. ${data.current.feels_like}°C)`],
+        ["Humedad", `${data.current.humidity}%`],
+        ["Viento", `${data.current.wind_speed_kmh} km/h desde ${data.current.wind_direction}°`],
+        ["Rachas", `${data.current.wind_gusts_kmh} km/h`],
+        ["Nubosidad", `${data.current.cloud_cover}%`],
+        ["Presión", `${data.current.pressure} hPa`],
+      ]);
+
+      document.getElementById("metar-raw").textContent = data.metar.raw || "METAR LEAS no disponible en este ciclo.";
+
+      // Mapa de análisis
+      const amSection = document.getElementById("analysis-map-section");
+      if (data.analysis_map_url) {
+        amSection.style.display = "";
+        const analysisImg = document.getElementById("analysis-map-img");
+        analysisImg.classList.remove("rotated");
+        analysisImg.onload = () => {
+          if (analysisImg.naturalHeight > analysisImg.naturalWidth) {
+            analysisImg.classList.add("rotated");
+          }
+        };
+        analysisImg.referrerPolicy = "no-referrer";
+        analysisImg.src = data.analysis_map_url;
+      } else {
+        amSection.style.display = "none";
+      }
+
+      // Predicciones AEMET textuales
+      const pred = data.aemet_prediccion || {};
+      document.getElementById("pred-ast-hoy").textContent = pred.asturias_hoy || "No disponible";
+      document.getElementById("pred-ast-man").textContent = pred.asturias_manana || "No disponible";
+      document.getElementById("pred-ast-pas").textContent = pred.asturias_pasado_manana || "No disponible";
+      document.getElementById("pred-llanera").textContent = pred.llanera || "No disponible";
+
+      // IA
+      document.getElementById("expert-final").textContent = data.ai.expert_final_verdict || "Sin veredicto final.";
+
+      // Windy
+      const windy = data.windy || {};
+      renderWindy(windy);
+
+      const windyDaily = windy.daily_summary || [];
+      const windyDailyTable = document.getElementById("windy-daily");
+      if (windyDailyTable) {
+        windyDailyTable.innerHTML = windyDaily.length
+          ? windyDaily.map(d => `
+              <tr>
+                <td>${d.date || "N/A"}</td>
+                <td>${d.max_wind_kmh ?? "N/A"}</td>
+                <td>${d.max_gust_kmh ?? "N/A"}</td>
+                <td>${d.avg_temp_c ?? "N/A"}</td>
+                <td>${d.precip_total_mm ?? "N/A"}</td>
+              </tr>
+            `).join("")
+          : `<tr><td colspan="5" class="muted">Sin datos Windy en este ciclo</td></tr>`;
+      }
+
+      const windyHourly = windy.hourly || [];
+      const windyHourlyTable = document.getElementById("windy-hourly");
+      if (windyHourlyTable) {
+        windyHourlyTable.innerHTML = windyHourly.length
+          ? windyHourly.map(h => `
+              <tr>
+                <td>${fmtDateTime(h.time_local)}</td>
+                <td>${h.wind_kmh ?? "N/A"} km/h · ${h.wind_dir_deg ?? "N/A"}°</td>
+                <td>${h.gust_kmh ?? "N/A"} km/h</td>
+                <td>${h.temp_c ?? "N/A"} °C</td>
+                <td>${h.cloud_cover_pct ?? "N/A"}%</td>
+                <td>${h.precip_3h_mm ?? "N/A"} mm</td>
+              </tr>
+            `).join("")
+          : `<tr><td colspan="6" class="muted">Sin datos horarios Windy en este ciclo</td></tr>`;
+      }
+
+      renderDays(data.forecast_days || []);
+      setLoadStatus("");
+    };
+
+    const fetchReport = async (force = false) => {
+      const model = state.windyModel || (state.data?.windy?.model) || "gfs";
+      const url = `/api/report?windy_model=${encodeURIComponent(model)}${force ? "&force=1" : ""}`;
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) return null;
+      return await r.json();
+    };
+
+    const fetchWindyOnly = async (model) => {
+      const url = `/api/windy?windy_model=${encodeURIComponent(model || "gfs")}`;
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) return null;
+      return await r.json();
+    };
+
+    const refreshData = async () => {
+      try {
+        const d = await fetchReport(false);
+        if (!d) return;
+        if (!state.data || d.cycle_id !== state.data.cycle_id || d.generated_at !== state.data.generated_at) {
+          state.data = d;
+          render(state.data);
+        }
+      } catch {}
+    };
+
+    document.getElementById("windy-model").addEventListener("change", async (e) => {
+      state.windyModel = e.target.value || "gfs";
+      document.getElementById("windy-meta").textContent = `Windy Point Forecast · actualizando modelo ${state.windyModel}...`;
+      const d = await fetchWindyOnly(state.windyModel);
+      if (!d) return;
+      const windy = d.windy || {};
+      if (state.data) {
+        state.data.windy = windy;
+      }
+      renderWindy(windy);
+    });
+
+    const bootstrap = async () => {
+      try {
+        setLoadStatus("⏳ Cargando datos meteorológicos...");
+        const d = await fetchReport(false);
+        if (!d) {
+          setLoadStatus("⚠️ No se pudieron cargar los datos. Reintenta en unos segundos.", true);
+          return;
+        }
+        state.data = d;
+        render(state.data);
+      } catch {
+        setLoadStatus("⚠️ Error al cargar datos iniciales.", true);
+      }
+    };
+
+    bootstrap();
+    setInterval(refreshData, 60 * 1000);
+  </script>
+</body>
+</html>

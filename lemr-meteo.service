@@ -1,0 +1,15 @@
+[Unit]
+Description=LEMR Meteo Web Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/lemr-meteo
+Environment="PATH=/var/www/lemr-meteo/venv/bin"
+ExecStart=/var/www/lemr-meteo/venv/bin/python web_app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
