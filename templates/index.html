@@ -299,15 +299,15 @@
     <!-- PREDICCIÓN AEMET TEXTUAL -->
     <section class="grid" id="aemet-pred-section">
       <article class="card">
-        <h2>🌦️ Predicción AEMET — Asturias hoy</h2>
+        <h2 id="pred-ast-hoy-title">🌦️ Predicción AEMET — Asturias hoy</h2>
         <p id="pred-ast-hoy" class="pred-text"></p>
       </article>
       <article class="card">
-        <h2>🌦️ Predicción AEMET — Asturias mañana</h2>
+        <h2 id="pred-ast-man-title">🌦️ Predicción AEMET — Asturias mañana</h2>
         <p id="pred-ast-man" class="pred-text"></p>
       </article>
       <article class="card">
-        <h2>🌦️ Predicción AEMET — Asturias pasado mañana</h2>
+        <h2 id="pred-ast-pas-title">🌦️ Predicción AEMET — Asturias pasado mañana</h2>
         <p id="pred-ast-pas" class="pred-text"></p>
       </article>
       <article class="card">
@@ -549,10 +549,23 @@
 
       // Predicciones AEMET textuales
       const pred = data.aemet_prediccion || {};
+      
+      // Actualizar contenido de predicciones
       document.getElementById("pred-ast-hoy").textContent = pred.asturias_hoy || "No disponible";
       document.getElementById("pred-ast-man").textContent = pred.asturias_manana || "No disponible";
       document.getElementById("pred-ast-pas").textContent = pred.asturias_pasado_manana || "No disponible";
       document.getElementById("pred-llanera").textContent = pred.llanera || "No disponible";
+      
+      // Actualizar iconos dinámicos en los títulos
+      if (pred.asturias_hoy_icon) {
+        document.getElementById("pred-ast-hoy-title").textContent = `${pred.asturias_hoy_icon} Predicción AEMET — Asturias hoy`;
+      }
+      if (pred.asturias_manana_icon) {
+        document.getElementById("pred-ast-man-title").textContent = `${pred.asturias_manana_icon} Predicción AEMET — Asturias mañana`;
+      }
+      if (pred.asturias_pasado_manana_icon) {
+        document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
+      }
 
       // IA
       document.getElementById("expert-final").textContent = data.ai.expert_final_verdict || "Sin veredicto final.";

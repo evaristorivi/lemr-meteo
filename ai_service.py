@@ -270,7 +270,7 @@ def get_ai_client():
                 api_key=config.GITHUB_TOKEN,
                 base_url="https://models.inference.ai.azure.com",
                 max_retries=0,
-                timeout=60,
+                timeout=120,  # 120s para modelos open source más lentos
             )
             return ('github', client)
         except Exception as e:
@@ -285,7 +285,7 @@ def get_ai_client():
             client = OpenAI(
                 api_key=config.OPENAI_API_KEY,
                 max_retries=0,
-                timeout=60,
+                timeout=120,  # 120s timeout
             )
             return ('openai', client)
         except Exception as e:
@@ -335,6 +335,17 @@ def _print_rate_limit_info(response, model_name: str):
     except Exception as e:
         # Si no podemos leer las cabeceras, no es crítico
         pass
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    """Detecta si el error es un timeout"""
+    text = str(exc).lower()
+    return (
+        "timeout" in text
+        or "timed out" in text
+        or "read timeout" in text
+        or "connection timeout" in text
+    )
 
 
 def _create_chat_completion_with_fallback(
@@ -389,11 +400,16 @@ def _create_chat_completion_with_fallback(
             error_msg = str(exc)
             attempted_models.append(model_name)
             
-            # Si es rate-limit, bloquear este modelo para el resto del ciclo
+            # Clasificar el tipo de error
             if _is_rate_limit_error(exc):
+                # Rate limit: bloquear este modelo para el resto del ciclo
                 _lock_primary_for_cycle(provider, model_name)
                 print(f"🔒 {model_name} alcanzó límite de rate-limit (bloqueado hasta próximo ciclo)")
+            elif _is_timeout_error(exc):
+                # Timeout: NO bloquear (puede ser temporal/saturación)
+                print(f"⏱️ {model_name} dio timeout ({error_msg[:80]}) - continuando con siguiente modelo")
             else:
+                # Otro error (modelo no existe, error de API, etc.)
                 print(f"⚠️ Error con {model_name}: {error_msg[:100]}")
             
             last_exception = exc
@@ -520,7 +536,6 @@ Proporciona análisis EDUCATIVO para vuelo ULM:
             ],
             temperature=0.7,
             max_tokens=1000,
-            model=config.AI_MODEL,
         )
         
         interpretation = response.choices[0].message.content
@@ -670,7 +685,6 @@ Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los pr
             ],
             temperature=0.7,
             max_tokens=1000,
-            model=config.AI_MODEL,
         )
         
         interpretation = response.choices[0].message.content
@@ -760,7 +774,6 @@ Requisitos de respuesta:
             ],
             temperature=0.5,
             max_tokens=1200,
-            model=config.AI_MODEL,
         )
 
         interpretation = response.choices[0].message.content
@@ -838,7 +851,6 @@ Requisitos de respuesta:
             ],
             temperature=0.5,
             max_tokens=1000,
-            model=config.AI_MODEL,
         )
 
         return response.choices[0].message.content
@@ -1112,8 +1124,8 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
         # Detectar si vamos a usar un modelo con límites bajos
         # GitHub Models: 60k tokens/min (muy restrictivo con mapas)
         # mini/small: bajo límite de tokens
-        primary_model = config.AI_MODEL
-        fallback_model = getattr(config, "AI_FALLBACK_MODEL", "gpt-4o-mini")
+        model_cascade = getattr(config, "AI_MODEL_CASCADE", [])
+        primary_model = model_cascade[0] if model_cascade else "gpt-4o"
         is_mini_model = "mini" in primary_model.lower() or "small" in primary_model.lower()
         is_github_provider = provider.lower() == "github"
         
@@ -1145,7 +1157,6 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
             ],
             temperature=0.4,
             max_tokens=2500,
-            model=config.AI_MODEL,
         )
 
         result = response.choices[0].message.content
@@ -1158,20 +1169,76 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
         print(f"❌ Error generando síntesis experta con {provider}: {e}")
         print(f"Detalles: {error_detail}")
         
-        # Intentar proporcionar un análisis básico sin IA como último recurso
-        return f"""⚠️ No se pudo generar análisis IA completo en este ciclo (Error: {str(e)[:100]})
-
-📊 RESUMEN BÁSICO DE DATOS DISPONIBLES:
-
-METAR LEAS: {metar_leas or 'No disponible'}
-
-Condiciones actuales Open-Meteo:
-- Temperatura: {current.get('temperature', 'N/A')}°C
-- Viento: {current.get('wind_speed', 'N/A')} km/h desde {current.get('wind_direction', 'N/A')}°
-- Presión: {current.get('pressure', 'N/A')} hPa
-
-⚠️ NOTA: Consulta briefing oficial AEMET y METAR actualizado antes de volar.
-El próximo análisis IA completo estará disponible en el siguiente ciclo de actualización."""
+        # Proporcionar un resumen COMPLETO de todos los datos disponibles como fallback
+        daily = weather_data.get('daily_forecast', [])
+        windy_daily = windy_data.get('daily_summary', []) if windy_data else []
+        
+        fallback_sections = []
+        
+        # Encabezado
+        fallback_sections.append(f"⚠️ No se pudo generar análisis IA completo en este ciclo (Error: {str(e)[:100]})")
+        fallback_sections.append("\n📊 RESUMEN COMPLETO DE DATOS DISPONIBLES:\n")
+        
+        # METAR
+        fallback_sections.append(f"**METAR LEAS:**\n{metar_leas or 'No disponible'}\n")
+        
+        # Condiciones actuales
+        fallback_sections.append("**CONDICIONES ACTUALES (Open-Meteo):**")
+        fallback_sections.append(f"- Temperatura: {current.get('temperature', 'N/A')}°C (sensación: {current.get('feels_like', 'N/A')}°C)")
+        fallback_sections.append(f"- Viento: {current.get('wind_speed', 'N/A')} km/h desde {current.get('wind_direction', 'N/A')}°")
+        fallback_sections.append(f"- Rachas: {current.get('wind_gusts', 'N/A')} km/h")
+        fallback_sections.append(f"- Presión: {current.get('pressure', 'N/A')} hPa")
+        fallback_sections.append(f"- Nubosidad: {current.get('cloud_cover', 'N/A')}%\n")
+        
+        # Pronóstico 3 días
+        if daily:
+            fallback_sections.append("**PRONÓSTICO 3 DÍAS (Open-Meteo):**")
+            for i, day in enumerate(daily[:3]):
+                label = ["HOY", "MAÑANA", "PASADO MAÑANA"][i]
+                sunrise = day.get('sunrise', 'N/A')
+                sunset = day.get('sunset', 'N/A')
+                fallback_sections.append(f"\n{label} ({day.get('date', 'N/A')}):")
+                fallback_sections.append(f"  🌡️ Temp: {day.get('temp_min', 'N/A')}°C - {day.get('temp_max', 'N/A')}°C")
+                fallback_sections.append(f"  💨 Viento max: {day.get('wind_max', 'N/A')} km/h")
+                fallback_sections.append(f"  🌬️ Rachas max: {day.get('wind_gusts_max', 'N/A')} km/h")
+                fallback_sections.append(f"  ☀️ Amanecer: {sunrise.split('T')[1][:5] if 'T' in sunrise else sunrise}")
+                fallback_sections.append(f"  🌅 Atardecer: {sunset.split('T')[1][:5] if 'T' in sunset else sunset}")
+        
+        # Windy
+        if windy_daily:
+            fallback_sections.append("\n**PRONÓSTICO WINDY:**")
+            for day in windy_daily[:3]:
+                fallback_sections.append(f"\n{day.get('date', 'N/A')}:")
+                fallback_sections.append(f"  💨 Viento: {day.get('wind_min', 'N/A')}-{day.get('wind_max', 'N/A')} km/h")
+                fallback_sections.append(f"  🌬️ Rachas: hasta {day.get('gust_max', 'N/A')} km/h")
+                fallback_sections.append(f"  🌡️ Temp: {day.get('temp_min', 'N/A')}-{day.get('temp_max', 'N/A')}°C")
+        
+        # AEMET predicciones
+        aemet_hoy = aemet_prediccion.get('asturias_hoy', '') if aemet_prediccion else ''
+        aemet_man = aemet_prediccion.get('asturias_manana', '') if aemet_prediccion else ''
+        aemet_pas = aemet_prediccion.get('asturias_pasado_manana', '') if aemet_prediccion else ''
+        aemet_llan = aemet_prediccion.get('llanera', '') if aemet_prediccion else ''
+        
+        if aemet_hoy or aemet_man or aemet_pas:
+            fallback_sections.append("\n**PREDICCIONES AEMET ASTURIAS:**")
+            if aemet_hoy:
+                fallback_sections.append(f"\nHOY:\n{aemet_hoy[:300]}{'...' if len(aemet_hoy) > 300 else ''}")
+            if aemet_man:
+                fallback_sections.append(f"\nMAÑANA:\n{aemet_man[:300]}{'...' if len(aemet_man) > 300 else ''}")
+            if aemet_pas:
+                fallback_sections.append(f"\nPASADO MAÑANA:\n{aemet_pas[:300]}{'...' if len(aemet_pas) > 300 else ''}")
+        
+        if aemet_llan:
+            fallback_sections.append(f"\n**PREDICCIÓN AEMET LLANERA:**\n{aemet_llan[:300]}{'...' if len(aemet_llan) > 300 else ''}")
+        
+        # Notas finales
+        fallback_sections.append("\n⚠️ **IMPORTANTE:**")
+        fallback_sections.append("- Los datos anteriores NO incluyen análisis experto IA")
+        fallback_sections.append("- Consulta briefing oficial AEMET y METAR actualizado antes de volar")
+        fallback_sections.append("- El análisis IA completo estará disponible en el siguiente ciclo de actualización")
+        fallback_sections.append("- Para ULM: límites típicos viento medio 15-18 kt, rachas 20-22 kt (consulta POH de tu modelo)")
+        
+        return "\n".join(fallback_sections)
 
 
 def create_combined_report(metar: str, weather_data: Dict, metar_location: str, weather_location: str) -> str:

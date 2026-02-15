@@ -28,6 +28,91 @@ from windy_service import get_windy_point_forecast, get_windy_map_forecast
 
 app = Flask(__name__)
 
+
+def get_weather_icon_from_text(prediction_text: str) -> str:
+    """
+    Determina el icono meteorológico más apropiado basándose en el texto de predicción.
+    Analiza palabras clave para elegir el emoji más representativo.
+    Prioriza condiciones más severas (tormentas > lluvia > nubes).
+    """
+    if not prediction_text:
+        return "🌦️"  # Por defecto
+    
+    text_lower = prediction_text.lower()
+    
+    # Prioridad de detección: condiciones más específicas/severas primero
+    
+    # Tormentas (máxima prioridad en precipitación)
+    if any(word in text_lower for word in ["tormenta", "tormentoso", "eléctrica", "aparato eléctrico"]):
+        return "⛈️"
+    
+    # Nieve
+    if any(word in text_lower for word in ["nieve", "nevadas", "nevada", "copos"]):
+        return "🌨️"
+    
+    # Niebla
+    if any(word in text_lower for word in ["niebla", "neblina", "bruma", "banco de niebla"]):
+        return "🌫️"
+    
+    # Lluvia fuerte / Chubascos (antes de verificar lluvia general)
+    if any(word in text_lower for word in ["chubasco", "chubascos", "lluvia fuerte", "precipitaciones intensas", 
+                                             "aguacero", "precipitaciones abundantes"]):
+        return "🌧️"
+    
+    # Lluvia / Precipitación general
+    if any(word in text_lower for word in ["lluvia", "lluvias", "precipitación", "precipitaciones", 
+                                             "llovizna", "mojado"]):
+        return "🌦️"
+    
+    # Viento fuerte
+    if any(word in text_lower for word in ["viento fuerte", "vientos fuertes", "vendaval", "temporal", 
+                                             "rachas muy fuertes", "rachas fuertes"]):
+        return "💨"
+    
+    # Muy nuboso / Cubierto (antes de nuboso general)
+    if any(word in text_lower for word in ["muy nuboso", "cubierto", "cielos cubiertos", "nubosidad abundante",
+                                             "bastante nuboso"]):
+        return "☁️"
+    
+    # Poco nuboso (debe ir antes de "nuboso" general)
+    if any(word in text_lower for word in ["poco nuboso", "algunas nubes", "escasa nubosidad"]):
+        return "🌤️"
+    
+    # Intervalos nubosos / Parcialmente nuboso
+    if any(word in text_lower for word in ["intervalos nubosos", "nubosidad variable", "parcialmente nuboso"]):
+        return "⛅"
+    
+    # Nuboso general (después de las variantes específicas)
+    if any(word in text_lower for word in ["nuboso", "nubosidad", "nubes", "cielos nubosos"]):
+        return "⛅"
+    
+    # Despejado / Soleado
+    if any(word in text_lower for word in ["despejado", "despejados", "cielos despejados", "soleado", 
+                                             "buen tiempo", "sin nubes"]):
+        return "☀️"
+    
+    # Default: si no detectamos nada específico, usar símbolo genérico
+    return "🌦️"
+
+
+def format_date_spanish(date_obj: date) -> str:
+    """
+    Formatea una fecha en español sin depender del locale del sistema.
+    Formato: "Domingo, 15 de febrero de 2026"
+    """
+    dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    meses = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ]
+    
+    # weekday() devuelve 0=lunes, 6=domingo
+    dia_nombre = dias[date_obj.weekday()].capitalize()
+    mes_nombre = meses[date_obj.month - 1]
+    
+    return f"{dia_nombre}, {date_obj.day} de {mes_nombre} de {date_obj.year}"
+
+
 MADRID_TZ = ZoneInfo("Europe/Madrid")
 UPDATE_SLOTS = list(range(6, 24))  # Cada hora de 06:00 a 23:00
 _CACHE_LOCK = Lock()
@@ -216,10 +301,15 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     pred_asturias_manana = get_prediccion_asturias_manana() or ""
     pred_asturias_pasado_manana = get_prediccion_asturias_pasado_manana() or ""
     
-    # Enriquecer con información de fecha esperada
-    pred_asturias_hoy_label = f"📅 {today_date.strftime('%A, %d de %B de %Y')}\n{pred_asturias_hoy}" if pred_asturias_hoy else f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
-    pred_asturias_manana_label = f"📅 {tomorrow_date.strftime('%A, %d de %B de %Y')}\n{pred_asturias_manana}" if pred_asturias_manana else f"Sin datos para {tomorrow_date.strftime('%d/%m/%Y')}"
-    pred_asturias_pasado_manana_label = f"📅 {day_after_tomorrow_date.strftime('%A, %d de %B de %Y')}\n{pred_asturias_pasado_manana}" if pred_asturias_pasado_manana else f"Sin datos para {day_after_tomorrow_date.strftime('%d/%m/%Y')}"
+    # Determinar iconos dinámicos basados en el contenido de las predicciones
+    icon_hoy = get_weather_icon_from_text(pred_asturias_hoy)
+    icon_manana = get_weather_icon_from_text(pred_asturias_manana)
+    icon_pasado = get_weather_icon_from_text(pred_asturias_pasado_manana)
+    
+    # Enriquecer con información de fecha esperada en español
+    pred_asturias_hoy_label = f"📅 {format_date_spanish(today_date)}\n{pred_asturias_hoy}" if pred_asturias_hoy else f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
+    pred_asturias_manana_label = f"📅 {format_date_spanish(tomorrow_date)}\n{pred_asturias_manana}" if pred_asturias_manana else f"Sin datos para {tomorrow_date.strftime('%d/%m/%Y')}"
+    pred_asturias_pasado_manana_label = f"📅 {format_date_spanish(day_after_tomorrow_date)}\n{pred_asturias_pasado_manana}" if pred_asturias_pasado_manana else f"Sin datos para {day_after_tomorrow_date.strftime('%d/%m/%Y')}"
 
     # ── Predicción AEMET municipal Llanera ──
     pred_llanera = get_prediccion_llanera()
@@ -315,7 +405,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     fused_ai = "⏳ Análisis IA en curso..."
     if include_ai:
         # Determinar si se va a usar gpt-4o o mini, y qué proveedor
-        primary_model = getattr(config, "AI_MODEL", "gpt-4o")
+        model_cascade = getattr(config, "AI_MODEL_CASCADE", [])
+        primary_model = model_cascade[0] if model_cascade else "gpt-4o"
         ai_provider = getattr(config, "AI_PROVIDER", "github").lower()
         is_mini = "mini" in primary_model.lower()
         is_github = ai_provider == "github"
@@ -399,8 +490,11 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         "analysis_map_url": analysis_map_b64,  # Base64 para navegador (evita CORS)
         "aemet_prediccion": {
             "asturias_hoy": pred_asturias_hoy_label,
+            "asturias_hoy_icon": icon_hoy,
             "asturias_manana": pred_asturias_manana_label,
+            "asturias_manana_icon": icon_manana,
             "asturias_pasado_manana": pred_asturias_pasado_manana_label,
+            "asturias_pasado_manana_icon": icon_pasado,
             "llanera": pred_llanera_text,
         },
         "windy": windy_section,

@@ -37,11 +37,11 @@ Edita `.env` y define como mínimo:
 ```env
 AI_PROVIDER=github
 GITHUB_TOKEN=tu_token
-AI_MODEL=gpt-4o
-AI_FALLBACK_MODEL=gpt-4o-mini
 WEB_HOST=127.0.0.1
 WEB_PORT=8000  # Para desarrollo local
 ```
+
+> 📚 **Nota sobre modelos IA:** El sistema usa automáticamente una cascada de modelos (gpt-4o → gpt-4o-mini → llama → phi-4). No necesitas configurar nada.
 
 > 💡 **Nota:** El puerto 8000 es para desarrollo local. En producción se usa 8001 por defecto.
 
@@ -166,12 +166,12 @@ Configura las variables para producción:
 ```env
 AI_PROVIDER=github
 GITHUB_TOKEN=tu_token_regenerado
-AI_MODEL=gpt-4o
-AI_FALLBACK_MODEL=gpt-4o-mini
 AEMET_API_KEY=tu_api_key_aemet
 WEB_HOST=127.0.0.1
 WEB_PORT=8001
 ```
+
+> 📚 El sistema usa cascada automática de modelos IA.
 
 
 ### Paso 3: Crear servicio systemd

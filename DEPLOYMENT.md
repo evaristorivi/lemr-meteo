@@ -75,10 +75,8 @@ GITHUB_TOKEN=ghp_tu_token_aqui
 WEB_PORT=8001
 WEB_HOST=127.0.0.1
 
-# Modelo de IA
+# Proveedor de IA (el sistema usa cascada automática de modelos)
 AI_PROVIDER=github
-AI_MODEL=gpt-4o
-AI_FALLBACK_MODEL=gpt-4o-mini
 ```
 
 Variables **opcionales** pero recomendadas:

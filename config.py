@@ -15,13 +15,11 @@ WEB_PORT = int(os.getenv('WEB_PORT', '8000'))
 
 # Configuración de IA
 AI_PROVIDER = os.getenv('AI_PROVIDER', 'github')  # 'github' o 'openai'
-AI_MODEL = os.getenv('AI_MODEL', 'gpt-4o')  # Modelo a usar: gpt-4o, gpt-4o-mini, etc.
-AI_FALLBACK_MODEL = os.getenv('AI_FALLBACK_MODEL', 'gpt-4o-mini')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Lista de modelos en orden de preferencia (mejor a peor)
-# El sistema intentará con cada uno hasta encontrar uno disponible
+# Sistema de cascada automática de modelos
+# El sistema prueba cada modelo en orden hasta encontrar uno disponible
 AI_MODEL_CASCADE = [
     'gpt-4o',                          # ⭐ Mejor calidad, límite bajo (50/día)
     'gpt-4o-mini',                     # 🥈 Buena calidad, límite medio (150/día)

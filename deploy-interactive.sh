@@ -328,10 +328,8 @@ GITHUB_TOKEN=$GITHUB_TOKEN
 WEB_PORT=$SERVICE_PORT
 WEB_HOST=127.0.0.1
 
-# Proveedor de IA
+# Proveedor de IA (cascada automática de modelos)
 AI_PROVIDER=github
-AI_MODEL=gpt-4o
-AI_FALLBACK_MODEL=gpt-4o-mini
 
 # AEMET API (opcional pero recomendado)
 EOF

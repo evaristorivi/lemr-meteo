@@ -23,8 +23,10 @@ def check_rate_limits():
     
     # Obtener lista de modelos de la cascada
     model_cascade = getattr(config, "AI_MODEL_CASCADE", [
-        config.AI_MODEL,
-        config.AI_FALLBACK_MODEL
+        'gpt-4o',
+        'gpt-4o-mini',
+        'meta-llama-3.1-405b-instruct',
+        'phi-4'
     ])
     
     print("📊 ESTADO DE LA CASCADA DE MODELOS")
@@ -116,8 +118,6 @@ if __name__ == "__main__":
     print("⚙️  CONFIGURACIÓN DEL SISTEMA DE CASCADA")
     print("=" * 60)
     print(f"\nProvider: {config.AI_PROVIDER}")
-    print(f"Modelo principal: {config.AI_MODEL}")
-    print(f"Modelo fallback: {config.AI_FALLBACK_MODEL}")
     
     cascade = getattr(config, "AI_MODEL_CASCADE", [])
     if cascade:

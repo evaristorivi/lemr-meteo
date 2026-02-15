@@ -157,7 +157,6 @@ Proporciona:
                     ],
                     temperature=0.7,
                     max_tokens=1500,
-                    model=config.AI_MODEL,
                 )
                 
                 explanation = response_ai.choices[0].message.content
