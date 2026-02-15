@@ -925,6 +925,18 @@ def interpret_fused_forecast_with_ai(
         hora_actual = now_local.strftime("%H:%M")
         fecha_actual = now_local.strftime("%Y-%m-%d")
 
+        # Formatear condiciones actuales Open-Meteo
+        current_lines = []
+        if current:
+            current_lines.append(f"  - Hora: {current.get('time', 'N/A')}")
+            current_lines.append(f"  - Temperatura: {current.get('temperature', 'N/A')}°C (sensación {current.get('feels_like', 'N/A')}°C)")
+            current_lines.append(f"  - Humedad: {current.get('humidity', 'N/A')}%")
+            current_lines.append(f"  - Viento: {current.get('wind_speed', 'N/A')} km/h desde {current.get('wind_direction', 'N/A')}°")
+            current_lines.append(f"  - Rachas: {current.get('wind_gusts', 'N/A')} km/h")
+            current_lines.append(f"  - Nubosidad: {current.get('cloud_cover', 'N/A')}%")
+            current_lines.append(f"  - Presión: {current.get('pressure', 'N/A')} hPa")
+            current_lines.append(f"  - Precipitación: {current.get('precipitation', 'N/A')} mm")
+
         user_message = f"""Actúa como experto en meteorología aeronáutica ULM para {location} y crea una síntesis OPERATIVA final de alta precisión.
 
 ⏰ HORA ACTUAL: {hora_actual} (Europe/Madrid) - Fecha: {fecha_actual}
@@ -936,6 +948,9 @@ DATOS FIJOS AERÓDROMO LEMR:
 
 METAR LEAS (referencia):
 {metar_leas or 'No disponible'}
+
+Open-Meteo CONDICIONES ACTUALES en {location}:
+{chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 
 Open-Meteo (resumen 3 días):
 {chr(10).join(om_lines) if om_lines else 'Sin datos'}
