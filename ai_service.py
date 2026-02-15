@@ -989,6 +989,14 @@ Objetivo: comparación razonada entre Windy vs AEMET (solo texto) vs METAR/Open-
 Formato obligatorio:
 0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
 
+0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
+   OBLIGATORIO: Compara explícitamente qué decía el pronóstico para HOY vs qué está pasando AHORA MISMO:
+   - Ejemplo: "Pronóstico HOY: viento máx 26 km/h, rachas máx 35 km/h → REALIDAD AHORA: viento 24.1 km/h, rachas 42.8 km/h ⚠️ (rachas más fuertes de lo esperado)"
+   - Ejemplo: "Pronóstico HOY: nubosidad variable → REALIDAD AHORA: 100% nublado (peor de lo esperado)"
+   - Ejemplo: "Pronóstico HOY: temp máx 15°C → REALIDAD AHORA: 14.6°C (dentro de lo esperado)"
+   - Si las condiciones actuales son MEJORES o PEORES que el pronóstico, menciónalo claramente
+   - Este análisis es CRÍTICO para decidir si HOY es viable AHORA vs lo que se esperaba
+
 1) **COINCIDENCIAS** clave entre fuentes (¿qué dicen todas las fuentes?)
 
 2) **DISCREPANCIAS** clave y explicación meteorológica probable
@@ -998,11 +1006,11 @@ Formato obligatorio:
    **HOY ({fecha_actual}):**
    - Valida si {hora_actual} está dentro del horario operativo (detecta invierno/verano automáticamente)
    - Si está FUERA: "YA NO DISPONIBLE - fuera de horario operativo"
-   - Si está DENTRO: Analiza viento esperado para resto del día
-   - Indica: "PISTA 10" o "PISTA 28" (basado en dirección viento actual/esperada)
-   - Componentes: headwind/tailwind y crosswind para AMBAS pistas
+   - Si está DENTRO: Analiza viento ACTUAL (usa "CONDICIONES ACTUALES", no pronóstico)
+   - Indica: "PISTA 10" o "PISTA 28" (basado en dirección viento ACTUAL)
+   - Componentes: headwind/tailwind y crosswind para AMBAS pistas (con datos ACTUALES)
    - Ejemplo si fuera de horario: "HOY → YA NO DISPONIBLE (son las {hora_actual}, aeródromo cierra a las 20:00)"
-   - Ejemplo si viable: "HOY → PISTA 28 (headwind 15 kt, crosswind 4 kt) ✅ - viable {hora_actual}-16:00"
+   - Ejemplo si viable: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas ACTUALES 23 kt, headwind 13 kt, crosswind 3 kt) ✅ - viable {hora_actual}-20:00"
    
    **MAÑANA:**
    - Analyza viento previsto para todo el día de mañana
@@ -1018,9 +1026,14 @@ Formato obligatorio:
 
 4) **VEREDICTO POR DÍA** (los 3 días completos):
    - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO / 🕐 YA NO DISPONIBLE
-   - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
-   - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
+     ⚠️ CRÍTICO: Para HOY usa las "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
+     - Si las condiciones actuales son MEJORES que el pronóstico: indícalo (ej: "mejor de lo esperado")
+     - Si las condiciones actuales son PEORES que el pronóstico: indícalo (ej: "rachas más fuertes de lo previsto")
+   - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
+   - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **JUSTIFICACIÓN MULTIFACTOR (OBLIGATORIA)**:
+     * Para HOY: cita los valores ACTUALES EN TIEMPO REAL (viento, rachas, nubosidad AHORA a las {hora_actual})
+     * Para MAÑANA/PASADO: cita el pronóstico esperado
      * Cita explícitamente: viento medio (kt), rachas (kt), diferencia rachas-medio (kt)
      * Cita: nubosidad (techo ft, cobertura FEW/SCT/BKN/OVC)
      * Cita: precipitación (tipo, intensidad)
@@ -1032,7 +1045,8 @@ Formato obligatorio:
      * ❌ NO APTO: 2+ parámetros en límite O 1 factor crítico (rachas > 22 kt, lluvia, techo < 800 ft)
 
 5) **RIESGOS CRÍTICOS** por día:
-   - Rachas: diferencia con viento medio, valor absoluto
+   ⚠️ Para HOY: usa los valores de "CONDICIONES ACTUALES" (rachas, nubosidad, viento AHORA MISMO)
+   - Rachas: diferencia con viento medio, valor absoluto (cita valores actuales para HOY)
    - Precipitación: tipo (lluvia/nieve/granizo), intensidad (-/mod/+)
    - Nubosidad: techo bajo (ft AGL), cobertura extensa (BKN/OVC)
    - Visibilidad: si < 8 km (precaución), si < 5 km (límite legal)
@@ -1105,7 +1119,7 @@ Más allá de "¿puedo volar?", un piloto experimentado pregunta "¿DEBO volar?"
 
 3) **TIPO DE VUELO RECOMENDADO** (según carácter del día):
    - 🎯 **VUELO DE PLACER/TRAVESÍA**: Si PLACENTERO (< 10 kt, sin térmicas, visibilidad > 10 km) → Ideal para disfrutar
-   - 🗺️ **VUELO LOCAL/CIRCUITOS AMPLIOS**: Si ESTABLE (10-12 kt, térmicas débiles) → Buenos vuelos recreativos
+   - 🗺️ **VUELO LOCAL/CIRCUITOS**: Si ESTABLE (10-12 kt, térmicas débiles) → Buenos vuelos recreativos
    - 🔄 **CIRCUITOS CORTOS**: Si NORMAL (12-15 kt) o hay inestabilidad a distancia → Prudencia
    - 🏫 **SOLO TRÁFICOS DE ESCUELA**: Si AGITADO (15-18 kt) → Solo para mantener práctica, NO para disfrute
    - 🏠 **MANTENIMIENTO EN TIERRA**: Si límite pero técnicamente viable → Mejor aprovechar para tareas de hangar
