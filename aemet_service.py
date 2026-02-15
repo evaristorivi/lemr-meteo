@@ -252,11 +252,18 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
             })
 
         # Fallback: si faltan horarios, buscar con desfase horario (AEMET publica maps anticipados)
-        # Mapeo de desfase conocido: 
-        # - 06 UTC del día N suele estar en emisión 18 UTC del día N-1
-        # - 18 UTC del día N suele estar en emisión 06 UTC del día N
+        # Mapeo de desfase conocido para AEMET:
+        # - Para día actual (delta=0):
+        #   - 00 UTC: QGQE70LEMM0000________{fecha_actual}
+        #   - 06 UTC: QGQE70LEMM1800________{fecha_anterior}
+        #   - 12 UTC: QGQE70LEMM0000________{fecha_actual} (mismo que 00 UTC, pero diferentes datos)
+        #   - 18 UTC: QGQE70LEMM0600________{fecha_actual}
         if len(day_results) < 4:
             desfase_map = {
+                "12": {
+                    "source_date": today + timedelta(days=delta),
+                    "source_hour": "00",
+                },
                 "06": {
                     "source_date": today + timedelta(days=delta - 1),
                     "source_hour": "18",
@@ -267,9 +274,13 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
                 },
             }
             
-            for target_hour, mapping in desfase_map.items():
+            for target_hour in ["12", "06", "18"]:
                 # Si ya existe este horario, skip
                 if any(m.get("utc_hour") == target_hour for m in day_results):
+                    continue
+                
+                mapping = desfase_map.get(target_hour)
+                if not mapping:
                     continue
                 
                 source_d = mapping["source_date"]
