@@ -44,11 +44,77 @@
       backdrop-filter: blur(8px);
       border-radius: 18px;
       padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .hero-content {
+      flex: 1;
+      min-width: 280px;
     }
 
     .hero h1 {
       margin: 0 0 8px;
       font-size: clamp(1.4rem, 2.2vw, 2.1rem);
+    }
+
+    .nav-menu {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .nav-menu a {
+      color: var(--text);
+      text-decoration: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      transition: all 0.2s ease;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid transparent;
+    }
+
+    .nav-menu a:hover {
+      background: rgba(102, 227, 255, 0.15);
+      border-color: rgba(102, 227, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .scroll-to-top {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 24px;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s ease;
+      opacity: 0;
+      visibility: hidden;
+      z-index: 1000;
+    }
+
+    .scroll-to-top.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .scroll-to-top:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 20px rgba(102, 227, 255, 0.5);
     }
 
     .muted { color: var(--muted); }
@@ -244,20 +310,41 @@
       .map-pair { grid-template-columns: 1fr; }
       .days { grid-template-columns: 1fr; }
     }
+
+    @media (max-width: 768px) {
+      .hero {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .nav-menu {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
   <main class="container">
     <!-- HERO -->
     <section class="hero">
-      <h1>🛩️ LEMR Meteo · La Morgal</h1>
-      <div class="muted" id="meta-line"></div>
-      <div class="muted" id="refresh-line"></div>
-      <div class="muted" id="load-status">⏳ Cargando datos meteorológicos...</div>
+      <div class="hero-content">
+        <h1>🛩️ LEMR Meteo · La Morgal</h1>
+        <div class="muted" id="meta-line"></div>
+        <div class="muted" id="refresh-line"></div>
+        <div class="muted" id="load-status">⏳ Cargando datos meteorológicos...</div>
+      </div>
+      <nav class="nav-menu">
+        <a href="#condiciones">🌤️ Actual</a>
+        <a href="#windy">🌬️ Windy</a>
+        <a href="#pronostico">📅 3 días</a>
+        <a href="#aemet">🌦️ AEMET</a>
+        <a href="#analisis-ia">👨‍✈️ IA</a>
+        <a href="#mapa-analisis">🗺️ Mapa</a>
+      </nav>
     </section>
 
     <!-- TOP CARDS -->
-    <section class="grid">
+    <section class="grid" id="condiciones">
       <article class="card">
         <h2>📍 Aeródromo</h2>
         <dl class="kv" id="aerodrome-kv"></dl>
@@ -275,7 +362,7 @@
     </section>
 
     <!-- WINDY POINT FORECAST -->
-    <section class="card">
+    <section class="card" id="windy">
       <h2>🌬️ Windy Point Forecast (La Morgal)</h2>
       <div class="control-row">
         <label for="windy-model" class="muted">Modelo:</label>
@@ -291,13 +378,13 @@
     </section>
 
     <!-- TRES DÍAS CON MAPAS SIGNIFICATIVOS -->
-    <section class="card">
+    <section class="card" id="pronostico">
       <h2>📅 Pronóstico 3 días con mapas significativos AEMET</h2>
       <div id="days" class="days"></div>
     </section>
 
     <!-- PREDICCIÓN AEMET TEXTUAL -->
-    <section class="grid" id="aemet-pred-section">
+    <section class="grid" id="aemet">
       <article class="card">
         <h2 id="pred-ast-hoy-title">🌦️ Predicción AEMET — Asturias hoy</h2>
         <p id="pred-ast-hoy" class="pred-text"></p>
@@ -316,13 +403,13 @@
       </article>
     </section>
 
-    <section class="card">
+    <section class="card" id="analisis-ia">
       <h2>👨‍✈️ Análisis IA</h2>
       <p id="expert-final" class="analysis"></p>
     </section>
 
     <!-- MAPA ANÁLISIS EN SUPERFICIE -->
-    <section class="card" id="analysis-map-section" style="display:none">
+    <section class="card" id="mapa-analisis" style="display:none">
       <h2>🗺️ Mapa de análisis en superficie (isobaras + frentes)</h2>
       <img id="analysis-map-img" class="map analysis-map" alt="Mapa de análisis AEMET" />
     </section>
@@ -336,6 +423,9 @@
     </div>
   </main>
 
+  <!-- Botón flotante de vuelta al inicio -->
+  <div class="scroll-to-top" id="scrollToTop" title="Volver al inicio">↑</div>
+
   <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
   <script>
     const state = {
@@ -345,6 +435,51 @@
       windySdk: null,
       windySdkReady: false,
     };
+
+    // Smooth scroll para el menú de navegación
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.nav-menu a').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+          e.preventDefault();
+          const targetId = this.getAttribute('href').substring(1);
+          const targetElement = document.getElementById(targetId);
+          if (targetElement) {
+            // Verificar si la sección está oculta (mapa de análisis)
+            if (targetElement.style.display === 'none') {
+              return; // No hacer scroll si está oculto
+            }
+            const offset = 20; // Espacio superior
+            const elementPosition = targetElement.getBoundingClientRect().top;
+            const offsetPosition = elementPosition + window.pageYOffset - offset;
+            
+            window.scrollTo({
+              top: offsetPosition,
+              behavior: 'smooth'
+            });
+          }
+        });
+      });
+
+      // Botón scroll to top
+      const scrollToTopBtn = document.getElementById('scrollToTop');
+      
+      // Mostrar/ocultar botón según scroll
+      window.addEventListener('scroll', () => {
+        if (window.pageYOffset > 300) {
+          scrollToTopBtn.classList.add('visible');
+        } else {
+          scrollToTopBtn.classList.remove('visible');
+        }
+      });
+
+      // Acción del botón
+      scrollToTopBtn.addEventListener('click', () => {
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      });
+    });
 
     const setLoadStatus = (text, isError = false) => {
       const el = document.getElementById("load-status");
@@ -532,7 +667,7 @@
       document.getElementById("metar-raw").textContent = data.metar.raw || "METAR LEAS no disponible en este ciclo.";
 
       // Mapa de análisis
-      const amSection = document.getElementById("analysis-map-section");
+      const amSection = document.getElementById("mapa-analisis");
       if (data.analysis_map_url) {
         amSection.style.display = "";
         const analysisImg = document.getElementById("analysis-map-img");
