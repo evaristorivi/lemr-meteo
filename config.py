@@ -1,5 +1,5 @@
 """
-Configuración del bot de Telegram para meteorología aeronáutica
+Configuración para meteorología aeronáutica LEMR
 """
 import os
 from pathlib import Path
@@ -8,9 +8,6 @@ from dotenv import load_dotenv
 # Cargar variables de entorno desde el directorio del propio script
 _ENV_PATH = Path(__file__).resolve().parent / ".env"
 load_dotenv(_ENV_PATH, override=True)
-
-# Configuración de Telegram
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # Configuración Web
 WEB_HOST = os.getenv('WEB_HOST', '127.0.0.1')

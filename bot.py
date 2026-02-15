@@ -142,22 +142,22 @@ Proporciona:
 5. **ALERTAS ULM**: Periodos donde NO volar según condiciones previstas"""
         
         try:
-            from ai_service import get_ai_client, SYSTEM_PROMPT
-            from openai import OpenAI
+            from ai_service import get_ai_client, SYSTEM_PROMPT, _create_chat_completion_with_fallback
             
             client_info = get_ai_client()
             if client_info:
                 provider, client = client_info
-                model = config.AI_MODEL
                 
-                response_ai = client.chat.completions.create(
-                    model=model,
+                response_ai = _create_chat_completion_with_fallback(
+                    client=client,
+                    provider=provider,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": taf_explanation}
                     ],
                     temperature=0.7,
-                    max_tokens=1500
+                    max_tokens=1500,
+                    model=config.AI_MODEL,
                 )
                 
                 explanation = response_ai.choices[0].message.content

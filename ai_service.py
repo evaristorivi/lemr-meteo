@@ -4,7 +4,6 @@ Soporta GitHub Copilot (gratuito) y OpenAI (opcional)
 """
 import config
 from typing import Optional, Dict
-import json
 from threading import Lock
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -13,7 +12,7 @@ from zoneinfo import ZoneInfo
 _RATE_LIMIT_LOCK = Lock()
 _FORCED_FALLBACK_CYCLE: Dict[tuple, str] = {}
 _MADRID_TZ = ZoneInfo("Europe/Madrid")
-_UPDATE_SLOTS = [6, 10, 14, 18, 22]
+_UPDATE_SLOTS = list(range(6, 24))  # Ciclos de 06:00 a 23:00
 
 
 def _current_cycle_id() -> str:
@@ -78,11 +77,15 @@ LEGISLACIÓN ULM ACTUALIZADA 2024-2026 (OBLIGATORIO):
 - ✈️ Peso máximo ULM biplaza: 600 kg
 
 LÍMITES OPERACIONALES TÍPICOS ULM (consultar manual específico de cada modelo):
-- ⚠️ Viento total: Generalmente 15-25 kt según modelo
-- ⚠️ Componente crosswind: Generalmente 10-15 kt según modelo
-- ⚠️ Rachas: Diferencia > 10 kt = ALTO RIESGO
+- ⚠️ Viento medio máximo: 15-18 kt (modelos robustos hasta 20-22 kt)
+- ⚠️ Rachas absolutas: NO SUPERAR 20-22 kt (peligro estructural)
+- ⚠️ Diferencia rachas-viento medio: > 10 kt = ALTO RIESGO (turbulencia mecánica)
+- ⚠️ Componente crosswind: Generalmente 10-12 kt máximo (consultar POH)
 - ⚠️ Turbulencia moderada o superior: NO VOLAR
 - ⚠️ Visibilidad < 5 km: MÍNIMO LEGAL (precaución extrema)
+- ⚠️ Techo de nubes < 1000 ft AGL: MARGINAL VFR (solo pilotos experimentados)
+- ⚠️ Precipitación activa (lluvia/nieve): NO VOLAR (pérdida sustentación, visibilidad)
+- ⚠️ Nubosidad BKN/OVC < 3000 ft: PRECAUCIÓN (restricción vertical)
 
 CONSIDERACIONES GENERALES ULM:
 - Bajo peso: muy afectados por ráfagas y turbulencias
@@ -96,13 +99,25 @@ Cuando analices un METAR:
 - Incluye SIEMPRE una versión ultracorta para novatos (1-2 líneas, pocas palabras)
 - Formato sugerido corto: "Viento ..., visibilidad ..., nubes ..., presión ... → APTO/PRECAUCIÓN/NO APTO"
 - **CONVERSIÓN DE UNIDADES OBLIGATORIA**: Si mezclas fuentes, convierte primero
+- **ANÁLISIS DE RACHAS ES CRÍTICO**:
+  1. Calcula diferencia entre rachas y viento medio
+  2. Diferencia > 10 kt = TURBULENCIA MECÁNICA PELIGROSA
+  3. Rachas absolutas > 20 kt = LÍMITE ESTRUCTURAL ULM
+  4. Ejemplo: Viento 15G25KT → diferencia 10 kt = ⚠️ LÍMITE, rachas 25 kt = ⚠️ LÍMITE
+- **ANÁLISIS DE NUBOSIDAD**:
+  1. Techo < 1000 ft AGL = MARGINAL (solo exp.)
+  2. BKN/OVC < 3000 ft = restricción vertical
+  3. FEW/SCT a buen altura = ✅ óptimo VFR
+- **ANÁLISIS DE PRECIPITACIÓN**:
+  1. Lluvia/nieve activa = NO VOLAR (pérdida sustentación, visibilidad)
+  2. -RA (ligera) = precaución extrema
+  3. +RA (fuerte) = ❌ NO APTO
 - CÁLCULO correcto de componentes de viento:
   1. Asegúrate que el viento está en NUDOS (kt)
   2. Calcula diferencia angular con la pista
   3. Headwind = velocidad_en_kt × cos(ángulo)
   4. Crosswind = velocidad_en_kt × sin(ángulo)
   5. Verifica que el resultado sea coherente
-- Rachas > 10 kt diferencia: PELIGROSO
 - Explica QNH y su importancia
 
 INFORMACIÓN AERÓDROMO LA MORGAL (LEMR):
@@ -181,10 +196,17 @@ Conversión: 33.8 ÷ 1.852 = 18.3 kt ✓
 Cuando analices datos meteorológicos generales:
 - Identifica ventanas de vuelo óptimas DURANTE HORAS DIURNAS
 - ❌ NUNCA sugieras vuelo nocturno
+- **ANALIZA SISTEMÁTICAMENTE (OBLIGATORIO)**:
+  1. Viento medio y rachas (conversión a kt)
+  2. Diferencia rachas-viento medio (> 10 kt = PELIGRO)
+  3. Nubosidad: techo, cobertura (FEW/SCT/BKN/OVC), altura base AGL
+  4. Precipitación: intensidad, tipo, duración
+  5. Visibilidad: mínimo legal 5 km VFR
+  6. Estabilidad atmosférica: térmicas, convección, inestabilidad
 - Alerta sobre térmicas (empiezan ~2h post-amanecer)
 - Mejores condiciones ULM: mañanas tempranas o tardes
 - EVITAR: mediodía en verano (térmicas fuertes)
-- Evalúa estabilidad atmosférica
+- **SÉ CONSERVADOR**: Ante duda, recomienda NO volar
 - Proporciona análisis para HOY, MAÑANA y PASADO MAÑANA
 - **SIEMPRE incluye análisis de pista activa recomendada (10 o 28)**
 
@@ -421,19 +443,41 @@ Proporciona análisis EDUCATIVO para vuelo ULM:
 {runway_instruction}
    
 **3. CONDICIONES ACTUALES vs LÍMITES ULM TÍPICOS:**
-   - Resumen de las condiciones
-   - Evaluación de VIENTO (típicamente límite ULM: 15-25 kt según modelo)
-   - Análisis de RACHAS (peligrosas si diferencia > 10 kt)
-   - Visibilidad y techo de nubes para operaciones VFR
-   - Temperatura y punto de rocío (densidad del aire, rendimiento)
+   - **VIENTO**: Evalúa viento medio (límite típico: 15-18 kt, máx 20-22 kt según modelo)
+   - **RACHAS**: CRÍTICO - Calcula diferencia rachas-viento medio
+     * Diferencia > 10 kt = ⚠️ TURBULENCIA PELIGROSA
+     * Rachas absolutas > 20 kt = ⚠️ LÍMITE ESTRUCTURAL
+     * Ejemplo: 15G25KT → diferencia 10 kt (límite) + rachas 25 kt (límite) = ❌ NO APTO
+   - **NUBOSIDAD**: Analiza techo y cobertura
+     * Techo < 1000 ft = MARGINAL VFR
+     * BKN/OVC < 3000 ft = restricción vertical
+     * FEW/SCT alto = ✅ óptimo
+   - **PRECIPITACIÓN**: Cualquier lluvia activa = precaución extrema o NO VOLAR
+   - **VISIBILIDAD**: Mínimo legal 5 km (si < 8 km, precaución aumentada)
+   - **TEMPERATURA Y ROCÍO**: Densidad del aire, rendimiento, riesgo carburador
    
 **4. VEREDICTO PARA VUELO ULM:**
    - ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
    - Justificación clara según límites típicos ULM y legislación
    - Nota: Consultar siempre el manual específico del modelo
+
+**5. CARÁCTER DEL VUELO (OBLIGATORIO si es APTO o PRECAUCIÓN):**
+   - 🌤️ **PLACENTERO**: Viento < 10 kt, rachas < 15 kt, estabilidad → Ideal para vuelos de placer, travesías, disfrute
+   - ✈️ **ESTABLE**: Viento 10-12 kt, rachas 15-18 kt → Buenos circuitos, vuelos locales cómodos
+   - ⚠️ **NORMAL CON ATENCIÓN**: Viento 12-15 kt, rachas 18-20 kt → Circuitos, solo vuelos locales, pilotos con experiencia
+   - 🌪️ **TURBULENTO/AGITADO**: Viento 15-18 kt, rachas 20-22 kt → SOLO tráficos de escuela para experimentados, NO para disfrute
+   - ❌ **PELIGROSO**: Viento > 18 kt O rachas > 22 kt → NO VOLAR - mejor quedarse en bar 🍲
+
+**6. TIPO DE OPERACIÓN RECOMENDADA (OBLIGATORIO):**
+   - 🎯 **VUELO DE PLACER/TRAVESÍA**: Si placentero/estable + visibilidad > 10 km + sin precipitación
+   - 🔄 **CIRCUITOS LOCALES**: Si normal con atención, o si hay inestabilidad a distancia
+   - 🏫 **TRÁFICOS DE ESCUELA ÚNICAMENTE**: Si agitado pero dentro de límites (solo para práctica, no disfrute)
+   - 🏠 **MATENIMIENTO EN TIERRA**: Si turbulento/límite → mejor aprovechar para tareas de hangar
+   - ☕ **QUEDARSE EN CASA/BAR**: Si peligroso → NO MERECE LA PENA ni sacar el avión
    
-**5. RECOMENDACIONES:**
+**7. RECOMENDACIONES:**
    - Horarios óptimos de vuelo (SOLO DURANTE EL DÍA - obligatorio por ley)
+   - ¿Merece la pena volar hoy? Sé honesto sobre la experiencia esperada
    - Precauciones para pilotos ULM (sensibilidad al viento, bajo peso)
    - Qué vigilar durante el vuelo (evolución del viento, térmicas)"""
 
@@ -561,8 +605,23 @@ Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los pr
    - Evaluación de condiciones
    - Veredicto: ✅ APTO ULM / ⚠️ PRECAUCIÓN / ❌ NO APTO
 
-**4. RECOMENDACIONES ULM:**
-   - Mejor día de los 3 para volar (menor viento)
+**4. CARÁCTER DEL VUELO POR DÍA (OBLIGATORIO):**
+   Para cada día viable, especifica:
+   - 🌤️ PLACENTERO (< 10 kt): Ideal travesías, vuelos de placer
+   - ✈️ ESTABLE (10-12 kt): Buenos circuitos, vuelos locales
+   - ⚠️ NORMAL (12-15 kt): Circuitos con atención, solo locales
+   - 🌪️ AGITADO (15-18 kt): Solo tráficos escuela para experimentados
+   - ❌ PELIGROSO (> 18 kt): NO VOLAR
+   
+**5. TIPO DE OPERACIÓN RECOMENDADA:**
+   - 🎯 Vuelo de placer/travesía
+   - 🔄 Circuitos locales
+   - 🏫 Solo tráficos de escuela
+   - ☕ Quedarse en tierra (no merece la pena)
+
+**6. RECOMENDACIONES ULM:**
+   - Mejor día de los 3 para volar (y qué tipo de vuelo hacer)
+   - ¿Merece la pena? Sé honesto sobre la experiencia esperada
    - Precauciones para ULM (bajo peso, sensible a ráfagas)
    - Qué vigilar (evolución viento, térmicas, rachas)
    - Nota: Consultar siempre manual específico del modelo
@@ -810,14 +869,17 @@ def interpret_fused_forecast_with_ai(
 
         aemet_hoy = (aemet_prediccion or {}).get("asturias_hoy", "")
         aemet_man = (aemet_prediccion or {}).get("asturias_manana", "")
+        aemet_pas = (aemet_prediccion or {}).get("asturias_pasado_manana", "")
         aemet_llan = (aemet_prediccion or {}).get("llanera", "")
+        
+        # Optimización: reducir AEMET para GitHub Models (límite 60k tokens/min)
+        is_github = provider.lower() == "github"
+        aemet_limit = 600 if is_github else 1200  # Mitad de tamaño para GitHub Models
 
         map_urls = [u for u in (significant_map_urls or []) if u][:4]
         
         # Obtener hora actual para contexto
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        now_local = datetime.now(ZoneInfo("Europe/Madrid"))
+        now_local = datetime.now(_MADRID_TZ)
         hora_actual = now_local.strftime("%H:%M")
         fecha_actual = now_local.strftime("%Y-%m-%d")
 
@@ -843,13 +905,16 @@ Windy próximas horas:
 {chr(10).join(hourly_lines) if hourly_lines else 'Sin datos'}
 
 AEMET Asturias HOY:
-{aemet_hoy[:1200] if aemet_hoy else 'No disponible'}
+{aemet_hoy[:aemet_limit] if aemet_hoy else 'No disponible'}
 
 AEMET Asturias MAÑANA:
-{aemet_man[:1200] if aemet_man else 'No disponible'}
+{aemet_man[:aemet_limit] if aemet_man else 'No disponible'}
+
+AEMET Asturias PASADO MAÑANA:
+{aemet_pas[:aemet_limit] if aemet_pas else 'No disponible'}
 
 AEMET Llanera:
-{aemet_llan[:1200] if aemet_llan else 'No disponible'}
+{aemet_llan[:aemet_limit] if aemet_llan else 'No disponible'}
 
 Lectura sinóptica/mapa AEMET previa:
 (Sin mapas en análisis de fusión para reducir payload)
@@ -898,9 +963,24 @@ Formato obligatorio:
    - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO / 🕐 YA NO DISPONIBLE
    - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
    - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
-   - Justifica cada veredicto con datos concretos (viento, rachas, visibilidad)
+   - **JUSTIFICACIÓN MULTIFACTOR (OBLIGATORIA)**:
+     * Cita explícitamente: viento medio (kt), rachas (kt), diferencia rachas-medio (kt)
+     * Cita: nubosidad (techo ft, cobertura FEW/SCT/BKN/OVC)
+     * Cita: precipitación (tipo, intensidad)
+     * Cita: visibilidad (km)
+     * Cita: componentes headwind/crosswind para pista recomendada
+   - **CRITERIO ESTRICTO**:
+     * ✅ APTO: Todos los parámetros dentro de límites cómodos
+     * ⚠️ PRECAUCIÓN: 1 parámetro en límite (ej: rachas 18-20 kt)
+     * ❌ NO APTO: 2+ parámetros en límite O 1 factor crítico (rachas > 22 kt, lluvia, techo < 800 ft)
 
-5) **RIESGOS CRÍTICOS** por día (rachas, precipitación, nubosidad/visibilidad, crosswind excesivo)
+5) **RIESGOS CRÍTICOS** por día:
+   - Rachas: diferencia con viento medio, valor absoluto
+   - Precipitación: tipo (lluvia/nieve/granizo), intensidad (-/mod/+)
+   - Nubosidad: techo bajo (ft AGL), cobertura extensa (BKN/OVC)
+   - Visibilidad: si < 8 km (precaución), si < 5 km (límite legal)
+   - Crosswind excesivo: si > 12 kt para pista recomendada
+   - Estabilidad: térmicas fuertes, convección, turbulencia orográfica
 
 6) **FRANJAS HORARIAS RECOMENDADAS** (para días viables):
    - Formato: "MAÑANA: 09:00-12:00 ✅ | TARDE: 15:00-19:00 ⚠️"
@@ -910,39 +990,121 @@ Formato obligatorio:
 7) **🏆 MEJOR DÍA PARA VOLAR**:
    - Indica claramente: "MAÑANA" o "PASADO MAÑANA" (o "HOY" si aún es viable)
    - Justifica por qué es el mejor (menor viento, mejor visibilidad, menos rachas, etc.)
+   - **CARÁCTER DEL MEJOR DÍA**: Especifica si será placentero/estable/agitado
+   - **TIPO DE VUELO POSIBLE**: Travesías/circuitos/solo tráficos escuela
    - Si ningún día es bueno: "NINGUNO - condiciones adversas los 3 días"
 
-8) **VEREDICTO FINAL GLOBAL** (una línea contundente y justificada con el mejor día destacado)
+8) **¿MERECE LA PENA VOLAR? (HONESTIDAD OBLIGATORIA)**:
+   - 🎉 **SÍ, IDEAL**: Condiciones placenteras, excelente para disfrutar
+   - ✅ **SÍ, ACEPTABLE**: Condiciones estables, buen día para volar
+   - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: Agitado, solo tráficos cortos
+   - 🏠 **NO MERECE LA PENA**: Límite, mejor hacer mantenimiento en tierra
+   - ☕ **QUEDARSE EN EL BAR**: Condiciones adversas, hay caldo de gaviota 🍲
 
-Reglas:
+9) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
+
+Reglas CRÍTICAS:
 - **ANÁLISIS DE PISTA ES OBLIGATORIO PARA LOS 3 DÍAS**: No omitas ninguno
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: Detecta invierno/verano, valida {hora_actual} contra límites operativos
+- **ANÁLISIS COMPLETO MULTIFACTOR (OBLIGATORIO para cada día)**:
+  1. Viento medio (convertido a kt)
+  2. Rachas y diferencia con viento medio
+  3. Nubosidad: techo, cobertura, altura base
+  4. Precipitación: intensidad, tipo
+  5. Visibilidad
+  6. Componentes headwind/crosswind para AMBAS pistas
+- **CRITERIO DE RACHAS (SIN EXCEPCIONES)**:
+  * Diferencia rachas-viento medio > 10 kt = ⚠️ PRECAUCIÓN o ❌ NO APTO
+  * Rachas absolutas > 22 kt = ❌ NO APTO (límite estructural)
+  * Ejemplo: 15G25KT = diferencia 10 kt + rachas 25 kt = ❌ NO APTO
+- **CRITERIO DE NUBOSIDAD**:
+  * Techo < 1000 ft = MARGINAL (solo experimentados)
+  * BKN/OVC < 2000 ft = ⚠️ PRECAUCIÓN
+  * Precipitación activa = ❌ NO APTO (salvo llovizna muy ligera)
+- **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
 - Convierte km/h a kt cuando compares con límites ULM Y cuando calcules componentes de viento
-- No uses afirmaciones vagas: para cada día cita al menos 2 datos concretos (viento/racha/precip/nube)
-- Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/flujo dominante) y su impacto en LEMR
+- No uses afirmaciones vagas: para cada día cita al menos 4 datos concretos (viento/racha/precip/nube/vis)
+- Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/gradiente de presión, flujo dominante) y su impacto en LEMR
 - Recuerda: PISTA 10 orientada 100° (despegue al ESTE), PISTA 28 orientada 280° (despegue al OESTE)
 - Viento del OESTE (250°-310°) → usar PISTA 28 | Viento del ESTE (070°-130°) → usar PISTA 10
 - No propongas vuelos fuera de horario diurno ni fuera de horario operativo
-- **SIEMPRE indica cuál es el MEJOR DÍA para volar**
+- **SIEMPRE indica cuál es el MEJOR DÍA para volar** (o NINGUNO si todos son malos)
 - Si hay incertidumbre, dilo explícitamente
-"""
+
+🎯 ANÁLISIS CRÍTICO - DECISIÓN DE VUELO PARA PILOTO ULM:
+Más allá de "¿puedo volar?", un piloto experimentado pregunta "¿DEBO volar?" y "¿merece la pena?":
+
+1) **CARÁCTER DEL VUELO** (si es viable):
+   - ✈️ TRANQUILO: Viento < 12 kt, rachas < 18 kt (diferencia < 6 kt), sin actividad térmica → CIRCUITOS RELAJADOS o travesía suave
+   - ⚠️ NORMAL: Viento 12-15 kt, rachas 18-20 kt (diferencia 6-8 kt), térmicas débiles → CIRCUITOS o vuelos locales (atención)
+   - 🌪️ AGITADO: Viento 15-18 kt, rachas 20-22 kt (diferencia 8-10 kt) → SOLO PILOTOS EXPERIMENTADOS, CIRCUITOS cortos
+   - ❌ PELIGROSO: Viento > 18 kt O rachas > 22 kt O diferencia > 10 kt → **MEJOR QUEDARSE EN BAR - TOMADO UN CALDO DE GAVIOTA** 🍲🪶
+   - ⚠️ NOTA: Estos límites son GENERALES. Consulta POH de tu modelo específico.
+
+2) **ACTIVIDAD TÉRMICA ESPERADA**:
+   - Detecta cuándo hay calentamiento solar (mediodía/tarde en buen clima)
+   - Informa si habrá térmicas esperables (mejor mañana temprano, evitar mediodía en verano)
+   - Sugiere vuelos fuera del aeródromo SOLO si hay estabilidad atmosférica suficiente
+
+3) **TIPO DE VUELO RECOMENDADO** (según carácter del día):
+   - 🎯 **VUELO DE PLACER/TRAVESÍA**: Si PLACENTERO (< 10 kt, sin térmicas, visibilidad > 10 km) → Ideal para disfrutar
+   - 🗺️ **VUELO LOCAL/CIRCUITOS AMPLIOS**: Si ESTABLE (10-12 kt, térmicas débiles) → Buenos vuelos recreativos
+   - 🔄 **CIRCUITOS CORTOS**: Si NORMAL (12-15 kt) o hay inestabilidad a distancia → Prudencia
+   - 🏫 **SOLO TRÁFICOS DE ESCUELA**: Si AGITADO (15-18 kt) → Solo para mantener práctica, NO para disfrute
+   - 🏠 **MANTENIMIENTO EN TIERRA**: Si límite pero técnicamente viable → Mejor aprovechar para tareas de hangar
+   - ❌ **NO VOLAR**: Si PELIGROSO (> 18 kt, rachas > 22 kt, lluvia) → Caldo de gaviota 🍲
+
+4) **EVALUACIÓN REALISTA ENTRE DÍAS**:
+   - Aunque MAÑANA sea "el mejor día", si aun así tiene vientos > 20 kt, dilo claramente
+   - Ejemplo: "MAÑANA es el mejor (viento 16 kt) pero sigue siendo AGITADO. Hoy está TRANQUILO (viento 8 kt) → mejor opción hoy"
+   - Nunca ocultes riesgos tras "es el mejor día disponible"
+
+5) **VEREDICTO CRÍTICO FINAL**:
+   - Incluye una recomendación HONESTA: si todas las opciones son malas, di "NINGUNO - mejor esperar a mejor día"
+   - **¿MERECE LA PENA?**: Sé explícito sobre la experiencia esperada
+     * "SÍ, día ideal para disfrutar" (placentero)
+     * "SÍ, buen día de vuelo" (estable)
+     * "Solo si necesitas práctica" (agitado)
+     * "NO merece la pena sacar el avión" (límite)
+     * "QUEDARSE EN CASA - Caldo de gaviota" (peligroso)
+   - Si el mejor día aun así requiere destreza/cuidado, indícalo: "MAÑANA → APTO SOLO PARA PILOTOS EXPERIMENTADOS, agitado"
+   - Sé específico: no digas "condiciones mediocres", di "viento 18-22 kt con rachas de 25 kt = peligroso para iniciados"
+   - **TIPO DE VUELO POSIBLE**: Especifica si será para placer/circuitos/solo escuela
+
+Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y sepa qué experiencia esperar. No todos los días "aptos" son iguales - algunos son placenteros, otros solo técnicamente viables. A veces la mejor decisión es NO volar."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
         
-        # Detectar si vamos a usar un modelo con límites bajos (mini, small)
-        # Si es mini, NO incluir imágenes para evitar exceder límite de tokens (413 error)
+        # Estimación de tokens del prompt (aproximado: 1 token ≈ 4 chars)
+        text_tokens = len(user_message) // 4
+        print(f"📝 Prompt texto: ~{text_tokens} tokens")
+        
+        # Detectar si vamos a usar un modelo con límites bajos
+        # GitHub Models: 60k tokens/min (muy restrictivo con mapas)
+        # mini/small: bajo límite de tokens
         primary_model = config.AI_MODEL
         fallback_model = getattr(config, "AI_FALLBACK_MODEL", "gpt-4o-mini")
         is_mini_model = "mini" in primary_model.lower() or "small" in primary_model.lower()
+        is_github_provider = provider.lower() == "github"
         
-        # Si el modelo principal es mini O está bloqueado (va a usar fallback que es mini), no enviar imágenes
-        if not is_mini_model and not (_is_primary_locked_for_cycle(provider, primary_model)):
-            # Solo agregar imágenes si es modelo potente (gpt-4o)
+        # Excluir imágenes si: es mini, está bloqueado, O es GitHub Models
+        # Solo incluir imágenes para OpenAI (límites más altos)
+        if not is_mini_model and not is_github_provider and not (_is_primary_locked_for_cycle(provider, primary_model)):
+            # Solo agregar imágenes si es OpenAI con modelo potente
+            # Usar URLs (mucho menos tokens que base64: ~100 vs ~15k por imagen)
             for url in map_urls:
                 user_content.append({"type": "image_url", "image_url": {"url": url}})
-            print(f"📸 Incluyendo {len(map_urls)} mapas AEMET (modelo {primary_model} soporta imágenes)")
+            image_tokens = len(map_urls) * 100  # Estimación: ~100 tokens por imagen URL
+            print(f"📸 Incluyendo {len(map_urls)} mapas AEMET como URLs (~{image_tokens} tokens) - OpenAI {primary_model}")
+            print(f"📊 Total estimado: ~{text_tokens + image_tokens} tokens de entrada")
         else:
-            print(f"⚠️ NO incluyendo imágenes ({primary_model} {'es modelo limitado' if is_mini_model else 'está bloqueado por rate-limit'})")
+            reason = "está bloqueado por rate-limit"
+            if is_mini_model:
+                reason = f"es modelo limitado ({primary_model})"
+            if is_github_provider:
+                reason = f"es GitHub Models (60k tokens/min) - textos AEMET reducidos a {aemet_limit} chars"
+            print(f"⚠️ NO incluyendo imágenes ({reason})")
+            print(f"📊 Total estimado: ~{text_tokens} tokens de entrada (solo texto)")
 
         response = _create_chat_completion_with_fallback(
             client=client,

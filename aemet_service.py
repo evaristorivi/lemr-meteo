@@ -20,6 +20,10 @@ import config
 AEMET_BASE = "https://opendata.aemet.es/opendata"
 MADRID_TZ = ZoneInfo("Europe/Madrid")
 
+# Protección anti-rate-limit: delay entre peticiones consecutivas a AEMET
+_LAST_AEMET_REQUEST_TIME = 0.0
+_MIN_REQUEST_INTERVAL = 0.8  # segundos entre peticiones (evita rate-limit)
+
 # Reintentos ante HTTP 429 (rate-limit AEMET)
 _MAX_RETRIES = 2
 _RETRY_WAIT = 12  # segundos entre reintentos
@@ -45,7 +49,20 @@ def _aemet_get(endpoint: str, timeout: int = 15) -> Optional[dict]:
     """
     Paso 1: llamada autenticada a un endpoint AEMET.
     Reintenta automáticamente ante HTTP 429 (rate-limit).
+    Añade delay automático entre peticiones para evitar bloqueos.
     """
+    global _LAST_AEMET_REQUEST_TIME, _AEMET_REQUEST_COUNT
+    
+    # Limpiar caché si es necesario
+    _clear_cache_if_needed()
+    
+    # Protección rate-limit: esperar si la última petición fue muy reciente
+    time_since_last = time.time() - _LAST_AEMET_REQUEST_TIME
+    if time_since_last < _MIN_REQUEST_INTERVAL:
+        sleep_time = _MIN_REQUEST_INTERVAL - time_since_last
+        print(f"⏳ Rate-limit protection: esperando {sleep_time:.1f}s antes de AEMET {endpoint[:40]}")
+        time.sleep(sleep_time)
+    
     api_key = _api_key()
     if not api_key:
         print("AEMET_API_KEY no configurada")
@@ -54,6 +71,8 @@ def _aemet_get(endpoint: str, timeout: int = 15) -> Optional[dict]:
     url = f"{AEMET_BASE}{endpoint}"
     for attempt in range(_MAX_RETRIES + 1):
         try:
+            _LAST_AEMET_REQUEST_TIME = time.time()  # Marcar timestamp
+            _AEMET_REQUEST_COUNT += 1  # Incrementar contador
             resp = requests.get(
                 url,
                 params={"api_key": api_key},
@@ -63,7 +82,7 @@ def _aemet_get(endpoint: str, timeout: int = 15) -> Optional[dict]:
             if resp.status_code == 200:
                 return resp.json()
             if resp.status_code == 429 and attempt < _MAX_RETRIES:
-                print(f"AEMET 429 rate-limit en {endpoint}, reintentando en {_RETRY_WAIT}s...")
+                print(f"⚠️ AEMET 429 rate-limit en {endpoint}, reintentando en {_RETRY_WAIT}s...")
                 time.sleep(_RETRY_WAIT)
                 continue
             print(f"AEMET {endpoint} -> HTTP {resp.status_code}")
@@ -106,24 +125,55 @@ def _fetch_datos_url(datos_url: str, timeout: int = 15, as_bytes: bool = False):
 AMA_MAP_BASE = "https://ama.aemet.es/o/estaticos/bbdd/imagenes"
 SIG_MAP_UTC_HOURS = ["00", "06", "12", "18"]
 
+# Caché de URLs verificadas (evita verificar la misma URL múltiples veces)
+_URL_AVAILABILITY_CACHE: Dict[str, bool] = {}
+_CACHE_LAST_CLEAR_TIME = time.time()
+_CACHE_CLEAR_INTERVAL = 1800  # Limpiar caché cada 30 minutos
+
+# Contador de peticiones AEMET (para monitoring)
+_AEMET_REQUEST_COUNT = 0
+
+
+def _clear_cache_if_needed():
+    """Limpia el caché de URLs si ha pasado el intervalo de tiempo."""
+    global _URL_AVAILABILITY_CACHE, _CACHE_LAST_CLEAR_TIME
+    if time.time() - _CACHE_LAST_CLEAR_TIME > _CACHE_CLEAR_INTERVAL:
+        _URL_AVAILABILITY_CACHE.clear()
+        _CACHE_LAST_CLEAR_TIME = time.time()
+        print("🧹 Caché de URLs AEMET limpiado")
+
+
+def get_aemet_request_count() -> int:
+    """Devuelve el número de peticiones AEMET realizadas desde el inicio."""
+    return _AEMET_REQUEST_COUNT
+
 
 def _url_has_image(url: str, timeout: int = 5) -> bool:
+    # Usar caché para evitar verificaciones repetidas
+    if url in _URL_AVAILABILITY_CACHE:
+        return _URL_AVAILABILITY_CACHE[url]
+    
+    result = False
     try:
         resp = requests.head(url, timeout=timeout, allow_redirects=True)
         if resp.status_code == 200:
             content_type = (resp.headers.get("Content-Type") or "").lower()
             if "image" in content_type or "png" in content_type or not content_type:
-                return True
+                result = True
     except Exception:
         pass
 
-    try:
-        resp = requests.get(url, timeout=timeout, stream=True)
-        ok = resp.status_code == 200
-        resp.close()
-        return ok
-    except Exception:
-        return False
+    if not result:
+        try:
+            resp = requests.get(url, timeout=timeout, stream=True)
+            result = resp.status_code == 200
+            resp.close()
+        except Exception:
+            pass
+    
+    # Cachear resultado (evita verificar de nuevo en este ciclo)
+    _URL_AVAILABILITY_CACHE[url] = result
+    return result
 
 
 def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
@@ -265,28 +315,67 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
 
 def get_analysis_map_url() -> Optional[str]:
     """
-    Obtiene la URL temporal del último mapa de análisis en superficie
-    (isobaras, frentes). Se actualiza cada ~12h.
+    Obtiene la URL temporal del mapa de análisis en superficie (isobaras, frentes).
+    
+    ⚠️ NOTA: Esta URL es temporal y puede tener problemas de CORS en navegadores.
+    Para usar en navegador, usar get_analysis_map_b64() que devuelve base64.
+    Para IA (OpenAI/GitHub Models), esta URL funciona perfectamente.
+    
+    Returns:
+        URL temporal de la API de AEMET (más ligera para IA, ~100 tokens)
     """
     meta = _aemet_get("/api/mapasygraficos/analisis")
     if meta and meta.get("datos"):
-        return meta["datos"]
+        return meta["datos"]  # URL temporal: https://opendata.aemet.es/opendata/sh/XXX
     return None
 
 
 def get_analysis_map_b64() -> Optional[str]:
     """
-    Descarga el mapa de análisis en superficie y lo devuelve como data-URI base64.
-    Más confiable que URLs temporales que pueden expirar.
+    Descarga el mapa de análisis en superficie y lo convierte a base64.
+    
+    Se actualiza cada ~12h. Ideal para embedding en navegadores (evita CORS y URLs expiradas).
+    
+    Returns:
+        String data URI base64 o None si hay error (~15k tokens, NO usar para IA)
     """
-    url = get_analysis_map_url()
-    if not url:
+    temp_url = get_analysis_map_url()
+    if not temp_url:
         return None
-    raw = _fetch_datos_url(url, as_bytes=True)
-    if raw:
-        b64_str = base64.b64encode(raw).decode("ascii")
-        return f"data:image/png;base64,{b64_str}"
+    
+    # Descargar la imagen con reintentos (las URLs temporales a veces tardan)
+    max_attempts = 2
+    for attempt in range(max_attempts):
+        try:
+            # Paso 2: descargar desde URL temporal con timeout generoso
+            raw_bytes = _fetch_datos_url(temp_url, timeout=20, as_bytes=True)
+            
+            if raw_bytes and len(raw_bytes) > 1000:  # Verificar que sea una imagen real
+                # Convertir a base64 para embedding directo
+                import base64
+                b64_str = base64.b64encode(raw_bytes).decode("ascii")
+                print(f"✅ Mapa análisis descargado: {len(raw_bytes)} bytes → {len(b64_str)} chars base64")
+                return f"data:image/png;base64,{b64_str}"
+            else:
+                print(f"⚠️ Mapa análisis: respuesta muy pequeña (intento {attempt+1}/{max_attempts})")
+                
+        except Exception as e:
+            print(f"⚠️ Error descargando mapa análisis (intento {attempt+1}/{max_attempts}): {e}")
+            
+        if attempt < max_attempts - 1:
+            import time
+            time.sleep(2)  # Esperar antes de reintentar
+    
+    print(f"❌ No se pudo descargar el mapa de análisis después de {max_attempts} intentos")
     return None
+
+
+def get_analysis_map_b64_compat() -> Optional[str]:
+    """
+    Devuelve base64 del mapa de análisis.
+    (Nombre mantenido por compatibilidad con get_analysis_map_b64)
+    """
+    return get_analysis_map_b64()
 
 
 # ──────────────────── Observaciones convencionales ─────────────────────────

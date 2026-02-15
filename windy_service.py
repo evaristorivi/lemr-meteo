@@ -178,14 +178,17 @@ def get_windy_point_forecast(lat: float, lon: float, model: Optional[str] = None
             if cloud_low is not None and cloud_mid is not None and cloud_high is not None:
                 cloud_total = min(100, max(cloud_low, cloud_mid, cloud_high))
 
+            temp_k = temp[i] if i < len(temp) else None
+            dewp_k = dewpoint[i] if i < len(dewpoint) else None
+
             hourly.append(
                 {
                     "time_local": dt_local.isoformat(),
                     "wind_kmh": round(wind_kmh, 1),
                     "wind_dir_deg": round(wind_dir, 0),
                     "gust_kmh": round(gust_kmh, 1) if gust_kmh is not None else None,
-                    "temp_c": temp[i] if i < len(temp) else None,
-                    "dewpoint_c": dewpoint[i] if i < len(dewpoint) else None,
+                    "temp_c": round(temp_k - 273.15, 1) if temp_k is not None else None,
+                    "dewpoint_c": round(dewp_k - 273.15, 1) if dewp_k is not None else None,
                     "rh_pct": rh[i] if i < len(rh) else None,
                     "pressure_pa": pressure[i] if i < len(pressure) else None,
                     "precip_3h_mm": precip_3h[i] if i < len(precip_3h) else None,

@@ -1,7 +1,7 @@
 """
 Aplicación web meteorológica para pilotos ULM de La Morgal (LEMR).
-Reemplaza el flujo de Telegram por una web moderna con actualización automática 5 veces al día.
-Integra mapas AEMET, METAR LEAS, Open-Meteo y análisis IA.
+Interfaz web moderna con actualización automática cada hora de 06:00 a 23:00.
+Integra mapas AEMET, METAR LEAS, Open-Meteo, Windy y análisis IA.
 """
 from datetime import date, datetime, time, timedelta
 from threading import Lock, Thread
@@ -15,6 +15,7 @@ from ai_service import (
 )
 from aemet_service import (
     get_significant_maps_for_three_days,
+    get_analysis_map_url,
     get_analysis_map_b64,
     get_prediccion_asturias_hoy,
     get_prediccion_asturias_manana,
@@ -168,7 +169,11 @@ def _build_windy_section(selected_windy_model: str) -> dict:
 
 
 def _generate_report_payload(windy_model: str | None = None, include_ai: bool = True) -> dict:
+    from aemet_service import get_aemet_request_count
+    
     now_local = datetime.now(MADRID_TZ)
+    aemet_count_start = get_aemet_request_count()
+    
     metar_leas = get_metar(config.LEAS_ICAO)
     selected_windy_model = _sanitize_windy_model(windy_model)
 
@@ -190,7 +195,15 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     sig_maps = get_significant_maps_for_three_days(ambito="esp")
 
     # ── Mapa de análisis en superficie (isobaras, frentes) ──
-    analysis_map_url = get_analysis_map_b64()  # Base64 es más confiable que URLs temporales
+    # URL temporal: para pasar a la IA (ligera, ~100 tokens)
+    analysis_map_url = get_analysis_map_url()
+    # Base64: para mostrar en navegador (evita CORS, pesada ~400KB)
+    analysis_map_b64 = get_analysis_map_b64() if analysis_map_url else None
+    
+    if analysis_map_b64:
+        print(f"✅ Mapa análisis obtenido (URL para IA + base64 para navegador)")
+    else:
+        print("⚠️ No se pudo obtener mapa de análisis de AEMET")
 
     # ── Predicción AEMET textual Asturias ──
     # Obtener fechas esperadas para cada sección
@@ -301,14 +314,17 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     fused_ai = "⏳ Análisis IA en curso..."
     if include_ai:
-        # Determinar si se va a usar gpt-4o o mini
+        # Determinar si se va a usar gpt-4o o mini, y qué proveedor
         primary_model = getattr(config, "AI_MODEL", "gpt-4o")
+        ai_provider = getattr(config, "AI_PROVIDER", "github").lower()
         is_mini = "mini" in primary_model.lower()
+        is_github = ai_provider == "github"
         
-        # Si es gpt-4o, incluir mapas. Si es mini, no incluir para evitar 413
+        # Excluir mapas para: mini models O GitHub (60k tokens/min - muy restrictivo)
+        # Solo incluir mapas para OpenAI (límite de tokens más alto)
         map_urls_for_ai = []
-        if not is_mini:
-            # Solo para gpt-4o: incluir algunos mapas
+        if not is_mini and not is_github:
+            # Solo para OpenAI con gpt-4o: incluir URL del mapa análisis + mapas significativos
             if analysis_map_url:
                 map_urls_for_ai.append(analysis_map_url)
             for m in sig_maps[:1]:  # Solo 1 mapa significativo
@@ -316,8 +332,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 if u and u not in map_urls_for_ai:
                     map_urls_for_ai.append(u)
 
-        # Para mini: truncar agresivamente. Para gpt-4o: texto completo
-        if is_mini:
+        # Para mini O GitHub: truncar agresivamente. Para OpenAI: texto completo
+        if is_mini or is_github:
             aemet_pred_short = {
                 "asturias_hoy": (pred_asturias_hoy[:180] if pred_asturias_hoy else ""),
                 "asturias_manana": (pred_asturias_manana[:180] if pred_asturias_manana else ""),
@@ -325,7 +341,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "llanera": (pred_llanera_text[:80] if pred_llanera_text else ""),
             }
         else:
-            # gpt-4o: recibe texto AEMET completo
+            # OpenAI: recibe texto AEMET completo
             aemet_pred_short = {
                 "asturias_hoy": pred_asturias_hoy or "",
                 "asturias_manana": pred_asturias_manana or "",
@@ -338,10 +354,15 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             weather_data=weather_data,
             windy_data=windy_section or {},
             aemet_prediccion=aemet_pred_short,
-            map_analysis_text="" if is_mini else (analysis_map_url or ""),
+            map_analysis_text="" if (is_mini or is_github) else (analysis_map_url or ""),
             significant_map_urls=map_urls_for_ai,
             location=config.LA_MORGAL_COORDS["name"],
         )
+
+    # Log de peticiones AEMET realizadas en este ciclo
+    aemet_count_end = get_aemet_request_count()
+    aemet_requests_this_cycle = aemet_count_end - aemet_count_start
+    print(f"📊 Ciclo completado: {aemet_requests_this_cycle} peticiones AEMET (total: {aemet_count_end})")
 
     return {
         "generated_at": now_local.isoformat(),
@@ -375,7 +396,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "analysis": metar_ai,
         },
         "forecast_days": days,
-        "analysis_map_url": analysis_map_url,
+        "analysis_map_url": analysis_map_b64,  # Base64 para navegador (evita CORS)
         "aemet_prediccion": {
             "asturias_hoy": pred_asturias_hoy_label,
             "asturias_manana": pred_asturias_manana_label,
@@ -391,11 +412,25 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "pending": not include_ai,
         },
         "refresh_policy": {
-            "description": "Actualización automática 5 veces al día",
-            "slots_local_time": ["06:00", "10:00", "14:00", "18:00", "22:00"],
+            "description": "Actualización automática cada hora de 06:00 a 23:00",
+            "slots_local_time": [f"{h:02d}:00" for h in UPDATE_SLOTS],
             "timezone": "Europe/Madrid",
         },
     }
+
+
+def _background_regenerate_cache(cache_key: str, windy_model: str, include_ai: bool):
+    """Regenera el reporte en background y actualiza la caché."""
+    try:
+        now_local = datetime.now(MADRID_TZ)
+        payload = _generate_report_payload(windy_model=windy_model, include_ai=include_ai)
+        with _CACHE_LOCK:
+            _CACHE["cache_key"] = cache_key
+            _CACHE["generated_at"] = now_local.isoformat()
+            _CACHE["payload"] = payload
+        print(f"✅ Caché regenerada en background para ciclo {cache_key}")
+    except Exception as exc:
+        print(f"❌ Error regenerando caché en background: {exc}")
 
 
 def get_report_payload(force: bool = False, windy_model: str | None = None, include_ai: bool = True) -> dict:
@@ -405,10 +440,20 @@ def get_report_payload(force: bool = False, windy_model: str | None = None, incl
     cache_key = f"{cycle_id}|{selected_model}"
 
     with _CACHE_LOCK:
+        # Caché válida: mismo ciclo
         if not force and _CACHE["payload"] and _CACHE["cache_key"] == cache_key:
             return _CACHE["payload"]
-
-        payload = _generate_report_payload(windy_model=selected_model, include_ai=True)
+        
+        # Caché desactualizada: nuevo ciclo pero tenemos datos viejos
+        if not force and _CACHE["payload"] and _CACHE["cache_key"] != cache_key:
+            print(f"🔄 Nuevo ciclo detectado ({cache_key}), mostrando datos previos mientras se actualiza...")
+            old_payload = _CACHE["payload"]
+            # Lanzar regeneración en background
+            Thread(target=_background_regenerate_cache, args=(cache_key, selected_model, include_ai), daemon=True).start()
+            return old_payload
+        
+        # Sin caché o forzado: generación síncrona
+        payload = _generate_report_payload(windy_model=selected_model, include_ai=include_ai)
         _CACHE["cache_key"] = cache_key
         _CACHE["generated_at"] = now_local.isoformat()
         _CACHE["payload"] = payload
