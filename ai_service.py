@@ -1114,7 +1114,7 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
                 {"role": "user", "content": user_content},
             ],
             temperature=0.4,
-            max_tokens=1400,
+            max_tokens=2500,
             model=config.AI_MODEL,
         )
 
