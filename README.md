@@ -173,7 +173,6 @@ WEB_HOST=127.0.0.1
 WEB_PORT=8001
 ```
 
-**⚠️ Importante:** Usa un puerto diferente al de WordPress (típicamente 80/443), como 8001.
 
 ### Paso 3: Crear servicio systemd
 
@@ -182,26 +181,6 @@ Usa el archivo incluido `lemr-meteo.service` como plantilla:
 ```bash
 sudo cp lemr-meteo.service /etc/systemd/system/
 sudo nano /etc/systemd/system/lemr-meteo.service
-```
-
-Ajusta las rutas si es necesario. Contenido del archivo:
-
-```ini
-[Unit]
-Description=LEMR Meteo Web Service
-After=network.target
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/var/www/lemr-meteo
-Environment="PATH=/var/www/lemr-meteo/venv/bin"
-ExecStart=/var/www/lemr-meteo/venv/bin/python web_app.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
 ```
 
 Activar el servicio:
