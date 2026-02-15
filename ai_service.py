@@ -248,7 +248,7 @@ def get_ai_client():
                 api_key=config.GITHUB_TOKEN,
                 base_url="https://models.inference.ai.azure.com",
                 max_retries=0,
-                timeout=20,
+                timeout=60,
             )
             return ('github', client)
         except Exception as e:
@@ -263,7 +263,7 @@ def get_ai_client():
             client = OpenAI(
                 api_key=config.OPENAI_API_KEY,
                 max_retries=0,
-                timeout=20,
+                timeout=60,
             )
             return ('openai', client)
         except Exception as e:
@@ -278,21 +278,9 @@ def get_ai_client():
                 api_key=config.GITHUB_TOKEN,
                 base_url="https://models.inference.ai.azure.com",
                 max_retries=0,
-                timeout=20,
+                timeout=60,
             )
             return ('github', client)
-        except:
-            pass
-    
-    if config.OPENAI_API_KEY:
-        try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=config.OPENAI_API_KEY,
-                max_retries=0,
-                timeout=20,
-            )
-            return ('openai', client)
         except:
             pass
     
