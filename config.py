@@ -20,6 +20,15 @@ AI_FALLBACK_MODEL = os.getenv('AI_FALLBACK_MODEL', 'gpt-4o-mini')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
+# Lista de modelos en orden de preferencia (mejor a peor)
+# El sistema intentará con cada uno hasta encontrar uno disponible
+AI_MODEL_CASCADE = [
+    'gpt-4o',                          # ⭐ Mejor calidad, límite bajo (50/día)
+    'gpt-4o-mini',                     # 🥈 Buena calidad, límite medio (150/día)
+    'meta-llama-3.1-405b-instruct',   # 🔥 Gran modelo open source (límite alto)
+    'phi-4',                           # 🚀 Modelo pequeño pero eficiente de Microsoft
+]
+
 # AEMET OpenData
 AEMET_API_KEY = os.getenv('AEMET_API_KEY', '')
 

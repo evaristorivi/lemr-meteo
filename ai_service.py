@@ -320,6 +320,23 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     )
 
 
+def _print_rate_limit_info(response, model_name: str):
+    """Imprime información de rate limits de la respuesta de la API"""
+    try:
+        # Intentar obtener las cabeceras de rate limit
+        if hasattr(response, '_response') and hasattr(response._response, 'headers'):
+            headers = response._response.headers
+            limit = headers.get('x-ratelimit-limit-requests', 'N/A')
+            remaining = headers.get('x-ratelimit-remaining-requests', 'N/A')
+            reset = headers.get('x-ratelimit-reset-requests', 'N/A')
+            
+            if limit != 'N/A' or remaining != 'N/A':
+                print(f"📊 Rate Limit [{model_name}]: {remaining}/{limit} requests restantes (reset: {reset})")
+    except Exception as e:
+        # Si no podemos leer las cabeceras, no es crítico
+        pass
+
+
 def _create_chat_completion_with_fallback(
     client,
     provider: str,
@@ -328,53 +345,66 @@ def _create_chat_completion_with_fallback(
     max_tokens: int,
     model: Optional[str] = None,
 ):
-    primary_model = model or config.AI_MODEL
-    fallback_model = getattr(config, "AI_FALLBACK_MODEL", "gpt-4o-mini")
-
-    # Si el modelo principal está bloqueado por ciclo, usar directamente el fallback
-    if fallback_model and fallback_model != primary_model and _is_primary_locked_for_cycle(provider, primary_model):
-        print(f"📦 Usando modelo fallback {fallback_model} (principal bloqueado hasta próximo ciclo)")
-        return client.chat.completions.create(
-            model=fallback_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-    # Intentar con el modelo principal
-    try:
-        response = client.chat.completions.create(
-            model=primary_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return response
-    except Exception as exc:
-        error_msg = str(exc)
-        print(f"⚠️ Error con modelo {primary_model}: {error_msg}")
+    """
+    Intenta crear un chat completion con sistema de cascada de modelos.
+    Prueba modelos en orden de preferencia hasta encontrar uno disponible.
+    """
+    # Obtener lista de modelos a probar
+    model_cascade = getattr(config, "AI_MODEL_CASCADE", [
+        'gpt-4o',
+        'gpt-4o-mini',
+        'meta-llama-3.1-405b-instruct',
+        'mistral-large',
+    ])
+    
+    # Si se especifica un modelo, intentar primero con ese
+    if model and model not in model_cascade:
+        model_cascade = [model] + list(model_cascade)
+    
+    last_exception = None
+    attempted_models = []
+    
+    for model_name in model_cascade:
+        # Saltar modelos bloqueados en este ciclo
+        if _is_primary_locked_for_cycle(provider, model_name):
+            print(f"⏭️  Saltando {model_name} (bloqueado hasta próximo ciclo)")
+            attempted_models.append(f"{model_name} (bloqueado)")
+            continue
         
-        # Si hay modelo de fallback disponible y es diferente, intentar con él
-        if fallback_model and fallback_model != primary_model:
-            # Si es rate-limit, bloquear el principal para el resto del ciclo
-            if _is_rate_limit_error(exc):
-                _lock_primary_for_cycle(provider, primary_model)
-                print(f"🔒 Modelo {primary_model} bloqueado hasta próximo ciclo (rate-limit)")
+        try:
+            print(f"🔄 Intentando con modelo: {model_name}")
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             
-            print(f"🔄 Reintentando con modelo fallback {fallback_model}...")
-            try:
-                return client.chat.completions.create(
-                    model=fallback_model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            except Exception as fallback_exc:
-                print(f"❌ Error también con fallback {fallback_model}: {fallback_exc}")
-                raise fallback_exc
-        
-        # Si no hay fallback o ya falló, lanzar el error original
-        raise
+            # ¡Éxito!
+            _print_rate_limit_info(response, model_name)
+            print(f"✅ Análisis completado con {model_name}")
+            return response
+            
+        except Exception as exc:
+            error_msg = str(exc)
+            attempted_models.append(model_name)
+            
+            # Si es rate-limit, bloquear este modelo para el resto del ciclo
+            if _is_rate_limit_error(exc):
+                _lock_primary_for_cycle(provider, model_name)
+                print(f"🔒 {model_name} alcanzó límite de rate-limit (bloqueado hasta próximo ciclo)")
+            else:
+                print(f"⚠️ Error con {model_name}: {error_msg[:100]}")
+            
+            last_exception = exc
+            # Continuar con el siguiente modelo en la cascada
+    
+    # Si llegamos aquí, todos los modelos fallaron
+    print(f"❌ Todos los modelos fallaron. Intentados: {', '.join(attempted_models)}")
+    if last_exception:
+        raise last_exception
+    else:
+        raise Exception("No hay modelos disponibles para procesar la solicitud")
 
 
 def interpret_metar_with_ai(metar: str, icao: str = "") -> Optional[str]:
@@ -994,7 +1024,7 @@ Formato obligatorio:
    - **TIPO DE VUELO POSIBLE**: Travesías/circuitos/solo tráficos escuela
    - Si ningún día es bueno: "NINGUNO - condiciones adversas los 3 días"
 
-8) **¿MERECE LA PENA VOLAR? (HONESTIDAD OBLIGATORIA)**:
+8) **¿MERECE LA PENA VOLAR?**:
    - 🎉 **SÍ, IDEAL**: Condiciones placenteras, excelente para disfrutar
    - ✅ **SÍ, ACEPTABLE**: Condiciones estables, buen día para volar
    - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: Agitado, solo tráficos cortos
