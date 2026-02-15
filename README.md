@@ -1,5 +1,7 @@
 # 🛩️ LEMR Meteo Web · La Morgal
 
+## 🌐 **[Ver aplicación en vivo →](https://lemr-meteo.evaristorivieccio.es/)**
+
 Web moderna para pilotos ULM de La Morgal (Asturias), con:
 - METAR de LEAS como referencia cercana
 - Predicción local para LEMR (hoy, mañana y pasado mañana)
