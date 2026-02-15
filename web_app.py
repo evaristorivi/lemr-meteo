@@ -193,9 +193,20 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     analysis_map_url = get_analysis_map_url()
 
     # ── Predicción AEMET textual Asturias ──
+    # Obtener fechas esperadas para cada sección
+    today_date = now_local.date()
+    tomorrow_date = today_date + timedelta(days=1)
+    day_after_tomorrow_date = today_date + timedelta(days=2)
+    
+    # Obtener predicciones
     pred_asturias_hoy = get_prediccion_asturias_hoy() or ""
     pred_asturias_manana = get_prediccion_asturias_manana() or ""
     pred_asturias_pasado_manana = get_prediccion_asturias_pasado_manana() or ""
+    
+    # Enriquecer con información de fecha esperada
+    pred_asturias_hoy_label = f"📅 {today_date.strftime('%A, %d de %B de %Y')}\n{pred_asturias_hoy}" if pred_asturias_hoy else f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
+    pred_asturias_manana_label = f"📅 {tomorrow_date.strftime('%A, %d de %B de %Y')}\n{pred_asturias_manana}" if pred_asturias_manana else f"Sin datos para {tomorrow_date.strftime('%d/%m/%Y')}"
+    pred_asturias_pasado_manana_label = f"📅 {day_after_tomorrow_date.strftime('%A, %d de %B de %Y')}\n{pred_asturias_pasado_manana}" if pred_asturias_pasado_manana else f"Sin datos para {day_after_tomorrow_date.strftime('%d/%m/%Y')}"
 
     # ── Predicción AEMET municipal Llanera ──
     pred_llanera = get_prediccion_llanera()
@@ -349,9 +360,9 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         "forecast_days": days,
         "analysis_map_url": analysis_map_url,
         "aemet_prediccion": {
-            "asturias_hoy": pred_asturias_hoy,
-            "asturias_manana": pred_asturias_manana,
-            "asturias_pasado_manana": pred_asturias_pasado_manana,
+            "asturias_hoy": pred_asturias_hoy_label,
+            "asturias_manana": pred_asturias_manana_label,
+            "asturias_pasado_manana": pred_asturias_pasado_manana_label,
             "llanera": pred_llanera_text,
         },
         "windy": windy_section,

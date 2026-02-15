@@ -839,7 +839,7 @@ def interpret_fused_forecast_with_ai(
 
 DATOS FIJOS AERÓDROMO LEMR:
     - Pista: 10/28 (rumbos 100° y 280°)
-    - Horario operativo: Invierno 09:00-20:00 / Verano 09:00-21:45
+    - Horario operativo: Invierno (oct-mar) 09:00-20:00 / Verano (abr-sep) 09:00-21:45
     - Solo VFR diurno
 
 METAR LEAS (referencia):
@@ -871,11 +871,13 @@ Mapas significativos AEMET (analiza visualmente estas imágenes si están dispon
 
 Objetivo: comparación razonada entre Windy vs AEMET (texto + mapas) vs METAR/Open-Meteo para DECISIÓN DE VUELO ULM en LEMR.
 
-⚠️ SENTIDO COMÚN TEMPORAL (CRÍTICO):
-- Si la hora actual es después de las 18:00, HOY ya NO es viable para volar (demasiado tarde)
-- Si la hora actual está fuera del horario operativo del aeródromo, HOY debe descartarse
-- En estos casos, marca HOY como "YA NO DISPONIBLE" y enfócate en MAÑANA y PASADO MAÑANA
-- NUNCA recomiendes volar HOY si ya pasó el horario razonable
+⚠️ VALIDACIÓN HORARIA PARA HOY (CRÍTICA):
+- Determina si {fecha_actual} es temporada invierno (oct-mar) o verano (abr-sep)
+- Si invierno: horario operativo es 09:00-20:00 | Si verano: 09:00-21:45
+- Compara {hora_actual} (hora actual) contra el horario operativo
+- Si {hora_actual} está DENTRO del horario operativo: HOY es viable, analiza viento para resto del día
+- Si {hora_actual} está FUERA del horario operativo: marca HOY como "YA NO DISPONIBLE - fuera de horario operativo (abre a las HH:MM)"
+- ⚠️ IMPORTANTE: No marques HOY como no disponible si aún hay tiempo útil de vuelo (mín 2h)
 
 Formato obligatorio:
 0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
@@ -887,24 +889,25 @@ Formato obligatorio:
 3) **🎯 ANÁLISIS DE PISTA ACTIVA POR DÍA** (OBLIGATORIO para los 3 días):
    
    **HOY ({fecha_actual}):**
-   - Si hora actual > 18:00 o fuera de horario operativo: "YA NO DISPONIBLE - fuera de horario"
-   - Si aún es viable: Analiza viento esperado resto del día
-   - Indica: "PISTA 10" o "PISTA 28"
+   - Valida si {hora_actual} está dentro del horario operativo (detecta invierno/verano automáticamente)
+   - Si está FUERA: "YA NO DISPONIBLE - fuera de horario operativo"
+   - Si está DENTRO: Analiza viento esperado para resto del día
+   - Indica: "PISTA 10" o "PISTA 28" (basado en dirección viento actual/esperada)
    - Componentes: headwind/tailwind y crosswind para AMBAS pistas
-   - Ejemplo: "HOY → YA NO DISPONIBLE (son las {hora_actual}, fuera de horario operativo)"
-   - O si es viable: "HOY → PISTA 28 (headwind 15 kt, crosswind 4 kt) ✅ - viable 09:00-16:00"
+   - Ejemplo si fuera de horario: "HOY → YA NO DISPONIBLE (son las {hora_actual}, aeródromo cierra a las 20:00)"
+   - Ejemplo si viable: "HOY → PISTA 28 (headwind 15 kt, crosswind 4 kt) ✅ - viable {hora_actual}-16:00"
    
    **MAÑANA:**
-   - Analiza viento previsto para mañana
+   - Analyza viento previsto para todo el día de mañana
    - Indica: "PISTA 10" o "PISTA 28"
    - Componentes calculados para ambas pistas
-   - Franjas horarias recomendadas (mañana y tarde)
+   - Franjas horarias recomendadas (mañana y tarde, dentro de horario operativo)
    
    **PASADO MAÑANA:**
    - Analiza viento previsto para pasado mañana
    - Indica: "PISTA 10" o "PISTA 28"
    - Componentes calculados para ambas pistas
-   - Franjas horarias recomendadas (mañana y tarde)
+   - Franjas horarias recomendadas (mañana y tarde, dentro de horario operativo)
 
 4) **VEREDICTO POR DÍA** (los 3 días completos):
    - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO / 🕐 YA NO DISPONIBLE
@@ -917,7 +920,7 @@ Formato obligatorio:
 6) **FRANJAS HORARIAS RECOMENDADAS** (para días viables):
    - Formato: "MAÑANA: 09:00-12:00 ✅ | TARDE: 15:00-19:00 ⚠️"
    - Si no hay ventana segura: "NO RECOMENDADA"
-   - Considera amanecer, atardecer, y horario operativo
+   - Considera amanecer, atardecer, horario operativo y condiciones meteorológicas
 
 7) **🏆 MEJOR DÍA PARA VOLAR**:
    - Indica claramente: "MAÑANA" o "PASADO MAÑANA" (o "HOY" si aún es viable)
@@ -928,7 +931,7 @@ Formato obligatorio:
 
 Reglas:
 - **ANÁLISIS DE PISTA ES OBLIGATORIO PARA LOS 3 DÍAS**: No omitas ninguno
-- **SENTIDO COMÚN HORARIO**: Si son las 20:00+, HOY ya no sirve
+- **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: Detecta invierno/verano, valida {hora_actual} contra límites operativos
 - Convierte km/h a kt cuando compares con límites ULM Y cuando calcules componentes de viento
 - No uses afirmaciones vagas: para cada día cita al menos 2 datos concretos (viento/racha/precip/nube)
 - Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/flujo dominante) y su impacto en LEMR

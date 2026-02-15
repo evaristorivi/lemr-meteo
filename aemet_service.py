@@ -237,26 +237,14 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
                 continue
 
             url = candidate_urls[utc_hour]
-
-            display_hour = utc_hour
             source_date = target
 
-            # Para HOY, los mapas significativos de AEMET se interpretan con desfase operativo.
-            # Ejemplo: emisión 00 UTC suele corresponder al tramo 12 UTC del mismo día.
-            if delta == 0:
-                mapped = (int(utc_hour) + 12) % 24
-                display_hour = f"{mapped:02d}"
-
-                # Emisiones 12/18 UTC del día actual representan tramos de mañana (00/06),
-                # se muestran en la tarjeta de MAÑANA para evitar duplicados/confusión.
-                if display_hour in {"00", "06"}:
-                    continue
-
+            # Mostrar todos los horarios disponibles tal cual (sin asumir mapeos a otras fechas)
             day_results.append({
                 "date": target.isoformat(),
                 "label": labels[delta],
-                "utc_hour": display_hour,
-                "slot_label": f"{display_hour} UTC",
+                "utc_hour": utc_hour,
+                "slot_label": f"{utc_hour} UTC",
                 "map_url": url,
                 "map_b64": None,
                 "source_date": source_date.isoformat(),
