@@ -55,11 +55,6 @@ Ver [DEPLOYMENT.md](DEPLOYMENT.md) para más detalles.
 
 ## �🔁 Política de actualización
 
-La app refresca internamente la información en ciclos:
-- 06:00
-- 10:00
-- 14:00
-- 18:00
-- 22:00
+La app refresca internamente la información cada hora de 06:00 a 23:00.
 
 Zona horaria: Europe/Madrid.

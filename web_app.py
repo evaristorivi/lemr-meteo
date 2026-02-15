@@ -28,7 +28,7 @@ from windy_service import get_windy_point_forecast, get_windy_map_forecast
 app = Flask(__name__)
 
 MADRID_TZ = ZoneInfo("Europe/Madrid")
-UPDATE_SLOTS = [6, 10, 14, 18, 22]
+UPDATE_SLOTS = list(range(6, 24))  # Cada hora de 06:00 a 23:00
 _CACHE_LOCK = Lock()
 _CACHE = {
     "cache_key": None,
@@ -476,5 +476,5 @@ if __name__ == "__main__":
 
     print("Iniciando LEMR Meteo Web para La Morgal...")
     print(f"URL: http://{config.WEB_HOST}:{config.WEB_PORT}")
-    print("Actualizacion automatica: 06:00, 10:00, 14:00, 18:00 y 22:00 (Europe/Madrid)")
+    print("Actualizacion automatica: cada hora de 06:00 a 23:00 (Europe/Madrid)")
     app.run(host=config.WEB_HOST, port=config.WEB_PORT, debug=False)
