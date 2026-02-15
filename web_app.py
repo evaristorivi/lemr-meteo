@@ -15,7 +15,7 @@ from ai_service import (
 )
 from aemet_service import (
     get_significant_maps_for_three_days,
-    get_analysis_map_url,
+    get_analysis_map_b64,
     get_prediccion_asturias_hoy,
     get_prediccion_asturias_manana,
     get_prediccion_asturias_pasado_manana,
@@ -190,7 +190,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     sig_maps = get_significant_maps_for_three_days(ambito="esp")
 
     # ── Mapa de análisis en superficie (isobaras, frentes) ──
-    analysis_map_url = get_analysis_map_url()
+    analysis_map_url = get_analysis_map_b64()  # Base64 es más confiable que URLs temporales
 
     # ── Predicción AEMET textual Asturias ──
     # Obtener fechas esperadas para cada sección

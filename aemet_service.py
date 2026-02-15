@@ -275,12 +275,17 @@ def get_analysis_map_url() -> Optional[str]:
 
 
 def get_analysis_map_b64() -> Optional[str]:
+    """
+    Descarga el mapa de análisis en superficie y lo devuelve como data-URI base64.
+    Más confiable que URLs temporales que pueden expirar.
+    """
     url = get_analysis_map_url()
     if not url:
         return None
     raw = _fetch_datos_url(url, as_bytes=True)
     if raw:
-        return base64.b64encode(raw).decode("ascii")
+        b64_str = base64.b64encode(raw).decode("ascii")
+        return f"data:image/png;base64,{b64_str}"
     return None
 
 
