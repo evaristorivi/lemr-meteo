@@ -943,8 +943,21 @@ Reglas:
 """
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
-        for url in map_urls:
-            user_content.append({"type": "image_url", "image_url": {"url": url}})
+        
+        # Detectar si vamos a usar un modelo con límites bajos (mini, small)
+        # Si es mini, NO incluir imágenes para evitar exceder límite de tokens (413 error)
+        primary_model = config.AI_MODEL
+        fallback_model = getattr(config, "AI_FALLBACK_MODEL", "gpt-4o-mini")
+        is_mini_model = "mini" in primary_model.lower() or "small" in primary_model.lower()
+        
+        # Si el modelo principal es mini O está bloqueado (va a usar fallback que es mini), no enviar imágenes
+        if not is_mini_model and not (_is_primary_locked_for_cycle(provider, primary_model)):
+            # Solo agregar imágenes si es modelo potente (gpt-4o)
+            for url in map_urls:
+                user_content.append({"type": "image_url", "image_url": {"url": url}})
+            print(f"📸 Incluyendo {len(map_urls)} mapas AEMET (modelo {primary_model} soporta imágenes)")
+        else:
+            print(f"⚠️ NO incluyendo imágenes ({primary_model} {'es modelo limitado' if is_mini_model else 'está bloqueado por rate-limit'})")
 
         response = _create_chat_completion_with_fallback(
             client=client,
