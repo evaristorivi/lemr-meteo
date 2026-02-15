@@ -216,94 +216,44 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
     labels = ["Hoy", "Mañana"]
     results = []
 
+    # Mapeo de desfase conocido para AEMET (verificado con AerBrava):
+    # AEMET publica mapas con anticipación. La fuente de verdad es este mapeo:
+    # - 00 UTC: QGQE70LEMM1200________{fecha_anterior}
+    # - 06 UTC: QGQE70LEMM1800________{fecha_anterior}
+    # - 12 UTC: QGQE70LEMM0000________{fecha_actual}
+    # - 18 UTC: QGQE70LEMM0600________{fecha_actual}
+    desfase_map = {
+        "00": {"delta_date": -1, "source_hour": "12"},
+        "06": {"delta_date": -1, "source_hour": "18"},
+        "12": {"delta_date": 0, "source_hour": "00"},
+        "18": {"delta_date": 0, "source_hour": "06"},
+    }
+
     for delta in range(2):
         target = today + timedelta(days=delta)
         day_results: List[Dict] = []
 
-        candidate_urls = {utc_hour: _direct_sig_map_url(target, utc_hour) for utc_hour in SIG_MAP_UTC_HOURS}
-        available_urls: Dict[str, bool] = {}
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            future_map = {
-                executor.submit(_url_has_image, url): utc_hour
-                for utc_hour, url in candidate_urls.items()
-            }
-            for future, utc_hour in [(f, h) for f, h in future_map.items()]:
-                is_available = future.result()
-                if is_available:
-                    available_urls[utc_hour] = True
-
-        for utc_hour in SIG_MAP_UTC_HOURS:
-            if not available_urls.get(utc_hour):
+        # Intentar cada hora UTC con su mapeo de desfase
+        for target_hour in SIG_MAP_UTC_HOURS:
+            mapping = desfase_map.get(target_hour, {})
+            source_d = today + timedelta(days=delta + mapping.get("delta_date", 0))
+            source_h = mapping.get("source_hour", target_hour)
+            
+            url = _direct_sig_map_url(source_d, source_h)
+            
+            if not _url_has_image(url, timeout=5):
                 continue
-
-            url = candidate_urls[utc_hour]
-            source_date = target
-
-            # Mostrar todos los horarios disponibles tal cual (sin asumir mapeos a otras fechas)
+            
             day_results.append({
                 "date": target.isoformat(),
                 "label": labels[delta],
-                "utc_hour": utc_hour,
-                "slot_label": f"{utc_hour} UTC",
+                "utc_hour": target_hour,
+                "slot_label": f"{target_hour} UTC",
                 "map_url": url,
                 "map_b64": None,
-                "source_date": source_date.isoformat(),
-                "source_utc_hour": utc_hour,
+                "source_date": source_d.isoformat(),
+                "source_utc_hour": source_h,
             })
-
-        # Fallback: si faltan horarios, buscar con desfase horario (AEMET publica maps anticipados)
-        # Mapeo de desfase conocido para AEMET (verificado con AerBrava):
-        # - Para día actual (delta=0):
-        #   - 00 UTC: QGQE70LEMM1200________{fecha_anterior} (emisión 12 UTC día anterior)
-        #   - 06 UTC: QGQE70LEMM1800________{fecha_anterior} (emisión 18 UTC día anterior)
-        #   - 12 UTC: QGQE70LEMM0000________{fecha_actual} (emisión 00 UTC día actual)
-        #   - 18 UTC: QGQE70LEMM0600________{fecha_actual} (emisión 06 UTC día actual)
-        if len(day_results) < 4:
-            desfase_map = {
-                "00": {
-                    "source_date": today + timedelta(days=delta - 1),
-                    "source_hour": "12",
-                },
-                "06": {
-                    "source_date": today + timedelta(days=delta - 1),
-                    "source_hour": "18",
-                },
-                "12": {
-                    "source_date": today + timedelta(days=delta),
-                    "source_hour": "00",
-                },
-                "18": {
-                    "source_date": today + timedelta(days=delta),
-                    "source_hour": "06",
-                },
-            }
-            
-            for target_hour in ["00", "06", "12", "18"]:
-                # Si ya existe este horario, skip
-                if any(m.get("utc_hour") == target_hour for m in day_results):
-                    continue
-                
-                mapping = desfase_map.get(target_hour)
-                if not mapping:
-                    continue
-                
-                source_d = mapping["source_date"]
-                source_h = mapping["source_hour"]
-                url = _direct_sig_map_url(source_d, source_h)
-                
-                if not _url_has_image(url, timeout=5):
-                    continue
-                
-                day_results.append({
-                    "date": target.isoformat(),
-                    "label": labels[delta],
-                    "utc_hour": target_hour,
-                    "slot_label": f"{target_hour} UTC",
-                    "map_url": url,
-                    "map_b64": None,
-                    "source_date": source_d.isoformat(),
-                    "source_utc_hour": source_h,
-                })
 
         results.extend(day_results)
 
