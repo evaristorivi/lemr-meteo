@@ -252,21 +252,25 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
             })
 
         # Fallback: si faltan horarios, buscar con desfase horario (AEMET publica maps anticipados)
-        # Mapeo de desfase conocido para AEMET:
+        # Mapeo de desfase conocido para AEMET (verificado con AerBrava):
         # - Para día actual (delta=0):
-        #   - 00 UTC: QGQE70LEMM0000________{fecha_actual}
-        #   - 06 UTC: QGQE70LEMM1800________{fecha_anterior}
-        #   - 12 UTC: QGQE70LEMM0000________{fecha_actual} (mismo que 00 UTC, pero diferentes datos)
-        #   - 18 UTC: QGQE70LEMM0600________{fecha_actual}
+        #   - 00 UTC: QGQE70LEMM1200________{fecha_anterior} (emisión 12 UTC día anterior)
+        #   - 06 UTC: QGQE70LEMM1800________{fecha_anterior} (emisión 18 UTC día anterior)
+        #   - 12 UTC: QGQE70LEMM0000________{fecha_actual} (emisión 00 UTC día actual)
+        #   - 18 UTC: QGQE70LEMM0600________{fecha_actual} (emisión 06 UTC día actual)
         if len(day_results) < 4:
             desfase_map = {
-                "12": {
-                    "source_date": today + timedelta(days=delta),
-                    "source_hour": "00",
+                "00": {
+                    "source_date": today + timedelta(days=delta - 1),
+                    "source_hour": "12",
                 },
                 "06": {
                     "source_date": today + timedelta(days=delta - 1),
                     "source_hour": "18",
+                },
+                "12": {
+                    "source_date": today + timedelta(days=delta),
+                    "source_hour": "00",
                 },
                 "18": {
                     "source_date": today + timedelta(days=delta),
@@ -274,7 +278,7 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
                 },
             }
             
-            for target_hour in ["12", "06", "18"]:
+            for target_hour in ["00", "06", "12", "18"]:
                 # Si ya existe este horario, skip
                 if any(m.get("utc_hour") == target_hour for m in day_results):
                     continue
