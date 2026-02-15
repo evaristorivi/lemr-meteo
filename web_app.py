@@ -301,27 +301,44 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     fused_ai = "⏳ Análisis IA en curso..."
     if include_ai:
+        # Determinar si se va a usar gpt-4o o mini
+        primary_model = getattr(config, "AI_MODEL", "gpt-4o")
+        is_mini = "mini" in primary_model.lower()
+        
+        # Si es gpt-4o, incluir mapas. Si es mini, no incluir para evitar 413
         map_urls_for_ai = []
-        if analysis_map_url:
-            map_urls_for_ai.append(analysis_map_url)
-        for m in sig_maps:
-            u = m.get("map_url")
-            if u and u not in map_urls_for_ai:
-                map_urls_for_ai.append(u)
-            if len(map_urls_for_ai) >= 4:
-                break
+        if not is_mini:
+            # Solo para gpt-4o: incluir algunos mapas
+            if analysis_map_url:
+                map_urls_for_ai.append(analysis_map_url)
+            for m in sig_maps[:1]:  # Solo 1 mapa significativo
+                u = m.get("map_url")
+                if u and u not in map_urls_for_ai:
+                    map_urls_for_ai.append(u)
+
+        # Para mini: truncar agresivamente. Para gpt-4o: texto completo
+        if is_mini:
+            aemet_pred_short = {
+                "asturias_hoy": (pred_asturias_hoy[:180] if pred_asturias_hoy else ""),
+                "asturias_manana": (pred_asturias_manana[:180] if pred_asturias_manana else ""),
+                "asturias_pasado_manana": (pred_asturias_pasado_manana[:180] if pred_asturias_pasado_manana else ""),
+                "llanera": (pred_llanera_text[:80] if pred_llanera_text else ""),
+            }
+        else:
+            # gpt-4o: recibe texto AEMET completo
+            aemet_pred_short = {
+                "asturias_hoy": pred_asturias_hoy or "",
+                "asturias_manana": pred_asturias_manana or "",
+                "asturias_pasado_manana": pred_asturias_pasado_manana or "",
+                "llanera": pred_llanera_text or "",
+            }
 
         fused_ai = interpret_fused_forecast_with_ai(
             metar_leas=metar_leas or "",
             weather_data=weather_data,
             windy_data=windy_section or {},
-            aemet_prediccion={
-                "asturias_hoy": pred_asturias_hoy,
-                "asturias_manana": pred_asturias_manana,
-                "asturias_pasado_manana": pred_asturias_pasado_manana,
-                "llanera": pred_llanera_text,
-            },
-            map_analysis_text=(analysis_map_url or (sig_maps[0].get("map_url") if sig_maps else "")),
+            aemet_prediccion=aemet_pred_short,
+            map_analysis_text="" if is_mini else (analysis_map_url or ""),
             significant_map_urls=map_urls_for_ai,
             location=config.LA_MORGAL_COORDS["name"],
         )

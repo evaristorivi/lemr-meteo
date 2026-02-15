@@ -812,12 +812,12 @@ def interpret_fused_forecast_with_ai(
             )
 
         hourly_lines = []
-        for row in windy_hourly[:10]:
+        for row in windy_hourly[:4]:  # Reducido de 10 a 4 horas
             t = row.get("time_local", "")
             hh = t.split("T")[1][:5] if "T" in t else t
             hourly_lines.append(
                 f"- {hh}: {row.get('wind_kmh')} km/h ({row.get('wind_dir_deg')}°), "
-                f"rachas {row.get('gust_kmh')} km/h, nubes {row.get('cloud_cover_pct')}%, precip3h {row.get('precip_3h_mm')}"
+                f"rachas {row.get('gust_kmh')} km/h"
             )
 
         aemet_hoy = (aemet_prediccion or {}).get("asturias_hoy", "")
@@ -864,12 +864,9 @@ AEMET Llanera:
 {aemet_llan[:1200] if aemet_llan else 'No disponible'}
 
 Lectura sinóptica/mapa AEMET previa:
-{(map_analysis_text or 'No disponible')[:1200]}
+(Sin mapas en análisis de fusión para reducir payload)
 
-Mapas significativos AEMET (analiza visualmente estas imágenes si están disponibles):
-{chr(10).join(f'- {u}' for u in map_urls) if map_urls else '- No disponibles'}
-
-Objetivo: comparación razonada entre Windy vs AEMET (texto + mapas) vs METAR/Open-Meteo para DECISIÓN DE VUELO ULM en LEMR.
+Objetivo: comparación razonada entre Windy vs AEMET (solo texto) vs METAR/Open-Meteo para DECISIÓN DE VUELO ULM en LEMR.
 
 ⚠️ VALIDACIÓN HORARIA PARA HOY (CRÍTICA):
 - Determina si {fecha_actual} es temporada invierno (oct-mar) o verano (abr-sep)
