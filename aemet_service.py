@@ -251,31 +251,43 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
                 "source_utc_hour": utc_hour,
             })
 
-        # Fallback para "Mañana": algunos días AEMET aún no publica con la fecha objetivo,
-        # pero sí existe el último mapa emitido con fecha del día anterior.
-        if not day_results and delta == 1:
-            source_date = today
-            # Mapeo operativo: para mañana, el 00 UTC suele estar en emisión 12 UTC del día previo,
-            # y el 06 UTC suele estar en emisión 18 UTC del día previo.
-            fallback_pairs = [
-                ("00", "12"),
-                ("06", "18"),
-            ]
-
-            for target_hour, source_hour in fallback_pairs:
-                url = _direct_sig_map_url(source_date, source_hour)
+        # Fallback: si faltan horarios, buscar con desfase horario (AEMET publica maps anticipados)
+        # Mapeo de desfase conocido: 
+        # - 06 UTC del día N suele estar en emisión 18 UTC del día N-1
+        # - 18 UTC del día N suele estar en emisión 06 UTC del día N
+        if len(day_results) < 4:
+            desfase_map = {
+                "06": {
+                    "source_date": today + timedelta(days=delta - 1),
+                    "source_hour": "18",
+                },
+                "18": {
+                    "source_date": today + timedelta(days=delta),
+                    "source_hour": "06",
+                },
+            }
+            
+            for target_hour, mapping in desfase_map.items():
+                # Si ya existe este horario, skip
+                if any(m.get("utc_hour") == target_hour for m in day_results):
+                    continue
+                
+                source_d = mapping["source_date"]
+                source_h = mapping["source_hour"]
+                url = _direct_sig_map_url(source_d, source_h)
+                
                 if not _url_has_image(url, timeout=5):
                     continue
-
+                
                 day_results.append({
                     "date": target.isoformat(),
                     "label": labels[delta],
                     "utc_hour": target_hour,
-                    "slot_label": f"{target_hour} UTC · emitido {source_date.isoformat()} {source_hour} UTC",
+                    "slot_label": f"{target_hour} UTC",
                     "map_url": url,
                     "map_b64": None,
-                    "source_date": source_date.isoformat(),
-                    "source_utc_hour": source_hour,
+                    "source_date": source_d.isoformat(),
+                    "source_utc_hour": source_h,
                 })
 
         results.extend(day_results)
@@ -332,8 +344,19 @@ def get_prediccion_asturias_hoy() -> Optional[str]:
     if meta and meta.get("datos"):
         data = _fetch_datos_url(meta["datos"])
         if isinstance(data, list) and data:
-            return data[0].get("prediccion", {}).get("texto", str(data[0]))
-        return str(data) if data else None
+            text = data[0].get("prediccion", {}).get("texto", str(data[0]))
+        else:
+            text = str(data) if data else None
+        # Limpiar metadatos AEMET innecesarios: mantener solo la predicción textual
+        if text and "PREDICCIÓN" in text:
+            try:
+                # Extraer solo la sección "B.- PREDICCIÓN" hasta el final
+                parts = text.split("B.- PREDICCIÓN")
+                if len(parts) > 1:
+                    return parts[1].strip()
+            except:
+                pass
+        return text
     return None
 
 
@@ -343,8 +366,18 @@ def get_prediccion_asturias_manana() -> Optional[str]:
     if meta and meta.get("datos"):
         data = _fetch_datos_url(meta["datos"])
         if isinstance(data, list) and data:
-            return data[0].get("prediccion", {}).get("texto", str(data[0]))
-        return str(data) if data else None
+            text = data[0].get("prediccion", {}).get("texto", str(data[0]))
+        else:
+            text = str(data) if data else None
+        # Limpiar metadatos AEMET innecesarios
+        if text and "PREDICCIÓN" in text:
+            try:
+                parts = text.split("B.- PREDICCIÓN")
+                if len(parts) > 1:
+                    return parts[1].strip()
+            except:
+                pass
+        return text
     return None
 
 
@@ -354,8 +387,18 @@ def get_prediccion_asturias_pasado_manana() -> Optional[str]:
     if meta and meta.get("datos"):
         data = _fetch_datos_url(meta["datos"])
         if isinstance(data, list) and data:
-            return data[0].get("prediccion", {}).get("texto", str(data[0]))
-        return str(data) if data else None
+            text = data[0].get("prediccion", {}).get("texto", str(data[0]))
+        else:
+            text = str(data) if data else None
+        # Limpiar metadatos AEMET innecesarios
+        if text and "PREDICCIÓN" in text:
+            try:
+                parts = text.split("B.- PREDICCIÓN")
+                if len(parts) > 1:
+                    return parts[1].strip()
+            except:
+                pass
+        return text
     return None
 
 
