@@ -29,6 +29,120 @@ from windy_service import get_windy_point_forecast, get_windy_map_forecast
 app = Flask(__name__)
 
 
+# ============================================================================
+# FUNCIONES OGIMET (Vista Semanal Rápida)
+# ============================================================================
+
+def _build_ogimet_image_url(date_str: str, run: str, projection_hours: int) -> str:
+    """Construye URL directa de imagen Ogimet."""
+    proy_str = f"{projection_hours:03d}"
+    return (
+        f"https://www.ogimet.com/forecasts/{date_str}_{run}/SFC/"
+        f"{date_str}{run}H{proy_str}_SP00_SFC.jpg"
+    )
+
+
+def _get_latest_ogimet_run_fast():
+    """
+    Calcula el run de Ogimet más reciente SIN hacer requests HTTP.
+    Ogimet genera runs a las 00Z y 12Z, disponibles ~3 horas después.
+    """
+    utc_now = datetime.now(ZoneInfo("UTC"))
+    
+    if utc_now.hour >= 15:  # Después de las 15:00 UTC, usar run 12Z de hoy
+        run = "12"
+        run_date = utc_now
+    elif utc_now.hour >= 3:  # Entre 03:00 y 15:00 UTC, usar run 00Z de hoy
+        run = "00"
+        run_date = utc_now
+    else:  # Antes de las 03:00 UTC, usar run 12Z de ayer
+        run = "12"
+        run_date = utc_now - timedelta(days=1)
+    
+    return {
+        'date_str': run_date.strftime("%Y%m%d"),
+        'run': run,
+        'run_date': run_date
+    }
+
+
+def get_ogimet_week_forecast():
+    """
+    Genera previsión semanal de Ogimet (7 días, 1 mapa por día).
+    Versión rápida: no verifica existencia de imágenes.
+    Prefiere proyecciones cercanas a las 12:00 UTC (mediodía).
+    """
+    latest_run = _get_latest_ogimet_run_fast()
+    run_time = datetime.strptime(f"{latest_run['date_str']} {latest_run['run']}", "%Y%m%d %H")
+    
+    today = datetime.now(MADRID_TZ).date()
+    weekday_short = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+    
+    # Recopilar todas las proyecciones y agruparlas por día
+    daily_projections = {}
+    
+    for hours in range(12, 193, 6):
+        valid_time = run_time + timedelta(hours=hours)
+        day_key = valid_time.date()
+        
+        # Calcular distancia al mediodía (12:00 UTC)
+        distance_to_noon = abs(valid_time.hour - 12)
+        
+        # Si no tenemos este día, o si esta proyección está más cerca del mediodía
+        if day_key not in daily_projections or distance_to_noon < daily_projections[day_key]['distance']:
+            daily_projections[day_key] = {
+                'hours': hours,
+                'valid_time': valid_time,
+                'distance': distance_to_noon
+            }
+    
+    # Ordenar por fecha y tomar los primeros 7 días
+    sorted_days = sorted(daily_projections.keys())[:7]
+    
+    week_forecast = []
+    for day_key in sorted_days:
+        proj = daily_projections[day_key]
+        valid_time = proj['valid_time']
+        hours = proj['hours']
+        
+        # Etiqueta del día
+        if day_key == today:
+            day_label = "HOY"
+        elif day_key == today + timedelta(days=1):
+            day_label = "MAÑANA"
+        elif day_key == today + timedelta(days=2):
+            day_label = "PASADO"
+        else:
+            day_label = weekday_short[day_key.weekday()]
+        
+        image_url = _build_ogimet_image_url(latest_run['date_str'], latest_run['run'], hours)
+        
+        week_forecast.append({
+            'date': day_key.strftime("%Y-%m-%d"),
+            'day_label': day_label,
+            'weekday': weekday_short[day_key.weekday()],
+            'date_formatted': day_key.strftime("%d/%m"),
+            'image_url': image_url,
+            'valid_time': f"{weekday_short[valid_time.weekday()]} {valid_time.strftime('%d/%m %H:00')}",
+            'description': f"Válido para {weekday_short[valid_time.weekday()]} {valid_time.strftime('%d/%m/%Y %H:00 UTC')}",
+            'projection_hours': hours
+        })
+    
+    return {
+        'success': True,
+        'run_info': {
+            'date': latest_run['date_str'],
+            'run': latest_run['run'],
+            'label': f"Run {latest_run['run']}:00 UTC del {run_time.strftime('%d/%m/%Y')}",
+            'full_label': f"Run {latest_run['run']}:00 UTC del {run_time.strftime('%d/%m/%Y')}"
+        },
+        'week': week_forecast,
+        'total_days': len(week_forecast)
+    }
+
+# ============================================================================
+
+
 def get_weather_icon_from_text(prediction_text: str) -> str:
     """
     Determina el icono meteorológico más apropiado basándose en el texto de predicción.
@@ -603,6 +717,19 @@ def api_windy():
     selected_model = _sanitize_windy_model(windy_model)
     windy_section = _build_windy_section(selected_model)
     return jsonify({"windy": windy_section})
+
+
+@app.get("/api/ogimet/week")
+def api_ogimet_week():
+    """API endpoint para la vista semanal de Ogimet (7 días, 1 mapa/día)"""
+    try:
+        forecast_data = get_ogimet_week_forecast()
+        return jsonify(forecast_data)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 if __name__ == "__main__":

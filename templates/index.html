@@ -306,9 +306,146 @@
 
     a { color: var(--accent); }
 
+    /* Estilos para Ogimet - Vista Semanal */
+    .ogimet-week-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .ogimet-day-card {
+      background: rgba(20, 31, 49, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ogimet-day-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+      box-shadow: 0 8px 24px rgba(102, 227, 255, 0.15);
+    }
+
+    .ogimet-day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ogimet-day-label {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .ogimet-day-date {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .ogimet-map-preview {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      min-height: 180px;
+      object-fit: cover;
+      background: #0c1525;
+    }
+
+    .ogimet-info {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .ogimet-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+
+    .ogimet-error {
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid var(--danger);
+      border-radius: 8px;
+      padding: 16px;
+      color: var(--danger);
+      text-align: center;
+    }
+
+    .ogimet-run-info {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: rgba(102, 227, 255, 0.05);
+      border-radius: 6px;
+      border-left: 3px solid var(--accent);
+    }
+
+    /* Modal para ampliar imágenes de Ogimet */
+    .ogimet-modal {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.9);
+      animation: fadeIn 0.3s;
+    }
+
+    .ogimet-modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ogimet-modal-content {
+      max-width: 95%;
+      max-height: 95%;
+      margin: auto;
+      display: block;
+      border-radius: 8px;
+    }
+
+    .ogimet-modal-close {
+      position: absolute;
+      top: 20px;
+      right: 40px;
+      color: #fff;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .ogimet-modal-close:hover {
+      color: var(--accent);
+    }
+
+    .ogimet-modal-info {
+      text-align: center;
+      color: #fff;
+      padding: 16px;
+      font-size: 1.1rem;
+    }
+
     @media (max-width: 600px) {
       .map-pair { grid-template-columns: 1fr; }
       .days { grid-template-columns: 1fr; }
+      .ogimet-week-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 768px) {
@@ -340,6 +477,7 @@
         <a href="#aemet">🌦️ AEMET</a>
         <a href="#analisis-ia">👨‍✈️ IA</a>
         <a href="#mapa-analisis">🗺️ Mapa</a>
+        <a href="#ogimet-semana">📆 7 días</a>
       </nav>
     </section>
 
@@ -414,11 +552,32 @@
       <img id="analysis-map-img" class="map analysis-map" alt="Mapa de análisis AEMET" />
     </section>
 
+    <!-- OGIMET - VISTA SEMANAL -->
+    <section class="card" id="ogimet-semana">
+      <h2>🗺️ Previsión de superficie 7 días (Ogimet GFS)</h2>
+      <div id="ogimet-run-info" class="ogimet-run-info" style="display:none"></div>
+      <div id="ogimet-week-container" class="ogimet-loading">
+        <div>⏳ Cargando previsión semanal...</div>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--muted); margin-top: 12px; text-align: center;">
+        📊 Datos de <a href="https://www.ogimet.com" target="_blank" style="color: var(--accent);">Ogimet</a> 
+        (Modelo GFS) · Solo informativo, verificar con AEMET antes de volar
+      </div>
+    </section>
+
+    <!-- Modal para ampliar imágenes de Ogimet -->
+    <div id="ogimetModal" class="ogimet-modal">
+      <span class="ogimet-modal-close" onclick="closeOgimetModal()">&times;</span>
+      <img class="ogimet-modal-content" id="ogimetModalImg">
+      <div class="ogimet-modal-info" id="ogimetModalInfo"></div>
+    </div>
+
     <div class="footer">
       Datos de <a href="https://opendata.aemet.es" target="_blank">AEMET OpenData</a>,
-      <a href="https://aviationweather.gov" target="_blank">Aviation Weather</a> y
-      <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> y
-      <a href="https://www.windy.com" target="_blank">Windy</a>.
+      <a href="https://aviationweather.gov" target="_blank">Aviation Weather</a>,
+      <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>,
+      <a href="https://www.windy.com" target="_blank">Windy</a> y
+      <a href="https://www.ogimet.com" target="_blank">Ogimet</a>.
       Actualización automática · cada hora de 06:00 a 23:00 (Europe/Madrid).
     </div>
   </main>
@@ -794,10 +953,101 @@
         }
         state.data = d;
         render(state.data);
+        
+        // Cargar datos de Ogimet después de renderizar
+        loadOgimetWeek();
       } catch {
         setLoadStatus("⚠️ Error al cargar datos iniciales.", true);
       }
     };
+
+    // ========================================================================
+    // FUNCIONES OGIMET
+    // ========================================================================
+
+    async function loadOgimetWeek() {
+      const container = document.getElementById('ogimet-week-container');
+      const runInfoEl = document.getElementById('ogimet-run-info');
+      
+      try {
+        const response = await fetch('/api/ogimet/week');
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Error desconocido');
+        }
+
+        // Mostrar información del run
+        if (runInfoEl) {
+          runInfoEl.innerHTML = `📡 <strong>${data.run_info.full_label}</strong> · ${data.total_days} días disponibles`;
+          runInfoEl.style.display = 'block';
+        }
+
+        // Renderizar mapas
+        container.className = 'ogimet-week-grid';
+        container.innerHTML = data.week.map(day => `
+          <div class="ogimet-day-card" onclick="openOgimetModal('${day.image_url}', '${day.description}')">
+            <div class="ogimet-day-header">
+              <div class="ogimet-day-label">${day.day_label}</div>
+              <div class="ogimet-day-date">${day.date_formatted}</div>
+            </div>
+            <img src="${day.image_url}" 
+                 alt="Mapa Ogimet ${day.day_label}" 
+                 class="ogimet-map-preview"
+                 onerror="this.style.display='none'; this.parentElement.innerHTML += '<div class=\\'ogimet-info\\' style=\\'color:var(--warn)\\'>⚠️ Imagen no disponible</div>'">
+            <div class="ogimet-info">
+              ${day.valid_time} UTC
+            </div>
+          </div>
+        `).join('');
+
+      } catch (error) {
+        console.error('Error al cargar Ogimet:', error);
+        container.className = '';
+        container.innerHTML = `
+          <div class="ogimet-error">
+            ❌ Error al cargar previsión semanal: ${error.message}
+          </div>
+        `;
+      }
+    }
+
+    function openOgimetModal(imageUrl, description) {
+      const modal = document.getElementById('ogimetModal');
+      const modalImg = document.getElementById('ogimetModalImg');
+      const modalInfo = document.getElementById('ogimetModalInfo');
+      
+      modal.classList.add('show');
+      modalImg.src = imageUrl;
+      modalInfo.textContent = description;
+      
+      // Cerrar con ESC
+      document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') {
+          closeOgimetModal();
+          document.removeEventListener('keydown', escHandler);
+        }
+      });
+    }
+
+    function closeOgimetModal() {
+      const modal = document.getElementById('ogimetModal');
+      modal.classList.remove('show');
+    }
+
+    // Cerrar modal al hacer click fuera de la imagen
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal = document.getElementById('ogimetModal');
+      if (modal) {
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) {
+            closeOgimetModal();
+          }
+        });
+      }
+    });
+
+    // ========================================================================
 
     bootstrap();
     setInterval(refreshData, 60 * 1000);
