@@ -35,7 +35,7 @@ app = Flask(__name__)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["1000 per hour", "100 per minute"],
     storage_uri="memory://"
 )
 
@@ -709,7 +709,7 @@ def _start_cycle_warmer_once():
 
 
 @app.get("/")
-@limiter.limit("10 per minute")
+@limiter.limit("100 per minute")
 def index():
     _start_cycle_warmer_once()
     with _CACHE_LOCK:
@@ -723,7 +723,6 @@ def index():
 
 
 @app.get("/api/report")
-@limiter.limit("5 per minute")
 def api_report():
     _start_cycle_warmer_once()
     # Parámetro force eliminado: la caché se actualiza automáticamente cada ciclo horario
