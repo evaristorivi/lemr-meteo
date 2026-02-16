@@ -32,7 +32,6 @@ AEMET_API_KEY = os.getenv('AEMET_API_KEY', '')
 
 # Windy APIs
 WINDY_POINT_FORECAST_API_KEY = os.getenv('WINDY_POINT_FORECAST_API_KEY', '')
-WINDY_MAP_FORECAST_API_KEY = os.getenv('WINDY_MAP_FORECAST_API_KEY', '')
 WINDY_MODEL = os.getenv('WINDY_MODEL', 'gfs')
 
 # Aeropuertos
@@ -72,7 +71,6 @@ METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
 OPEN_METEO_API = 'https://api.open-meteo.com/v1/forecast'
 AEMET_MAP_TEMPLATE_URL = 'https://ama.aemet.es/o/estaticos/bbdd/imagenes/QGQE70LEMM1800________{date}.png'
 WINDY_POINT_FORECAST_API = 'https://api.windy.com/api/point-forecast/v2'
-WINDY_MAP_FORECAST_API = 'https://api.windy.com/api/map-forecast/v2'
 WINDY_EMBED_URL_TEMPLATE = (
     'https://embed.windy.com/embed2.html?lat={lat}&lon={lon}&zoom=9&level=surface&overlay=wind'
     '&menu=&message=true&marker=true&calendar=24&pressure=true&type=map&location=coordinates'

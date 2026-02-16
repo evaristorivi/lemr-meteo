@@ -13,6 +13,7 @@ _RATE_LIMIT_LOCK = Lock()
 _FORCED_FALLBACK_CYCLE: Dict[tuple, str] = {}
 _MADRID_TZ = ZoneInfo("Europe/Madrid")
 _UPDATE_SLOTS = list(range(6, 24))  # Ciclos de 06:00 a 23:00
+_FINAL_DISCLAIMER = "⚠️ Este análisis es orientativo; sigue siempre las indicaciones de tus instructores y, en caso de duda, mejor no volar."
 
 
 def _current_cycle_id() -> str:
@@ -45,6 +46,22 @@ def _lock_primary_for_cycle(provider: str, model: str):
     current_cycle = _current_cycle_id()
     with _RATE_LIMIT_LOCK:
         _FORCED_FALLBACK_CYCLE[key] = current_cycle
+
+
+def _append_final_disclaimer(text: Optional[str]) -> str:
+    content = (text or "").strip()
+    if not content:
+        return _FINAL_DISCLAIMER
+
+    normalized = content.lower()
+    if (
+        "análisis es orientativo" in normalized
+        and "instructores" in normalized
+        and "caso de duda" in normalized
+    ):
+        return content
+
+    return f"{content}\n\n{_FINAL_DISCLAIMER}"
 
 
 # Sistema de prompts para interpretación meteorológica
@@ -92,6 +109,7 @@ CONSIDERACIONES GENERALES ULM:
 - Velocidades bajas: el análisis de viento es crítico
 - Mayor sensibilidad a condiciones meteorológicas que aviación general
 - Operaciones VFR exclusivamente
+- En días muy cálidos el avión rinde peor que en días fríos: trepa menos y en despegue conviene dejarlo volar más antes de rotar.
 
 Cuando analices un METAR:
 - EXPLICA cada componente de forma educativa
@@ -126,7 +144,7 @@ INFORMACIÓN AERÓDROMO LA MORGAL (LEMR):
 - 🛫 Coordenadas: 43°25.833'N 005°49.617'W
 
 🎯 ANÁLISIS DE PISTA ACTIVA (OBLIGATORIO EN CADA ANÁLISIS):
-**SIEMPRE debes indicar qué pista usar según el viento actual/previsto**
+**SIEMPRE debes indicar qué pista podemos imaginar que estará en servicio según el viento actual/previsto**
 
 Principios fundamentales:
 1. ✈️ SIEMPRE despegar y aterrizar CON VIENTO DE CARA (headwind)
@@ -152,7 +170,7 @@ Procedimiento de análisis:
 
 Ejemplo de análisis:
 ```
-🎯 PISTA ACTIVA: Usar PISTA 28 (aterrizaje hacia el OESTE)
+🎯 PISTA ACTIVA: Posiblemente se usará la PISTA 28 (aterrizaje hacia el OESTE)
 
 Análisis de componentes (viento 270° a 18 kt):
 - Pista 28 (280°): Headwind 18 kt, Crosswind 3 kt → ✅ ÓPTIMA
@@ -212,7 +230,7 @@ Cuando analices datos meteorológicos generales:
 
 Formato de respuesta OBLIGATORIO:
 - Usa emojis: ✅ (buenas), ⚠️ (precaución), ❌ (NO VOLAR)
-- **🎯 PISTA ACTIVA: Especifica qué pista usar (10 o 28) y componentes de viento**
+- **🎯 PISTA ACTIVA: Especifica qué pista estimamos que se usará (10 o 28) y componentes de viento**
 - Veredicto claro: APTO/PRECAUCIÓN/NO APTO para ULM
 - Horarios recomendados SOLO DIURNOS
 - Estructura sugerida:
@@ -250,7 +268,8 @@ ANÁLISIS DE MAPA AEMET (cuando se proporcione imagen):
 - Describe primero qué se ve (frentes, isobaras, gradiente de presión, flujo dominante).
 - Traduce a lenguaje de novato ULM: impacto en viento, nubosidad, precipitación, turbulencia.
 - Enfoca siempre en Asturias y operación ULM en La Morgal.
-- Concluye con: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO y franja horaria sugerida dentro de horario operativo."""
+- Concluye con: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO y franja horaria sugerida dentro de horario operativo.
+"""
 
 
 def get_ai_client():
@@ -437,7 +456,7 @@ def interpret_metar_with_ai(metar: str, icao: str = "") -> Optional[str]:
     client_info = get_ai_client()
     
     if not client_info:
-        return "⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env"
+        return _append_final_disclaimer("⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env")
     
     provider, client = client_info
     
@@ -540,7 +559,7 @@ Proporciona análisis EDUCATIVO para vuelo ULM:
         
         interpretation = response.choices[0].message.content
         print(f"✅ METAR interpretado exitosamente con {provider}")
-        return interpretation
+        return _append_final_disclaimer(interpretation)
         
     except Exception as e:
         import traceback
@@ -548,12 +567,12 @@ Proporciona análisis EDUCATIVO para vuelo ULM:
         print(f"Traceback: {traceback.format_exc()}")
         
         # Devolver al menos el METAR crudo para que el usuario tenga información
-        return f"""⚠️ No se pudo generar interpretación IA del METAR (Error: {str(e)[:80]})
+        return _append_final_disclaimer(f"""⚠️ No se pudo generar interpretación IA del METAR (Error: {str(e)[:80]})
 
 METAR {icao}: {metar}
 
 💡 Consulta una fuente alternativa de interpretación de METAR o espera al próximo ciclo de actualización.
-El sistema intentará automáticamente con el modelo fallback si está disponible."""
+    El sistema intentará automáticamente con el modelo fallback si está disponible.""")
 
 
 def interpret_weather_with_ai(weather_data: Dict, location: str = "") -> Optional[str]:
@@ -570,7 +589,7 @@ def interpret_weather_with_ai(weather_data: Dict, location: str = "") -> Optiona
     client_info = get_ai_client()
     
     if not client_info:
-        return "⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env"
+        return _append_final_disclaimer("⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env")
     
     provider, client = client_info
     
@@ -688,12 +707,12 @@ Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los pr
         )
         
         interpretation = response.choices[0].message.content
-        
-        return interpretation
+
+        return _append_final_disclaimer(interpretation)
         
     except Exception as e:
         print(f"Error interpretando datos meteorológicos con {provider}: {e}")
-        return f"⚠️ Error al interpretar datos meteorológicos: {str(e)}"
+        return _append_final_disclaimer(f"⚠️ Error al interpretar datos meteorológicos: {str(e)}")
 
 
 def interpret_aemet_map_with_ai(
@@ -717,7 +736,7 @@ def interpret_aemet_map_with_ai(
     client_info = get_ai_client()
 
     if not client_info:
-        return "⚠️ No se ha configurado ningún proveedor de IA. Configura GITHUB_TOKEN u OPENAI_API_KEY en .env"
+        return _append_final_disclaimer("⚠️ No se ha configurado ningún proveedor de IA. Configura GITHUB_TOKEN u OPENAI_API_KEY en .env")
 
     provider, client = client_info
 
@@ -777,11 +796,11 @@ Requisitos de respuesta:
         )
 
         interpretation = response.choices[0].message.content
-        return interpretation
+        return _append_final_disclaimer(interpretation)
 
     except Exception as e:
         print(f"Error interpretando mapa AEMET con {provider}: {e}")
-        return (
+        return _append_final_disclaimer(
             "⚠️ No se pudo analizar automáticamente el mapa AEMET con IA. "
             "Puedes revisar el mapa visualmente y usar el análisis meteorológico textual como respaldo."
         )
@@ -797,7 +816,7 @@ def interpret_windy_forecast_with_ai(
     client_info = get_ai_client()
 
     if not client_info:
-        return "⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env"
+        return _append_final_disclaimer("⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env")
 
     provider, client = client_info
 
@@ -853,11 +872,11 @@ Requisitos de respuesta:
             max_tokens=1000,
         )
 
-        return response.choices[0].message.content
+        return _append_final_disclaimer(response.choices[0].message.content)
 
     except Exception as e:
         print(f"Error interpretando Windy con {provider}: {e}")
-        return "⚠️ No se pudo generar el análisis IA de la predicción Windy en este ciclo."
+        return _append_final_disclaimer("⚠️ No se pudo generar el análisis IA de la predicción Windy en este ciclo.")
 
 
 def interpret_fused_forecast_with_ai(
@@ -866,6 +885,7 @@ def interpret_fused_forecast_with_ai(
     windy_data: Dict,
     aemet_prediccion: Dict,
     map_analysis_text: str,
+    metar_lemr: str = "",
     significant_map_urls: Optional[list[str]] = None,
     location: str = "La Morgal (LEMR)",
 ) -> Optional[str]:
@@ -874,7 +894,7 @@ def interpret_fused_forecast_with_ai(
     """
     client_info = get_ai_client()
     if not client_info:
-        return "⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env"
+        return _append_final_disclaimer("⚠️ No se ha configurado ningún proveedor de IA. Por favor, configura GITHUB_TOKEN o OPENAI_API_KEY en el archivo .env")
 
     provider, client = client_info
 
@@ -949,6 +969,9 @@ DATOS FIJOS AERÓDROMO LEMR:
 METAR LEAS (referencia):
 {metar_leas or 'No disponible'}
 
+METAR LEMR (estimado local):
+{metar_lemr or 'No disponible'}
+
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 
@@ -982,12 +1005,14 @@ Objetivo: comparación razonada entre Windy vs AEMET (solo texto) vs METAR/Open-
 - Determina si {fecha_actual} es temporada invierno (oct-mar) o verano (abr-sep)
 - Si invierno: horario operativo es 09:00-20:00 | Si verano: 09:00-21:45
 - Compara {hora_actual} (hora actual) contra el horario operativo
+- Si {hora_actual} está ANTES de la apertura: NO marques HOY como no disponible; indica "aún no abierto" y evalúa HOY desde la hora de apertura
 - Si {hora_actual} está DENTRO del horario operativo: HOY es viable, analiza viento para resto del día
-- Si {hora_actual} está FUERA del horario operativo: marca HOY como "YA NO DISPONIBLE - fuera de horario operativo (abre a las HH:MM)"
+- Si {hora_actual} está DESPUÉS del cierre: marca HOY como "YA NO DISPONIBLE - fuera de horario operativo"
 - ⚠️ IMPORTANTE: No marques HOY como no disponible si aún hay tiempo útil de vuelo (mín 2h)
 
 Formato obligatorio:
 0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
+0.1) **METAR LEMR explicado** (versión corta para novatos - máximo 2 líneas, sin jerga, indicando que es estimado/local)
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
    OBLIGATORIO: Compara explícitamente qué decía el pronóstico para HOY vs qué está pasando AHORA MISMO:
@@ -1004,13 +1029,15 @@ Formato obligatorio:
 3) **🎯 ANÁLISIS DE PISTA ACTIVA POR DÍA** (OBLIGATORIO para los 3 días):
    
    **HOY ({fecha_actual}):**
-   - Valida si {hora_actual} está dentro del horario operativo (detecta invierno/verano automáticamente)
-   - Si está FUERA: "YA NO DISPONIBLE - fuera de horario operativo"
-   - Si está DENTRO: Analiza viento ACTUAL (usa "CONDICIONES ACTUALES", no pronóstico)
+    - Valida si {hora_actual} está antes de apertura, dentro de horario o después de cierre (detecta invierno/verano automáticamente)
+    - Si está ANTES de apertura: indica "aún no abierto" y evalúa HOY desde la hora de apertura
+    - Si está DENTRO: Analiza viento ACTUAL (usa "CONDICIONES ACTUALES", no pronóstico)
+    - Si está DESPUÉS de cierre: "YA NO DISPONIBLE - fuera de horario operativo"
    - Indica: "PISTA 10" o "PISTA 28" (basado en dirección viento ACTUAL)
    - Componentes: headwind/tailwind y crosswind para AMBAS pistas (con datos ACTUALES)
-   - Ejemplo si fuera de horario: "HOY → YA NO DISPONIBLE (son las {hora_actual}, aeródromo cierra a las 20:00)"
-   - Ejemplo si viable: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas ACTUALES 23 kt, headwind 13 kt, crosswind 3 kt) ✅ - viable {hora_actual}-20:00"
+    - Ejemplo si antes de abrir: "HOY → AÚN NO ABIERTO (son las {hora_actual}, abre a las 09:00), pero evaluable desde apertura"
+    - Ejemplo si tras cierre: "HOY → YA NO DISPONIBLE (son las {hora_actual}, aeródromo cierra a las 20:00)"
+    - Ejemplo si viable: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas ACTUALES 23 kt, headwind 13 kt, crosswind 3 kt) ✅ - viable hasta cierre"
    
    **MAÑANA:**
    - Analyza viento previsto para todo el día de mañana
@@ -1027,6 +1054,7 @@ Formato obligatorio:
 4) **VEREDICTO POR DÍA** (los 3 días completos):
    - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO / 🕐 YA NO DISPONIBLE
      ⚠️ CRÍTICO: Para HOY usa las "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
+    - Si es ANTES de apertura, NO marques "YA NO DISPONIBLE": evalúa HOY igualmente y aclara que el aeródromo aún no está abierto.
      - Si las condiciones actuales son MEJORES que el pronóstico: indícalo (ej: "mejor de lo esperado")
      - Si las condiciones actuales son PEORES que el pronóstico: indícalo (ej: "rachas más fuertes de lo previsto")
    - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
@@ -1070,7 +1098,7 @@ Formato obligatorio:
    - ✅ **SÍ, ACEPTABLE**: Condiciones estables, buen día para volar
    - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: Agitado, solo tráficos cortos
    - 🏠 **NO MERECE LA PENA**: Límite, mejor hacer mantenimiento en tierra
-   - ☕ **QUEDARSE EN EL BAR**: Condiciones adversas, hay caldo de gaviota 🍲
+   - ☕ **QUEDARSE EN EL BAR**: Condiciones adversas, hay caldo de gaviota en el bar 🍲
 
 9) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
 
@@ -1123,7 +1151,7 @@ Más allá de "¿puedo volar?", un piloto experimentado pregunta "¿DEBO volar?"
    - 🔄 **CIRCUITOS CORTOS**: Si NORMAL (12-15 kt) o hay inestabilidad a distancia → Prudencia
    - 🏫 **SOLO TRÁFICOS DE ESCUELA**: Si AGITADO (15-18 kt) → Solo para mantener práctica, NO para disfrute
    - 🏠 **MANTENIMIENTO EN TIERRA**: Si límite pero técnicamente viable → Mejor aprovechar para tareas de hangar
-   - ❌ **NO VOLAR**: Si PELIGROSO (> 18 kt, rachas > 22 kt, lluvia) → Caldo de gaviota 🍲
+   - ❌ **NO VOLAR**: Si PELIGROSO (> 18 kt, rachas > 22 kt, lluvia) → **QUEDARSE EN CASA - Hay caldo de gaviota en el bar** 🍲
 
 4) **EVALUACIÓN REALISTA ENTRE DÍAS**:
    - Aunque MAÑANA sea "el mejor día", si aun así tiene vientos > 20 kt, dilo claramente
@@ -1137,7 +1165,7 @@ Más allá de "¿puedo volar?", un piloto experimentado pregunta "¿DEBO volar?"
      * "SÍ, buen día de vuelo" (estable)
      * "Solo si necesitas práctica" (agitado)
      * "NO merece la pena sacar el avión" (límite)
-     * "QUEDARSE EN CASA - Caldo de gaviota" (peligroso)
+     * "QUEDARSE EN EL BAR - Hay caldo de gaviota en el bar" (peligroso)
    - Si el mejor día aun así requiere destreza/cuidado, indícalo: "MAÑANA → APTO SOLO PARA PILOTOS EXPERIMENTADOS, agitado"
    - Sé específico: no digas "condiciones mediocres", di "viento 18-22 kt con rachas de 25 kt = peligroso para iniciados"
    - **TIPO DE VUELO POSIBLE**: Especifica si será para placer/circuitos/solo escuela
@@ -1190,7 +1218,7 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
 
         result = response.choices[0].message.content
         print(f"✅ Síntesis experta generada exitosamente con {provider}")
-        return result
+        return _append_final_disclaimer(result)
 
     except Exception as e:
         import traceback
@@ -1267,7 +1295,7 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
         fallback_sections.append("- El análisis IA completo estará disponible en el siguiente ciclo de actualización")
         fallback_sections.append("- Para ULM: límites típicos viento medio 15-18 kt, rachas 20-22 kt (consulta POH de tu modelo)")
         
-        return "\n".join(fallback_sections)
+        return _append_final_disclaimer("\n".join(fallback_sections))
 
 
 def create_combined_report(metar: str, weather_data: Dict, metar_location: str, weather_location: str) -> str:

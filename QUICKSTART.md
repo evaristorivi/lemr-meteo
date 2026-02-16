@@ -29,7 +29,7 @@ AEMET_API_KEY=tu_aemet_key  # Recomendado (gratis en opendata.aemet.es)
 ## 🔐 Seguridad de tokens
 
 - Si alguna clave se ha mostrado por terminal/chat, regénérala antes de subir a GitHub o desplegar.
-- Variables sensibles típicas: `GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`, `WINDY_MAP_FORECAST_API_KEY`.
+- Variables sensibles típicas: `GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`.
 - Mantén `.env` fuera de git y comparte solo `.env.example`.
 
 ## 3) Ejecuta la web

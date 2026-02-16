@@ -9,9 +9,9 @@ Web moderna para pilotos ULM de La Morgal (Asturias), con:
 - Interpretación IA para novatos (centrada en Asturias/La Morgal)
 - Actualización automática **cada hora** (06:00 - 23:00 · Europe/Madrid)
 
-## ✨ Qué hace esta versión
+## ✨ Qué hace esta aplicación
 
-- Sustituye el enfoque de Telegram por una interfaz web.
+- Web moderna con interfaz responsive y dark theme.
 - Combina Open-Meteo + METAR LEAS + análisis IA para inferir condiciones en LEMR.
 - Incluye reglas operativas de La Morgal en el prompt de IA:
   - Invierno: 09:00 a 20:00
@@ -56,7 +56,7 @@ AEMET_API_KEY=tu_aemet_key
 Sin esto funcionarán los mapas AEMET pero no las predicciones textuales de Asturias y Llanera.
 
 Recomendación para publicación/despliegue:
-- Regenera todos los tokens/claves si han estado expuestos (`GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`, `WINDY_MAP_FORECAST_API_KEY`).
+- Regenera todos los tokens/claves si han estado expuestos (`GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`).
 - No subas nunca `.env` al repositorio (usa solo `.env.example`).
 
 Ejecuta:

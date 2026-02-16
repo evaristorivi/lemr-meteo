@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: *.json$
+
+# Sitemap
+Sitemap: https://lemr-meteo.evaristorivieccio.com/sitemap.xml
+
+# Crawl-delay (opcional, ajusta según necesites)
+Crawl-delay: 1

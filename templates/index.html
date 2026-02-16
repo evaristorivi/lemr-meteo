@@ -3,7 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LEMR Meteo | La Morgal</title>
+  
+  <!-- SEO Meta Tags -->
+  <title>LEMR Meteo | La Morgal - Meteorología Aeropuerto Asturias</title>
+  <meta name="description" content="Información meteorológica en tiempo real del Aeropuerto de Asturias (LEMR). Consulta METAR, TAF, pronósticos AEMET, mapas de viento y condiciones para vuelo." />
+  <meta name="keywords" content="LEMR, meteo, meteorología, aeropuerto asturias, METAR, TAF, AEMET, tiempo asturias, aviación, pronóstico vuelo" />
+  <meta name="author" content="LEMR Meteo" />
+  <meta name="robots" content="index, follow" />
+  <meta name="language" content="Spanish" />
+  <meta name="revisit-after" content="1 days" />
+  <meta name="theme-color" content="#0b1220" />
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌤️</text></svg>" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌤️</text></svg>" />
+  
+  <!-- Open Graph / Facebook / WhatsApp -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://lemr-meteo.evaristorivieccio.com/" />
+  <meta property="og:title" content="LEMR Meteo | La Morgal - Meteorología Aeropuerto Asturias" />
+  <meta property="og:description" content="Información meteorológica en tiempo real del Aeropuerto de Asturias (LEMR). Consulta METAR, TAF, pronósticos AEMET y condiciones para vuelo." />
+  <meta property="og:image" content="https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:site_name" content="LEMR Meteo" />
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://lemr-meteo.evaristorivieccio.com/" />
+  <meta name="twitter:title" content="LEMR Meteo | La Morgal - Meteorología Aeropuerto Asturias" />
+  <meta name="twitter:description" content="Información meteorológica en tiempo real del Aeropuerto de Asturias (LEMR). Consulta METAR, TAF, pronósticos AEMET y condiciones para vuelo." />
+  <meta name="twitter:image" content="https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg" />
+  
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://lemr-meteo.evaristorivieccio.com/" />
+  
   <style>
     :root {
       color-scheme: dark;
@@ -494,8 +529,14 @@
       </article>
 
       <article class="card">
-        <h2>✈️ METAR LEAS (referencia LEMR)</h2>
-        <p id="metar-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px"></p>
+        <h2>✈️ METAR LEAS (referencia oficial)</h2>
+        <p id="metar-leas-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px"></p>
+      </article>
+
+      <article class="card">
+        <h2>🎯 METAR LEMR (estimado automático)</h2>
+        <p id="metar-lemr-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px;margin-bottom:8px"></p>
+        <p id="metar-lemr-disclaimer" class="muted" style="font-size:0.8rem;line-height:1.4;margin:0"></p>
       </article>
     </section>
 
@@ -508,7 +549,6 @@
       </div>
       <p class="muted" id="windy-meta"></p>
       <p class="analysis" id="windy-error" style="display:none;color:var(--warn)"></p>
-      <div id="windy-sdk-map" class="windy-map" style="display:none"></div>
       <iframe id="windy-map" class="windy-map" title="Mapa Windy La Morgal" loading="lazy"></iframe>
       <p class="muted" style="margin-top:8px">
         Abrir en Windy: <a id="windy-map-link" href="#" target="_blank" rel="noopener noreferrer">enlace directo</a>
@@ -585,14 +625,10 @@
   <!-- Botón flotante de vuelta al inicio -->
   <div class="scroll-to-top" id="scrollToTop" title="Volver al inicio">↑</div>
 
-  <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
   <script>
     const state = {
       data: {{ data | tojson }},
       windyModel: null,
-      windyMapApiKey: {{ (windy_map_api_key or "") | tojson }},
-      windySdk: null,
-      windySdkReady: false,
     };
 
     // Smooth scroll para el menú de navegación
@@ -650,51 +686,6 @@
       el.style.display = "";
       el.textContent = text;
       el.style.color = isError ? "var(--warn)" : "var(--muted)";
-    };
-
-    const normalizeWindyModel = (model) => {
-      const v = (model || "gfs").toLowerCase();
-      if (v === "iconeu") return "iconEu";
-      if (v === "arome") return "arome";
-      return "gfs";
-    };
-
-    const applyModelToWindySdk = (model) => {
-      if (!state.windySdkReady || !state.windySdk || !state.windySdk.store) return;
-      const sdkModel = normalizeWindyModel(model);
-      try {
-        state.windySdk.store.set("model", sdkModel, { forceChange: true });
-      } catch {
-        try { state.windySdk.store.set("model", sdkModel); } catch {}
-      }
-      try {
-        state.windySdk.store.set("overlay", "wind");
-      } catch {}
-    };
-
-    const initWindySdkIfPossible = (windy) => {
-      if (state.windySdkReady || !state.windyMapApiKey || typeof windyInit !== "function") return;
-
-      const lat = Number(windy?.lat);
-      const lon = Number(windy?.lon);
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-
-      windyInit(
-        {
-          key: state.windyMapApiKey,
-          lat,
-          lon,
-          zoom: 9,
-          verbose: false,
-        },
-        (windyAPI) => {
-          state.windySdk = windyAPI;
-          state.windySdkReady = true;
-          document.getElementById("windy-sdk-map").style.display = "";
-          document.getElementById("windy-map").style.display = "none";
-          applyModelToWindySdk(state.windyModel || windy?.model || "gfs");
-        }
-      );
     };
 
     const fmtDateTime = (v) => {
@@ -788,9 +779,6 @@
       const windyMap = document.getElementById("windy-map");
       if (windy.map_embed_url) windyMap.src = windy.map_embed_url;
 
-      initWindySdkIfPossible(windy);
-      applyModelToWindySdk(selectedModel);
-
       const windyMapLink = document.getElementById("windy-map-link");
       windyMapLink.href = windy.map_link || "https://www.windy.com";
     };
@@ -823,7 +811,18 @@
         ["Presión", `${data.current.pressure} hPa`],
       ]);
 
-      document.getElementById("metar-raw").textContent = data.metar.raw || "METAR LEAS no disponible en este ciclo.";
+      // METAR LEAS (oficial)
+      const metarLeas = data.metar?.leas?.raw || data.metar?.raw || "METAR LEAS no disponible en este ciclo.";
+      document.getElementById("metar-leas-raw").textContent = metarLeas;
+
+      // METAR LEMR (sintético)
+      if (data.metar?.lemr) {
+        document.getElementById("metar-lemr-raw").textContent = data.metar.lemr.raw || "METAR LEMR no generado";
+        document.getElementById("metar-lemr-disclaimer").textContent = data.metar.lemr.disclaimer || "";
+      } else {
+        document.getElementById("metar-lemr-raw").textContent = "METAR LEMR no disponible";
+        document.getElementById("metar-lemr-disclaimer").textContent = "";
+      }
 
       // Mapa de análisis
       const amSection = document.getElementById("mapa-analisis");
@@ -905,9 +904,9 @@
       setLoadStatus("");
     };
 
-    const fetchReport = async (force = false) => {
+    const fetchReport = async () => {
       const model = state.windyModel || (state.data?.windy?.model) || "gfs";
-      const url = `/api/report?windy_model=${encodeURIComponent(model)}${force ? "&force=1" : ""}`;
+      const url = `/api/report?windy_model=${encodeURIComponent(model)}`;
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) return null;
       return await r.json();
@@ -922,7 +921,7 @@
 
     const refreshData = async () => {
       try {
-        const d = await fetchReport(false);
+        const d = await fetchReport();
         if (!d) return;
         if (!state.data || d.cycle_id !== state.data.cycle_id || d.generated_at !== state.data.generated_at) {
           state.data = d;
@@ -946,7 +945,7 @@
     const bootstrap = async () => {
       try {
         setLoadStatus("⏳ Cargando datos meteorológicos...");
-        const d = await fetchReport(false);
+        const d = await fetchReport();
         if (!d) {
           setLoadStatus("⚠️ No se pudieron cargar los datos. Reintenta en unos segundos.", true);
           return;

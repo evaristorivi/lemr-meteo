@@ -8,6 +8,8 @@ from threading import Lock, Thread
 import time as _time
 from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, render_template, request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import config
 from ai_service import (
@@ -23,10 +25,19 @@ from aemet_service import (
     get_prediccion_llanera,
 )
 from metar_service import get_metar
+from metar_generator import generate_metar_lemr, get_metar_disclaimer
 from weather_service import get_weather_forecast, weather_code_to_description
-from windy_service import get_windy_point_forecast, get_windy_map_forecast
+from windy_service import get_windy_point_forecast
 
 app = Flask(__name__)
+
+# Rate limiting: previene abuso y DoS
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 
 # ============================================================================
@@ -337,14 +348,6 @@ def _build_windy_section(selected_windy_model: str) -> dict:
         selected_windy_model,
     )
 
-    windy_maps = get_windy_map_forecast(
-        config.LA_MORGAL_COORDS["lat"],
-        config.LA_MORGAL_COORDS["lon"],
-        selected_windy_model,
-    )
-    if windy_data and isinstance(windy_data, dict) and windy_maps:
-        windy_data["maps"] = windy_maps
-
     return {
         "provider": windy_data.get("provider") if windy_data else "Windy Point Forecast",
         "model": windy_data.get("model") if windy_data else selected_windy_model,
@@ -384,6 +387,15 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     if not weather_data:
         raise RuntimeError("No se pudieron obtener datos meteorológicos de Open-Meteo.")
+
+    # Generar METAR sintético para LEMR desde datos Open-Meteo
+    current = weather_data.get("current", {})
+    metar_lemr = generate_metar_lemr(current, icao="LEMR", elevation_m=config.LA_MORGAL_AERODROME["elevation_m"])
+    if metar_lemr:
+        print(f"✅ METAR sintético LEMR generado: {metar_lemr}")
+    else:
+        print("⚠️ No se pudo generar METAR sintético para LEMR")
+        metar_lemr = "LEMR METAR NOT AVAILABLE"
 
     daily = weather_data.get("daily_forecast", [])[:3]
 
@@ -556,6 +568,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
         fused_ai = interpret_fused_forecast_with_ai(
             metar_leas=metar_leas or "",
+            metar_lemr=metar_lemr or "",
             weather_data=weather_data,
             windy_data=windy_section or {},
             aemet_prediccion=aemet_pred_short,
@@ -596,9 +609,16 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "condition": weather_code_to_description(current.get("weather_code")),
         },
         "metar": {
-            "station": config.LEAS_ICAO,
-            "raw": metar_leas,
-            "analysis": metar_ai,
+            "leas": {
+                "station": config.LEAS_ICAO,
+                "raw": metar_leas,
+                "analysis": metar_ai,
+            },
+            "lemr": {
+                "station": "LEMR",
+                "raw": metar_lemr,
+                "disclaimer": get_metar_disclaimer(),
+            },
         },
         "forecast_days": days,
         "analysis_map_url": analysis_map_b64,  # Base64 para navegador (evita CORS)
@@ -689,6 +709,7 @@ def _start_cycle_warmer_once():
 
 
 @app.get("/")
+@limiter.limit("10 per minute")
 def index():
     _start_cycle_warmer_once()
     with _CACHE_LOCK:
@@ -698,20 +719,21 @@ def index():
     return render_template(
         "index.html",
         data=payload,
-        windy_map_api_key=config.WINDY_MAP_FORECAST_API_KEY,
     )
 
 
 @app.get("/api/report")
+@limiter.limit("5 per minute")
 def api_report():
     _start_cycle_warmer_once()
-    force = request.args.get("force", "0") == "1"
+    # Parámetro force eliminado: la caché se actualiza automáticamente cada ciclo horario
     windy_model = request.args.get("windy_model", config.WINDY_MODEL)
-    payload = get_report_payload(force=force, windy_model=windy_model, include_ai=True)
+    payload = get_report_payload(force=False, windy_model=windy_model, include_ai=True)
     return jsonify(payload)
 
 
 @app.get("/api/windy")
+@limiter.limit("10 per minute")
 def api_windy():
     windy_model = request.args.get("windy_model", config.WINDY_MODEL)
     selected_model = _sanitize_windy_model(windy_model)
@@ -720,6 +742,7 @@ def api_windy():
 
 
 @app.get("/api/ogimet/week")
+@limiter.limit("15 per minute")
 def api_ogimet_week():
     """API endpoint para la vista semanal de Ogimet (7 días, 1 mapa/día)"""
     try:
@@ -730,6 +753,32 @@ def api_ogimet_week():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    """Sirve el archivo robots.txt para SEO."""
+    from flask import send_from_directory
+    return send_from_directory('static', 'robots.txt', mimetype='text/plain')
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    """Sirve el archivo sitemap.xml para SEO."""
+    from flask import send_from_directory
+    return send_from_directory('static', 'sitemap.xml', mimetype='application/xml')
+
+
+@app.after_request
+def set_security_headers(response):
+    """Añade cabeceras de seguridad a todas las respuestas."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    # HSTS solo en producción (cuando uses HTTPS)
+    # response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
 
 if __name__ == "__main__":

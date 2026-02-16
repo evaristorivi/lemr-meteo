@@ -17,10 +17,6 @@ def _windy_key() -> str:
     return getattr(config, "WINDY_POINT_FORECAST_API_KEY", "")
 
 
-def _windy_map_key() -> str:
-    return getattr(config, "WINDY_MAP_FORECAST_API_KEY", "")
-
-
 def _windy_model_for_embed(model_name: str) -> str:
     model = (model_name or "gfs").lower()
     if model == "iconeu":
@@ -61,7 +57,7 @@ def _build_day_summary(hourly: List[dict]) -> List[dict]:
         grouped.setdefault(day, []).append(row)
 
     result = []
-    for day, rows in sorted(grouped.items())[:3]:
+    for day, rows in sorted(grouped.items())[:7]:  # Extendido a 7 días
         max_wind = max((r.get("wind_kmh") or 0) for r in rows)
         max_gust = max((r.get("gust_kmh") or 0) for r in rows)
         avg_temp = round(sum((r.get("temp_c") or 0) for r in rows) / max(len(rows), 1), 1)
@@ -202,7 +198,7 @@ def get_windy_point_forecast(lat: float, lon: float, model: Optional[str] = None
             "lat": lat,
             "lon": lon,
             "units": data.get("units", {}),
-            "hourly": hourly[:48],
+            "hourly": hourly[:168],  # Extendido a 168 horas (7 días)
             "daily_summary": _build_day_summary(hourly),
             "map_embed_url": _build_windy_embed_url(lat, lon, payload["model"]),
             "map_link": f"https://www.windy.com/?{lat},{lon},10",
@@ -211,23 +207,3 @@ def get_windy_point_forecast(lat: float, lon: float, model: Optional[str] = None
         print(f"Error consultando Windy Point Forecast: {exc}")
         fallback_payload["error"] = f"Error consultando Windy: {exc}"
         return fallback_payload
-
-
-def get_windy_map_forecast(lat: float, lon: float, model: Optional[str] = None) -> Dict[str, str]:
-    """
-    Placeholder para integración de Windy Map Forecast.
-
-    Nota:
-      El producto Map Forecast de Windy se expone como SDK JavaScript (Leaflet),
-      no como endpoint REST para render estático de imágenes con este payload.
-      Para evitar errores HTTP 404 en backend, esta función no realiza llamadas
-      remotas hasta integrar el SDK en frontend.
-
-    Returns:
-        dict vacío (sin mapas estáticos)
-    """
-    _ = (lat, lon, model)
-    api_key = _windy_map_key()
-    if not api_key:
-        return {}
-    return {}

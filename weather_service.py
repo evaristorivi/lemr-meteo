@@ -42,6 +42,7 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                 'precipitation_probability',
                 'weather_code',
                 'cloud_cover',
+                'visibility',
                 'wind_speed_10m',
                 'wind_direction_10m'
             ],
@@ -93,6 +94,7 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                     'precipitation_prob': hourly['precipitation_probability'][i] if hourly.get('precipitation_probability') else None,
                     'weather_code': hourly['weather_code'][i] if hourly.get('weather_code') else None,
                     'cloud_cover': hourly['cloud_cover'][i] if hourly.get('cloud_cover') else None,
+                    'visibility': hourly['visibility'][i] / 1000 if hourly.get('visibility') else None,  # Convertir metros a km
                     'wind_speed': hourly['wind_speed_10m'][i] if hourly.get('wind_speed_10m') else None,
                     'wind_direction': hourly['wind_direction_10m'][i] if hourly.get('wind_direction_10m') else None,
                 })

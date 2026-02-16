@@ -47,3 +47,7 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Test and demo files (temporary)
+test_*.py
+demo_*.py
