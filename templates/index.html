@@ -530,12 +530,14 @@
 
       <article class="card">
         <h2>✈️ METAR LEAS (referencia oficial)</h2>
-        <p id="metar-leas-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px"></p>
+        <p id="metar-leas-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px;margin-bottom:8px"></p>
+        <p id="metar-leas-category" style="font-size:0.9rem;font-weight:600;margin:0"></p>
       </article>
 
       <article class="card">
         <h2>🎯 METAR LEMR (estimado automático)</h2>
         <p id="metar-lemr-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px;margin-bottom:8px"></p>
+        <p id="metar-lemr-category" style="font-size:0.9rem;font-weight:600;margin:0;margin-bottom:8px"></p>
         <p id="metar-lemr-disclaimer" class="muted" style="font-size:0.8rem;line-height:1.4;margin:0"></p>
       </article>
     </section>
@@ -814,14 +816,31 @@
       // METAR LEAS (oficial)
       const metarLeas = data.metar?.leas?.raw || data.metar?.raw || "METAR LEAS no disponible en este ciclo.";
       document.getElementById("metar-leas-raw").textContent = metarLeas;
+      
+      // Clasificación de vuelo LEAS
+      const leasCategory = data.metar?.leas?.flight_category;
+      if (leasCategory) {
+        document.getElementById("metar-leas-category").innerHTML = `${leasCategory.emoji} <span style="color:${leasCategory.color}">${leasCategory.category}</span> - ${leasCategory.description}`;
+      } else {
+        document.getElementById("metar-leas-category").textContent = "";
+      }
 
       // METAR LEMR (sintético)
       if (data.metar?.lemr) {
         document.getElementById("metar-lemr-raw").textContent = data.metar.lemr.raw || "METAR LEMR no generado";
         document.getElementById("metar-lemr-disclaimer").textContent = data.metar.lemr.disclaimer || "";
+        
+        // Clasificación de vuelo LEMR
+        const lemrCategory = data.metar.lemr.flight_category;
+        if (lemrCategory) {
+          document.getElementById("metar-lemr-category").innerHTML = `${lemrCategory.emoji} <span style="color:${lemrCategory.color}">${lemrCategory.category}</span> - ${lemrCategory.description}`;
+        } else {
+          document.getElementById("metar-lemr-category").textContent = "";
+        }
       } else {
         document.getElementById("metar-lemr-raw").textContent = "METAR LEMR no disponible";
         document.getElementById("metar-lemr-disclaimer").textContent = "";
+        document.getElementById("metar-lemr-category").textContent = "";
       }
 
       // Mapa de análisis

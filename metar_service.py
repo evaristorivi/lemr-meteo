@@ -2,7 +2,8 @@
 Módulo para obtener datos METAR de aeropuertos
 """
 import requests
-from typing import Optional, Dict
+import re
+from typing import Optional, Dict, Tuple
 import config
 
 
@@ -119,6 +120,106 @@ def parse_metar_components(metar: str) -> Dict[str, str]:
             components['temperature'] = part
     
     return components
+
+
+def classify_flight_category(metar: str) -> Dict[str, str]:
+    """
+    Clasifica las condiciones de vuelo según el METAR en categorías LIFR/IFR/MVFR/VFR.
+    
+    Args:
+        metar: String con el METAR completo
+    
+    Returns:
+        Diccionario con 'category', 'color', 'emoji' y 'description'
+    """
+    # Resultado por defecto
+    result = {
+        'category': 'DESCONOCIDO',
+        'color': '#888888',
+        'emoji': '⚪',
+        'description': 'No se pudo clasificar'
+    }
+    
+    if not metar or len(metar) < 10:
+        return result
+    
+    # Extraer visibilidad en metros
+    visibility_m = None
+    
+    # Buscar patrón de visibilidad (4 dígitos después de KT)
+    # Ejemplos: "28011KT 3000", "00000KT 9999", "27015KT 0800"
+    vis_match = re.search(r'\d{5}KT\s+(\d{4})', metar)
+    if vis_match:
+        visibility_m = int(vis_match.group(1))
+    else:
+        # Intentar formato alternativo
+        vis_match = re.search(r'KT\s+(\d{4})(?:\s|$)', metar)
+        if vis_match:
+            visibility_m = int(vis_match.group(1))
+    
+    # Si es 9999, significa >= 10km
+    if visibility_m == 9999:
+        visibility_m = 10000
+    
+    # Extraer techo de nubes (capa BKN o OVC más baja) en pies
+    ceiling_ft = None
+    
+    # Buscar grupos de nubes BKN o OVC
+    # Ejemplos: "BKN003", "OVC023", "BKN040"
+    cloud_pattern = re.findall(r'(BKN|OVC)(\d{3})', metar)
+    
+    if cloud_pattern:
+        # Convertir a pies (cada dígito representa cientos de pies)
+        ceilings = [int(height) * 100 for _, height in cloud_pattern]
+        ceiling_ft = min(ceilings)  # Tomar el más bajo
+    
+    # Clasificar según las reglas (tomar la más restrictiva)
+    # LIFR: techo <500 ft O visibilidad <1000m
+    # IFR: techo <1000 ft O visibilidad <3000m
+    # MVFR: techo 1000-3000 ft O visibilidad 3000-5000m
+    # VFR: techo >3000 ft Y visibilidad >5000m
+    
+    category = 'VFR'  # Por defecto
+    
+    # Evaluar restricciones
+    if (ceiling_ft is not None and ceiling_ft < 500) or (visibility_m is not None and visibility_m < 1000):
+        category = 'LIFR'
+    elif (ceiling_ft is not None and ceiling_ft < 1000) or (visibility_m is not None and visibility_m < 3000):
+        category = 'IFR'
+    elif (ceiling_ft is not None and ceiling_ft <= 3000) or (visibility_m is not None and visibility_m <= 5000):
+        category = 'MVFR'
+    else:
+        category = 'VFR'
+    
+    # Asignar colores y emojis según categoría
+    categories = {
+        'VFR': {
+            'category': 'VFR',
+            'color': '#22c55e',  # verde
+            'emoji': '🟢',
+            'description': 'Condiciones visuales (>3000 ft, >5000 m)'
+        },
+        'MVFR': {
+            'category': 'MVFR',
+            'color': '#3b82f6',  # azul
+            'emoji': '🔵',
+            'description': 'Condiciones visuales marginales (1000-3000 ft, 3000-5000 m)'
+        },
+        'IFR': {
+            'category': 'IFR',
+            'color': '#ef4444',  # rojo
+            'emoji': '🔴',
+            'description': 'Condiciones por instrumentos (<1000 ft, <3000 m)'
+        },
+        'LIFR': {
+            'category': 'LIFR',
+            'color': '#a855f7',  # magenta
+            'emoji': '🟣',
+            'description': 'Condiciones por instrumentos bajas (<500 ft, <1000 m)'
+        }
+    }
+    
+    return categories.get(category, result)
 
 
 if __name__ == '__main__':

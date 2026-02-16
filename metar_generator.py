@@ -222,7 +222,7 @@ def generate_metar_lemr(current_weather: Dict, icao: str = "LEMR", elevation_m: 
         qnh = f"Q{pressure_int:04d}"
         
         # Ensamblar METAR
-        metar = f"{icao} {day_hour}Z AUTO {wind_group} {visibility}{wx_str} {clouds} {temp_group} {qnh} NOSIG"
+        metar = f"METAR {icao} {day_hour}Z AUTO {wind_group} {visibility}{wx_str} {clouds} {temp_group} {qnh} NOSIG"
         
         # Limpiar espacios dobles
         metar = " ".join(metar.split())

@@ -888,6 +888,8 @@ def interpret_fused_forecast_with_ai(
     metar_lemr: str = "",
     significant_map_urls: Optional[list[str]] = None,
     location: str = "La Morgal (LEMR)",
+    flight_category_leas: Optional[Dict] = None,
+    flight_category_lemr: Optional[Dict] = None,
 ) -> Optional[str]:
     """
     Genera un veredicto experto fusionando Windy + AEMET + METAR + Open-Meteo.
@@ -968,9 +970,13 @@ DATOS FIJOS AERÓDROMO LEMR:
 
 METAR LEAS (referencia):
 {metar_leas or 'No disponible'}
+{f"{flight_category_leas.get('emoji')} Clasificación: {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
 METAR LEMR (estimado local):
 {metar_lemr or 'No disponible'}
+{f"{flight_category_lemr.get('emoji')} Clasificación: {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
+
+⚠️ IMPORTANTE: Los METAR y sus clasificaciones (VFR/MVFR/IFR/LIFR) son OBSERVACIONES PUNTUALES del momento indicado en el timestamp del METAR, NO son pronósticos para todo el día. Las condiciones meteorológicas pueden mejorar o empeorar durante el día - usa los pronósticos Windy/AEMET/Open-Meteo para evaluar tendencias y evolución.
 
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}

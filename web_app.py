@@ -24,7 +24,7 @@ from aemet_service import (
     get_prediccion_asturias_pasado_manana,
     get_prediccion_llanera,
 )
-from metar_service import get_metar
+from metar_service import get_metar, classify_flight_category
 from metar_generator import generate_metar_lemr, get_metar_disclaimer
 from weather_service import get_weather_forecast, weather_code_to_description
 from windy_service import get_windy_point_forecast
@@ -566,6 +566,10 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "llanera": pred_llanera_text or "",
             }
 
+        # Calcular clasificaciones de condiciones de vuelo antes de pasarlas a la IA
+        flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
+        flight_cat_lemr = classify_flight_category(metar_lemr) if metar_lemr else None
+
         fused_ai = interpret_fused_forecast_with_ai(
             metar_leas=metar_leas or "",
             metar_lemr=metar_lemr or "",
@@ -575,7 +579,13 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             map_analysis_text="" if (is_mini or is_github) else (analysis_map_url or ""),
             significant_map_urls=map_urls_for_ai,
             location=config.LA_MORGAL_COORDS["name"],
+            flight_category_leas=flight_cat_leas,
+            flight_category_lemr=flight_cat_lemr,
         )
+    else:
+        # Si no se incluye IA, igualmente calcular las clasificaciones
+        flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
+        flight_cat_lemr = classify_flight_category(metar_lemr) if metar_lemr else None
 
     # Log de peticiones AEMET realizadas en este ciclo
     aemet_count_end = get_aemet_request_count()
@@ -613,11 +623,13 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "station": config.LEAS_ICAO,
                 "raw": metar_leas,
                 "analysis": metar_ai,
+                "flight_category": flight_cat_leas,
             },
             "lemr": {
                 "station": "LEMR",
                 "raw": metar_lemr,
                 "disclaimer": get_metar_disclaimer(),
+                "flight_category": flight_cat_lemr,
             },
         },
         "forecast_days": days,
