@@ -397,7 +397,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         print("⚠️ No se pudo generar METAR sintético para LEMR")
         metar_lemr = "LEMR METAR NOT AVAILABLE"
 
-    daily = weather_data.get("daily_forecast", [])[:3]
+    daily = weather_data.get("daily_forecast", [])[:4]
 
     # ── Predicción Windy Point Forecast ──
     windy_section = _build_windy_section(selected_windy_model)
@@ -492,7 +492,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         sig_index.setdefault(m["date"], []).append(m)
 
     days = []
-    labels = ["Hoy", "Mañana", "Pasado mañana"]
+    labels = ["Hoy", "Mañana", "Pasado mañana", "Dentro de 3 días"]
     for index, day in enumerate(daily):
         target_date = datetime.fromisoformat(day["date"]).date()
         operating = _operating_hours(target_date)

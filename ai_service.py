@@ -619,8 +619,9 @@ Código meteorológico WMO: {current.get('weather_code')}
         daily = weather_data.get('daily_forecast', [])
         if daily and len(daily) > 0:
             weather_summary += f"\n**HORARIOS DE LUZ SOLAR (ULM SOLO PUEDE VOLAR DE DÍA):**\n"
-            for i, day in enumerate(daily):
-                day_label = ["HOY", "MAÑANA", "PASADO MAÑANA"][i] if i < 3 else day.get('date', 'N/A')
+            labels = ["HOY", "MAÑANA", "PASADO MAÑANA", "DENTRO DE 3 DÍAS"]
+            for i, day in enumerate(daily[:4]):
+                day_label = labels[i] if i < len(labels) else day.get('date', 'N/A')
                 sunrise = day.get('sunrise', 'N/A').split('T')[1][:5] if day.get('sunrise') else 'N/A'
                 sunset = day.get('sunset', 'N/A').split('T')[1][:5] if day.get('sunset') else 'N/A'
                 weather_summary += f"- {day_label}: Amanecer {sunrise}, Atardecer {sunset}\n"
@@ -644,7 +645,7 @@ Código meteorológico WMO: {current.get('weather_code')}
 - MUESTRA la conversión explícitamente
 - VERIFICA coherencia: Si dices X kt, no puede exceder un límite mayor
 
-Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los próximos 3 días:
+Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los próximos 4 días:
 
 **IMPORTANTE - Restricciones ULM:**
 - SOLO VUELO DIURNO (amanecer a atardecer) - OBLIGATORIO por legislación
@@ -672,7 +673,12 @@ Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los pr
    - Evaluación de condiciones
    - Veredicto: ✅ APTO ULM / ⚠️ PRECAUCIÓN / ❌ NO APTO
 
-**4. CARÁCTER DEL VUELO POR DÍA (OBLIGATORIO):**
+**4. DENTRO DE 3 DÍAS:**
+   - Pronóstico para ULM
+   - Evaluación de condiciones
+   - Veredicto: ✅ APTO ULM / ⚠️ PRECAUCIÓN / ❌ NO APTO
+
+**5. CARÁCTER DEL VUELO POR DÍA (OBLIGATORIO):**
    Para cada día viable, especifica:
    - 🌤️ PLACENTERO (< 10 kt): Ideal travesías, vuelos de placer
    - ✈️ ESTABLE (10-12 kt): Buenos circuitos, vuelos locales
@@ -680,14 +686,14 @@ Proporciona un análisis meteorológico DETALLADO PARA AVIACIÓN ULM para los pr
    - 🌪️ AGITADO (15-18 kt): Solo tráficos escuela para experimentados
    - ❌ PELIGROSO (> 18 kt): NO VOLAR
    
-**5. TIPO DE OPERACIÓN RECOMENDADA:**
+**6. TIPO DE OPERACIÓN RECOMENDADA:**
    - 🎯 Vuelo de placer/travesía
    - 🔄 Circuitos locales
    - 🏫 Solo tráficos de escuela
    - ☕ Quedarse en tierra (no merece la pena)
 
-**6. RECOMENDACIONES ULM:**
-   - Mejor día de los 3 para volar (y qué tipo de vuelo hacer)
+**7. RECOMENDACIONES ULM:**
+   - Mejor día de los 4 para volar (y qué tipo de vuelo hacer)
    - ¿Merece la pena? Sé honesto sobre la experiencia esperada
    - Precauciones para ULM (bajo peso, sensible a ráfagas)
    - Qué vigilar (evolución viento, térmicas, rachas)
@@ -748,8 +754,9 @@ def interpret_aemet_map_with_ai(
         daily = weather_data.get('daily_forecast', []) if weather_data else []
 
         daily_lines = []
-        for index, day in enumerate(daily[:3]):
-            label = ["HOY", "MAÑANA", "PASADO MAÑANA"][index]
+        labels = ["HOY", "MAÑANA", "PASADO MAÑANA", "DENTRO DE 3 DÍAS"]
+        for index, day in enumerate(daily[:4]):
+            label = labels[index] if index < len(labels) else f"DÍA +{index}"
             daily_lines.append(
                 f"- {label}: temp {day.get('temp_min')}°C/{day.get('temp_max')}°C, "
                 f"viento max {day.get('wind_max')} km/h, rachas {day.get('wind_gusts_max')} km/h"
@@ -766,7 +773,7 @@ Contexto local actual:
 - Rachas: {current.get('wind_gusts')} km/h
 - Presión: {current.get('pressure')} hPa
 
-Tendencia 3 días:
+Tendencia 4 días:
 {context_text}
 
 Referencia cercana (LEAS):
@@ -775,7 +782,7 @@ Referencia cercana (LEAS):
 Requisitos de respuesta:
 1) Explica de forma sencilla qué se ve en el mapa (frentes, isobaras, etc.)
 2) Interpreta impacto para Asturias y específicamente La Morgal (LEMR)
-3) Incluye predicción operativa para HOY, MAÑANA y PASADO MAÑANA
+3) Incluye predicción operativa para los 4 días
 4) Da veredicto ULM por día: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
 5) Propón mejor franja horaria de vuelo SOLO dentro del horario operativo de La Morgal
    (Invierno 09:00-20:00, Verano 09:00-21:45) y en horario diurno
@@ -829,7 +836,7 @@ def interpret_windy_forecast_with_ai(
         hourly = windy_data.get("hourly", []) if windy_data else []
 
         summary_lines = []
-        for row in daily_summary[:3]:
+        for row in daily_summary[:4]:
             summary_lines.append(
                 f"- {row.get('date')}: viento máx {row.get('max_wind_kmh')} km/h, "
                 f"rachas máx {row.get('max_gust_kmh')} km/h, temp media {row.get('avg_temp_c')}°C, "
@@ -850,14 +857,14 @@ def interpret_windy_forecast_with_ai(
 
 Modelo Windy: {model_name}
 
-Resumen 3 días:
+Resumen 4 días:
 {chr(10).join(summary_lines) if summary_lines else 'Sin resumen disponible'}
 
 Próximas horas:
 {chr(10).join(hourly_lines) if hourly_lines else 'Sin datos horarios disponibles'}
 
 Requisitos de respuesta:
-1) Evalúa condiciones HOY, MAÑANA y PASADO MAÑANA para ULM
+1) Evalúa condiciones HOY, MAÑANA, PASADO MAÑANA y DENTRO DE 3 DÍAS para ULM
 2) Convierte km/h a kt cuando compares con límites ULM
 3) Veredicto por día: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO
 4) Propón franjas horarias recomendadas SOLO diurnas y dentro del horario de La Morgal
@@ -910,8 +917,9 @@ def interpret_fused_forecast_with_ai(
         windy_hourly = windy_data.get("hourly", []) if windy_data else []
 
         om_lines = []
-        for idx, row in enumerate(daily[:3]):
-            label = ["HOY", "MAÑANA", "PASADO MAÑANA"][idx]
+        labels = ["HOY", "MAÑANA", "PASADO MAÑANA", "DENTRO DE 3 DÍAS"]
+        for idx, row in enumerate(daily[:4]):
+            label = labels[idx] if idx < len(labels) else f"DÍA +{idx}"
             om_lines.append(
                 f"- {label}: temp {row.get('temp_min')}-{row.get('temp_max')}°C, "
                 f"viento máx {row.get('wind_max')} km/h, rachas máx {row.get('wind_gusts_max')} km/h, "
@@ -919,14 +927,14 @@ def interpret_fused_forecast_with_ai(
             )
 
         windy_lines = []
-        for row in windy_daily[:3]:
+        for row in windy_daily[:4]:
             windy_lines.append(
                 f"- {row.get('date')}: viento máx {row.get('max_wind_kmh')} km/h, "
                 f"rachas máx {row.get('max_gust_kmh')} km/h, precip {row.get('precip_total_mm')} mm"
             )
 
         hourly_lines = []
-        for row in windy_hourly[:4]:  # Reducido de 10 a 4 horas
+        for row in windy_hourly[:24]:  # Ampliado a 24 horas para mejor planificación
             t = row.get("time_local", "")
             hh = t.split("T")[1][:5] if "T" in t else t
             hourly_lines.append(
@@ -990,13 +998,13 @@ ULM: Solo vuela en VFR. En IFR y LIFR está prohibido. En MVFR al ser condicione
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 
-Open-Meteo (resumen 3 días):
+Open-Meteo (resumen 4 días):
 {chr(10).join(om_lines) if om_lines else 'Sin datos'}
 
-Windy Point Forecast (resumen 3 días):
+Windy Point Forecast (resumen 4 días):
 {chr(10).join(windy_lines) if windy_lines else 'Sin datos'}
 
-Windy próximas horas:
+Windy próximas 24 horas:
 {chr(10).join(hourly_lines) if hourly_lines else 'Sin datos'}
 
 AEMET Asturias HOY:
@@ -1016,14 +1024,32 @@ Lectura sinóptica/mapa AEMET previa:
 
 Objetivo: comparación razonada entre Windy vs AEMET (solo texto) vs METAR/Open-Meteo para DECISIÓN DE VUELO ULM en LEMR.
 
+⚙️ **RENDIMIENTO DEL AVIÓN Y ALTITUD DE DENSIDAD** (CRÍTICO):
+Analiza los datos meteorológicos (temperatura, presión, humedad) y evalúa cómo afectarían al rendimiento del avión:
+- **TEMPERATURAS ALTAS** (>25°C): Reducen la densidad del aire → MENOR sustentación y potencia del motor
+  * Despegue: Se necesita MÁS pista para levantar vuelo
+  * Ascenso: Trepará PEOR (menor régimen de ascenso)
+  * Consejo: "Ten cuidado al despegar, necesitarás más pista hoy y trepará peor"
+- **TEMPERATURA + ALTITUD + HUMEDAD ALTA**: Efecto combinado = "alta altitud de densidad"
+  * La Morgal está a 350 ft, pero en un día caluroso (30°C) se comporta como si estuviera a 2000+ ft
+  * Reduce capacidad de carga útil y empeora rendimiento general
+- **PRESIÓN BAJA** (<1013 hPa): También reduce densidad del aire (efecto similar a temperatura alta)
+- **DÍA IDEAL para rendimiento**: Frío (<15°C), presión alta (>1020 hPa), baja humedad
+  * "Condiciones excelentes para rendimiento: aire denso, despegue corto, buen ascenso"
+
+Si hay temperaturas >25°C o presión <1010 hPa, MENCIONA explícitamente el impacto en despegue y ascenso.
+
 ⚠️ VALIDACIÓN HORARIA PARA HOY (CRÍTICA):
 - Determina si {fecha_actual} es temporada invierno (oct-mar) o verano (abr-sep)
 - Si invierno: horario operativo es 09:00-20:00 | Si verano: 09:00-21:45
 - Compara {hora_actual} (hora actual) contra el horario operativo
 - Si {hora_actual} está ANTES de la apertura: NO marques HOY como no disponible; indica "aún no abierto" y evalúa HOY desde la hora de apertura
-- Si {hora_actual} está DENTRO del horario operativo: HOY es viable, analiza viento para resto del día
-- Si {hora_actual} está DESPUÉS del cierre: marca HOY como "YA NO DISPONIBLE - fuera de horario operativo"
-- ⚠️ IMPORTANTE: No marques HOY como no disponible si aún hay tiempo útil de vuelo (mín 2h)
+- Si {hora_actual} está DENTRO del horario operativo: 
+  * Calcula el tiempo restante hasta el cierre
+  * Si quedan **< 1 hora**: marca "🕐 CIERRE INMINENTE - Ya no merece la pena (cierra pronto, tiempo insuficiente)"
+  * Si quedan **1-2 horas**: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve (cierra en X minutos, va justo)"
+  * Si quedan **> 2 horas**: HOY es viable, analiza viento y condiciones meteorológicas
+- Si {hora_actual} está DESPUÉS del cierre: marca HOY como "🕐 YA NO DISPONIBLE - fuera de horario operativo"
 
 Formato obligatorio:
 0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
@@ -1041,18 +1067,21 @@ Formato obligatorio:
 
 2) **DISCREPANCIAS** clave y explicación meteorológica probable
 
-3) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO POR DÍA** (OBLIGATORIO para los 3 días):
+3) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO POR DÍA** (OBLIGATORIO para los 4 días):
    
    **HOY ({fecha_actual}):**
     - Valida si {hora_actual} está antes de apertura, dentro de horario o después de cierre (detecta invierno/verano automáticamente)
+    - Calcula el tiempo restante hasta el cierre
     - Si está ANTES de apertura: indica "aún no abierto" y evalúa HOY desde la hora de apertura
-    - Si está DENTRO: Analiza viento ACTUAL (usa "CONDICIONES ACTUALES", no pronóstico)
+    - Si está DENTRO: Analiza viento ACTUAL (usa "CONDICIONES ACTUALES", no pronóstico) Y tiempo restante
     - Si está DESPUÉS de cierre: "YA NO DISPONIBLE - fuera de horario operativo"
    - Indica: "PISTA 10" o "PISTA 28" (basado en dirección viento ACTUAL)
    - Componentes: headwind/tailwind y crosswind para AMBAS pistas (con datos ACTUALES)
     - Ejemplo si antes de abrir: "HOY → AÚN NO ABIERTO (son las {hora_actual}, abre a las 09:00), pero evaluable desde apertura"
     - Ejemplo si tras cierre: "HOY → YA NO DISPONIBLE (son las {hora_actual}, aeródromo cierra a las 20:00)"
-    - Ejemplo si viable: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas ACTUALES 23 kt, headwind 13 kt, crosswind 3 kt) ✅ - viable hasta cierre"
+    - Ejemplo si < 1h restante: "HOY → 🕐 CIERRE INMINENTE (quedan 45 min, cierra a las 20:00) - Ya no merece la pena"
+    - Ejemplo si 1-2h restante: "HOY → ⚠️ TIEMPO LIMITADO (quedan 1h 30min, cierra a las 20:00) - Solo vuelo muy breve"
+    - Ejemplo si > 2h restante viable: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas ACTUALES 23 kt, headwind 13 kt, crosswind 3 kt) ✅ - viable hasta cierre a las 20:00"
    
    **MAÑANA:**
    - Analyza viento previsto para todo el día de mañana
@@ -1065,17 +1094,28 @@ Formato obligatorio:
    - Indica: "PISTA 10" o "PISTA 28"
    - Componentes calculados para ambas pistas
    - Franjas horarias recomendadas (mañana y tarde, dentro de horario operativo)
+   
+   **DENTRO DE 3 DÍAS:**
+   - Analiza viento previsto
+   - Indica: "PISTA 10" o "PISTA 28"
+   - Componentes calculados para ambas pistas
 
-4) **VEREDICTO POR DÍA** (los 3 días completos):
-   - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO / 🕐 YA NO DISPONIBLE
+4) **VEREDICTO POR DÍA** (los 4 días completos):
+   - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ⚠️ TIEMPO LIMITADO / 🕐 CIERRE INMINENTE / ❌ NO APTO / 🕐 YA NO DISPONIBLE
      ⚠️ CRÍTICO: Para HOY usa las "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
+    - Evalúa PRIMERO el tiempo restante hasta el cierre:
+      * Si < 1h: marca "🕐 CIERRE INMINENTE - Ya no merece la pena" (aunque las condiciones meteorológicas sean buenas)
+      * Si 1-2h: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve" (si las condiciones son aceptables)
+      * Si > 2h: evalúa normalmente según condiciones meteorológicas (✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO)
     - Si es ANTES de apertura, NO marques "YA NO DISPONIBLE": evalúa HOY igualmente y aclara que el aeródromo aún no está abierto.
      - Si las condiciones actuales son MEJORES que el pronóstico: indícalo (ej: "mejor de lo esperado")
      - Si las condiciones actuales son PEORES que el pronóstico: indícalo (ej: "rachas más fuertes de lo previsto")
    - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
+   - **DENTRO DE 3 DÍAS**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **JUSTIFICACIÓN MULTIFACTOR (OBLIGATORIA)**:
      * Para HOY: cita los valores ACTUALES EN TIEMPO REAL (viento, rachas, nubosidad AHORA a las {hora_actual})
+     * Para HOY: MENCIONA SIEMPRE el tiempo restante hasta el cierre y su hora (ej: "quedan 3h hasta cierre a las 20:00")
      * Para MAÑANA/PASADO: cita el pronóstico esperado
      * Cita explícitamente: viento medio (kt), rachas (kt), diferencia rachas-medio (kt)
      * Cita: nubosidad (techo ft, cobertura FEW/SCT/BKN/OVC)
@@ -1087,7 +1127,7 @@ Formato obligatorio:
      * ⚠️ PRECAUCIÓN: 1 parámetro en límite (ej: rachas 18-20 kt)
      * ❌ NO APTO: 2+ parámetros en límite O 1 factor crítico (rachas > 22 kt, lluvia, techo < 800 ft)
 
-5) **RIESGOS CRÍTICOS** por día:
+5) **RIESGOS CRÍTICOS** por día (4 días):
    ⚠️ Para HOY: usa los valores de "CONDICIONES ACTUALES" (rachas, nubosidad, viento AHORA MISMO)
    - Rachas: diferencia con viento medio, valor absoluto (cita valores actuales para HOY)
    - Precipitación: tipo (lluvia/nieve/granizo), intensidad (-/mod/+)
@@ -1095,18 +1135,19 @@ Formato obligatorio:
    - Visibilidad: si < 8 km (precaución), si < 5 km (límite legal)
    - Crosswind excesivo: si > 12 kt para pista recomendada
    - Estabilidad: térmicas fuertes, convección, turbulencia orográfica
+   - **Rendimiento reducido**: Temp >25°C o presión <1010 hPa → advertir sobre mayor carrera de despegue y peor ascenso
 
 6) **FRANJAS HORARIAS RECOMENDADAS** (para días viables):
    - Formato: "MAÑANA: 09:00-12:00 ✅ | TARDE: 15:00-19:00 ⚠️"
    - Si no hay ventana segura: "NO RECOMENDADA"
    - Considera amanecer, atardecer, horario operativo y condiciones meteorológicas
 
-7) **🏆 MEJOR DÍA PARA VOLAR**:
-   - Indica claramente: "MAÑANA" o "PASADO MAÑANA" (o "HOY" si aún es viable)
+7) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
+   - Indica claramente: "HOY", "MAÑANA", "PASADO MAÑANA" o "DENTRO DE 3 DÍAS"
    - Justifica por qué es el mejor (menor viento, mejor visibilidad, menos rachas, etc.)
    - **CARÁCTER DEL MEJOR DÍA**: Especifica si será placentero/estable/agitado
    - **TIPO DE VUELO POSIBLE**: Travesías/circuitos/solo tráficos escuela
-   - Si ningún día es bueno: "NINGUNO - condiciones adversas los 3 días"
+   - Si ningún día es bueno: "NINGUNO - condiciones adversas los 4 días"
 
 8) **¿MERECE LA PENA VOLAR?**:
    - 🎉 **SÍ, IDEAL**: Condiciones placenteras, excelente para disfrutar
@@ -1118,7 +1159,7 @@ Formato obligatorio:
 9) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
 
 Reglas CRÍTICAS:
-- **ANÁLISIS DE PISTA ES OBLIGATORIO PARA LOS 3 DÍAS**: No omitas ninguno
+- **ANÁLISIS DE PISTA ES OBLIGATORIO PARA LOS 4 DÍAS**: No omitas ninguno
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: Detecta invierno/verano, valida {hora_actual} contra límites operativos
 - **ANÁLISIS COMPLETO MULTIFACTOR (OBLIGATORIO para cada día)**:
   1. Viento medio (convertido a kt)
@@ -1263,11 +1304,12 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
         fallback_sections.append(f"- Presión: {current.get('pressure', 'N/A')} hPa")
         fallback_sections.append(f"- Nubosidad: {current.get('cloud_cover', 'N/A')}%\n")
         
-        # Pronóstico 3 días
+        # Pronóstico 4 días
         if daily:
-            fallback_sections.append("**PRONÓSTICO 3 DÍAS (Open-Meteo):**")
-            for i, day in enumerate(daily[:3]):
-                label = ["HOY", "MAÑANA", "PASADO MAÑANA"][i]
+            fallback_sections.append("**PRONÓSTICO 4 DÍAS (Open-Meteo):**")
+            labels = ["HOY", "MAÑANA", "PASADO MAÑANA", "DENTRO DE 3 DÍAS"]
+            for i, day in enumerate(daily[:4]):
+                label = labels[i] if i < len(labels) else f"DÍA +{i}"
                 sunrise = day.get('sunrise', 'N/A')
                 sunset = day.get('sunset', 'N/A')
                 fallback_sections.append(f"\n{label} ({day.get('date', 'N/A')}):")
@@ -1279,8 +1321,8 @@ Mentalidad: Tu análisis es para que un piloto REAL tome decisiones seguras Y se
         
         # Windy
         if windy_daily:
-            fallback_sections.append("\n**PRONÓSTICO WINDY:**")
-            for day in windy_daily[:3]:
+            fallback_sections.append("\n**PRONÓSTICO WINDY (4 días):**")
+            for day in windy_daily[:4]:
                 fallback_sections.append(f"\n{day.get('date', 'N/A')}:")
                 fallback_sections.append(f"  💨 Viento: {day.get('wind_min', 'N/A')}-{day.get('wind_max', 'N/A')} km/h")
                 fallback_sections.append(f"  🌬️ Rachas: hasta {day.get('gust_max', 'N/A')} km/h")

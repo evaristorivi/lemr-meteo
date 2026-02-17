@@ -39,6 +39,9 @@
   <!-- Canonical URL -->
   <link rel="canonical" href="https://lemr-meteo.evaristorivieccio.com/" />
   
+  <!-- Marked.js para renderizar markdown del análisis IA -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+  
   <style>
     :root {
       color-scheme: dark;
@@ -265,11 +268,63 @@
     }
 
     .analysis {
-      white-space: pre-wrap;
-      line-height: 1.5;
+      line-height: 1.7;
       font-size: 0.93rem;
       margin: 0;
       color: #dce7ff;
+    }
+
+    .analysis h2, .analysis h3, .analysis h4 {
+      color: var(--accent);
+      margin-top: 1.2em;
+      margin-bottom: 0.6em;
+      font-weight: 600;
+    }
+
+    .analysis h2 { font-size: 1.1rem; }
+    .analysis h3 { font-size: 1rem; }
+    .analysis h4 { font-size: 0.95rem; }
+
+    .analysis strong {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .analysis p {
+      margin: 0.8em 0;
+    }
+
+    .analysis ul, .analysis ol {
+      margin: 0.6em 0;
+      padding-left: 1.5em;
+    }
+
+    .analysis li {
+      margin: 0.4em 0;
+    }
+
+    .analysis code {
+      background: rgba(102, 227, 255, 0.1);
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+    }
+
+    .analysis pre {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.8em;
+      border-radius: 6px;
+      overflow-x: auto;
+      border-left: 3px solid var(--accent);
+    }
+
+    .analysis blockquote {
+      border-left: 3px solid var(--accent2);
+      padding-left: 1em;
+      margin: 1em 0;
+      color: var(--muted);
+      font-style: italic;
     }
 
     .pred-text {
@@ -908,8 +963,27 @@
         document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
       }
 
-      // IA
-      document.getElementById("expert-final").textContent = data.ai.expert_final_verdict || "Sin veredicto final.";
+      // IA - Convertir markdown a HTML
+      const aiAnalysis = data.ai.expert_final_verdict || "Sin veredicto final.";
+      const aiElement = document.getElementById("expert-final");
+      // Usar marked.js para convertir markdown a HTML si está disponible
+      if (typeof marked !== 'undefined') {
+        try {
+          aiElement.innerHTML = marked.parse(aiAnalysis);
+        } catch (e) {
+          console.warn('Error al parsear markdown:', e);
+          // Fallback: formatear manualmente si falla marked
+          aiElement.innerHTML = aiAnalysis
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/^(.+)$/gm, '<p>$1</p>');
+        }
+      } else {
+        // Fallback básico si marked.js no está disponible
+        aiElement.innerHTML = aiAnalysis
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n/g, '<br>');
+      }
 
       // Windy
       const windy = data.windy || {};

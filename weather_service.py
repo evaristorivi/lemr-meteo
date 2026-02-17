@@ -57,7 +57,7 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                 'weather_code'
             ],
             'timezone': 'Europe/Madrid',
-            'forecast_days': 3  # Hoy, mañana y pasado
+            'forecast_days': 4  # Hoy + 3 días siguientes
         }
         
         response = requests.get(config.OPEN_METEO_API, params=params, timeout=10)
@@ -99,7 +99,7 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                     'wind_direction': hourly['wind_direction_10m'][i] if hourly.get('wind_direction_10m') else None,
                 })
         
-        # Añadir pronóstico diario (3 días)
+        # Añadir pronóstico diario (4 días)
         daily = data.get('daily', {})
         daily_forecast = []
         
@@ -229,15 +229,15 @@ def format_weather_report(weather_data: Dict) -> str:
     if precip is not None and precip > 0:
         report += f"🌧️ Precipitación: {precip} mm\n"
     
-    # Añadir pronóstico de 3 días
+    # Añadir pronóstico de 4 días
     daily = weather_data.get('daily_forecast', [])
     if daily and len(daily) > 0:
         report += "\n━━━━━━━━━━━━━━━━━━━━\n"
-        report += "**PRONÓSTICO 3 DÍAS (ULM - Solo vuelo diurno):**\n\n"
+        report += "**PRONÓSTICO 4 DÍAS (ULM - Solo vuelo diurno):**\n\n"
         
-        day_names = ["📅 HOY", "📅 MAÑANA", "📅 PASADO MAÑANA"]
+        day_names = ["📅 HOY", "📅 MAÑANA", "📅 PASADO MAÑANA", "📅 DENTRO DE 3 DÍAS"]
         
-        for i, day in enumerate(daily[:3]):
+        for i, day in enumerate(daily[:4]):
             day_label = day_names[i] if i < len(day_names) else f"Día {i+1}"
             report += f"{day_label}\n"
             
