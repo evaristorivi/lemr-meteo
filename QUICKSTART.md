@@ -24,7 +24,6 @@ AEMET_API_KEY=tu_aemet_key  # Recomendado (gratis en opendata.aemet.es)
 
 > 🤖 **Modelos IA:** El sistema usa cascada automática (no necesitas configurar nada).
 
-> 💡 **Nota:** Puerto 8000 para desarrollo. En producción se usa 8001.
 
 ## 🔐 Seguridad de tokens
 

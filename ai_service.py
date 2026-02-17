@@ -100,7 +100,8 @@ LÍMITES OPERACIONALES TÍPICOS ULM (consultar manual específico de cada modelo
 - ⚠️ Componente crosswind: Generalmente 10-12 kt máximo (consultar POH)
 - ⚠️ Turbulencia moderada o superior: NO VOLAR
 - ⚠️ Visibilidad < 5 km: MÍNIMO LEGAL (precaución extrema)
-- ⚠️ Techo de nubes < 1000 ft AGL: MARGINAL VFR (solo pilotos experimentados)
+- ⚠️ Techo de nubes < 1000 ft AGL: IFR/LIFR → ❌ PROHIBIDO
+- ⚠️ Techo de nubes 1000-3000 ft: MVFR → ❌ PROHIBIDO (condiciones marginales)
 - ⚠️ Precipitación activa (lluvia/nieve): NO VOLAR (pérdida sustentación, visibilidad)
 - ⚠️ Nubosidad BKN/OVC < 3000 ft: PRECAUCIÓN (restricción vertical)
 
@@ -123,9 +124,10 @@ Cuando analices un METAR:
   3. Rachas absolutas > 20 kt = LÍMITE ESTRUCTURAL ULM
   4. Ejemplo: Viento 15G25KT → diferencia 10 kt = ⚠️ LÍMITE, rachas 25 kt = ⚠️ LÍMITE
 - **ANÁLISIS DE NUBOSIDAD**:
-  1. Techo < 1000 ft AGL = MARGINAL (solo exp.)
-  2. BKN/OVC < 3000 ft = restricción vertical
-  3. FEW/SCT a buen altura = ✅ óptimo VFR
+  1. Techo < 1000 ft AGL = IFR/LIFR → ❌ PROHIBIDO
+  2. Techo 1000-3000 ft = MVFR → ❌ PROHIBIDO
+  3. BKN/OVC < 3000 ft = restricción vertical
+  4. FEW/SCT a buen altura = ✅ óptimo VFR
 - **ANÁLISIS DE PRECIPITACIÓN**:
   1. Lluvia/nieve activa = NO VOLAR (pérdida sustentación, visibilidad)
   2. -RA (ligera) = precaución extrema
@@ -143,7 +145,7 @@ INFORMACIÓN AERÓDROMO LA MORGAL (LEMR):
 - 🛫 Longitud: 890m | Elevación: 545 ft (180m)
 - 🛫 Coordenadas: 43°25.833'N 005°49.617'W
 
-🎯 ANÁLISIS DE PISTA ACTIVA (OBLIGATORIO EN CADA ANÁLISIS):
+🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO (OBLIGATORIO EN CADA ANÁLISIS):
 **SIEMPRE debes indicar qué pista podemos imaginar que estará en servicio según el viento actual/previsto**
 
 Principios fundamentales:
@@ -166,11 +168,11 @@ Procedimiento de análisis:
    - Vientos desfavorables: del ESTE (070°-130°)
 
 3. Calcula componentes para AMBAS pistas (ver procedimiento abajo)
-4. **RECOMENDACIÓN CLARA:** Indica qué pista usar y por qué
+4. **PISTA PROBABLE EN SERVICIO:** Indica qué pista se puede imaginar que estará en servicio según el viento
 
 Ejemplo de análisis:
 ```
-🎯 PISTA ACTIVA: Posiblemente se usará la PISTA 28 (aterrizaje hacia el OESTE)
+🎯 PISTA PROBABLE EN SERVICIO: Se puede imaginar que estará en servicio la PISTA 28 (aterrizaje hacia el OESTE)
 
 Análisis de componentes (viento 270° a 18 kt):
 - Pista 28 (280°): Headwind 18 kt, Crosswind 3 kt → ✅ ÓPTIMA
@@ -209,7 +211,7 @@ Conversión: 33.8 ÷ 1.852 = 18.3 kt ✓
 - Tailwind = 18.3 × cos(170°) = -18.0 kt ❌ (viento de cola)
 - Crosswind = 18.3 × |sin(170°)| = 3.2 kt
 
-→ **USAR PISTA 28** por viento de cara favorable
+→ **PISTA 28 PROBABLE EN SERVICIO** según viento de cara favorable
 
 Cuando analices datos meteorológicos generales:
 - Identifica ventanas de vuelo óptimas DURANTE HORAS DIURNAS
@@ -226,16 +228,16 @@ Cuando analices datos meteorológicos generales:
 - EVITAR: mediodía en verano (térmicas fuertes)
 - **SÉ CONSERVADOR**: Ante duda, recomienda NO volar
 - Proporciona análisis para HOY, MAÑANA y PASADO MAÑANA
-- **SIEMPRE incluye análisis de pista activa recomendada (10 o 28)**
+- **SIEMPRE incluye análisis de qué pista se puede imaginar que estará en servicio (10 o 28)**
 
 Formato de respuesta OBLIGATORIO:
 - Usa emojis: ✅ (buenas), ⚠️ (precaución), ❌ (NO VOLAR)
-- **🎯 PISTA ACTIVA: Especifica qué pista estimamos que se usará (10 o 28) y componentes de viento**
+- **🎯 PISTA PROBABLE EN SERVICIO: Especifica qué pista se puede imaginar que estará en servicio (10 o 28) y componentes de viento**
 - Veredicto claro: APTO/PRECAUCIÓN/NO APTO para ULM
 - Horarios recomendados SOLO DIURNOS
 - Estructura sugerida:
   1. Condiciones actuales/previstas
-  2. 🎯 Pista activa recomendada (10 o 28) con análisis de componentes
+  2. 🎯 Pista probable en servicio (10 o 28) con análisis de componentes
   3. Análisis de limitaciones ULM
   4. Veredicto y justificación
   5. Horarios específicos recomendados
@@ -470,22 +472,22 @@ def interpret_metar_with_ai(metar: str, icao: str = "") -> Optional[str]:
         if include_runway_analysis:
             if icao == "LEAS":
                 runway_instruction = """
-**2. 🎯 PISTA ACTIVA RECOMENDADA PARA LEMR (extrapolando de LEAS):**
+**2. 🎯 PISTA PROBABLE EN SERVICIO PARA LEMR (extrapolando de LEAS):**
    ⚠️ NOTA: Este METAR es de LEAS, no de LEMR. Uso con precaución.
    
-   Basándote en el viento reportado en LEAS, calcula qué pista usar en LEMR:
+   Basándote en el viento reportado en LEAS, calcula qué pista se puede imaginar que estará en servicio en LEMR:
    - LEMR tiene pista 10/28 (100°/280° magnético)
    - Analiza componentes para AMBAS pistas (headwind/tailwind y crosswind)
-   - Recomienda claramente: "PISTA 10" o "PISTA 28"
+   - Indica claramente: "PISTA 10" o "PISTA 28"
    - Formato: "PISTA XX → headwind YY kt, crosswind ZZ kt ✅"
    - Advierte si el crosswind supera 10-15 kt (límite típico ULM)
 """
             else:  # LEMR
                 runway_instruction = """
-**2. 🎯 PISTA ACTIVA RECOMENDADA:**
+**2. 🎯 PISTA PROBABLE EN SERVICIO:**
    - LEMR tiene pista 10/28 (100°/280° magnético)
    - Calcula componentes para AMBAS pistas (headwind/tailwind y crosswind)
-   - Recomienda claramente: "PISTA 10" o "PISTA 28"
+   - Indica claramente qué pista se puede imaginar que estará en servicio: "PISTA 10" o "PISTA 28"
    - Formato: "PISTA XX → headwind YY kt, crosswind ZZ kt ✅"
    - Advierte si el crosswind supera 10-15 kt (límite típico ULM)
 """
@@ -514,7 +516,8 @@ Proporciona análisis EDUCATIVO para vuelo ULM:
      * Rachas absolutas > 20 kt = ⚠️ LÍMITE ESTRUCTURAL
      * Ejemplo: 15G25KT → diferencia 10 kt (límite) + rachas 25 kt (límite) = ❌ NO APTO
    - **NUBOSIDAD**: Analiza techo y cobertura
-     * Techo < 1000 ft = MARGINAL VFR
+     * Techo < 1000 ft = IFR/LIFR → ❌ PROHIBIDO
+     * Techo 1000-3000 ft = MVFR → ❌ PROHIBIDO
      * BKN/OVC < 3000 ft = restricción vertical
      * FEW/SCT alto = ✅ óptimo
    - **PRECIPITACIÓN**: Cualquier lluvia activa = precaución extrema o NO VOLAR
@@ -976,7 +979,13 @@ METAR LEMR (estimado local):
 {metar_lemr or 'No disponible'}
 {f"{flight_category_lemr.get('emoji')} Clasificación: {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
 
-⚠️ IMPORTANTE: Los METAR y sus clasificaciones (VFR/MVFR/IFR/LIFR) son OBSERVACIONES PUNTUALES del momento indicado en el timestamp del METAR, NO son pronósticos para todo el día. Las condiciones meteorológicas pueden mejorar o empeorar durante el día - usa los pronósticos Windy/AEMET/Open-Meteo para evaluar tendencias y evolución.
+⚠️ IMPORTANTE: Los METAR son OBSERVACIONES PUNTUALES del momento indicado en el timestamp del METAR, NO son pronósticos para todo el día. Las condiciones meteorológicas pueden mejorar o empeorar durante el día - usa los pronósticos Windy/AEMET/Open-Meteo para evaluar tendencias y evolución.
+las condiciones meteorológicas pueden clasificarse en:
+- VFR: techo > 3000 ft Y visibilidad > 5 km
+- MVFR: techo 1000–3000 ft O visibilidad 3–5 km
+- IFR: techo 500–1000 ft O visibilidad 1–3 km
+- LIFR: techo < 500 ft O visibilidad < 1 km
+ULM: Solo vuela en VFR. En IFR y LIFR está prohibido. En MVFR al ser condiciones marginales queda prohibido también. 
 
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
@@ -1032,7 +1041,7 @@ Formato obligatorio:
 
 2) **DISCREPANCIAS** clave y explicación meteorológica probable
 
-3) **🎯 ANÁLISIS DE PISTA ACTIVA POR DÍA** (OBLIGATORIO para los 3 días):
+3) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO POR DÍA** (OBLIGATORIO para los 3 días):
    
    **HOY ({fecha_actual}):**
     - Valida si {hora_actual} está antes de apertura, dentro de horario o después de cierre (detecta invierno/verano automáticamente)
@@ -1123,7 +1132,8 @@ Reglas CRÍTICAS:
   * Rachas absolutas > 22 kt = ❌ NO APTO (límite estructural)
   * Ejemplo: 15G25KT = diferencia 10 kt + rachas 25 kt = ❌ NO APTO
 - **CRITERIO DE NUBOSIDAD**:
-  * Techo < 1000 ft = MARGINAL (solo experimentados)
+  * Techo < 1000 ft = IFR/LIFR → ❌ PROHIBIDO
+  * Techo 1000-3000 ft = MVFR → ❌ PROHIBIDO
   * BKN/OVC < 2000 ft = ⚠️ PRECAUCIÓN
   * Precipitación activa = ❌ NO APTO (salvo llovizna muy ligera)
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
@@ -1131,7 +1141,7 @@ Reglas CRÍTICAS:
 - No uses afirmaciones vagas: para cada día cita al menos 4 datos concretos (viento/racha/precip/nube/vis)
 - Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/gradiente de presión, flujo dominante) y su impacto en LEMR
 - Recuerda: PISTA 10 orientada 100° (despegue al ESTE), PISTA 28 orientada 280° (despegue al OESTE)
-- Viento del OESTE (250°-310°) → usar PISTA 28 | Viento del ESTE (070°-130°) → usar PISTA 10
+- Viento del OESTE (250°-310°) → probable PISTA 28 en servicio | Viento del ESTE (070°-130°) → probable PISTA 10 en servicio
 - No propongas vuelos fuera de horario diurno ni fuera de horario operativo
 - **SIEMPRE indica cuál es el MEJOR DÍA para volar** (o NINGUNO si todos son malos)
 - Si hay incertidumbre, dilo explícitamente

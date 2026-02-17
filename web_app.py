@@ -56,17 +56,17 @@ def _build_ogimet_image_url(date_str: str, run: str, projection_hours: int) -> s
 def _get_latest_ogimet_run_fast():
     """
     Calcula el run de Ogimet más reciente SIN hacer requests HTTP.
-    Ogimet genera runs a las 00Z y 12Z, disponibles ~3 horas después.
+    Ogimet genera runs a las 00Z y 12Z, disponibles ~5-6 horas después.
     """
     utc_now = datetime.now(ZoneInfo("UTC"))
     
-    if utc_now.hour >= 15:  # Después de las 15:00 UTC, usar run 12Z de hoy
+    if utc_now.hour >= 18:  # Después de las 18:00 UTC, usar run 12Z de hoy
         run = "12"
         run_date = utc_now
-    elif utc_now.hour >= 3:  # Entre 03:00 y 15:00 UTC, usar run 00Z de hoy
+    elif utc_now.hour >= 6:  # Entre 06:00 y 18:00 UTC, usar run 00Z de hoy
         run = "00"
         run_date = utc_now
-    else:  # Antes de las 03:00 UTC, usar run 12Z de ayer
+    else:  # Antes de las 06:00 UTC, usar run 12Z de ayer
         run = "12"
         run_date = utc_now - timedelta(days=1)
     
@@ -759,6 +759,47 @@ def api_ogimet_week():
     try:
         forecast_data = get_ogimet_week_forecast()
         return jsonify(forecast_data)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.get("/api/ogimet/debug")
+def api_ogimet_debug():
+    """Endpoint de debug para verificar URLs de Ogimet"""
+    import requests
+    try:
+        forecast_data = get_ogimet_week_forecast()
+        
+        # Verificar disponibilidad de cada imagen
+        results = []
+        for day in forecast_data['week']:
+            url = day['image_url']
+            try:
+                response = requests.head(url, timeout=5, allow_redirects=True)
+                status = response.status_code
+                available = status == 200
+            except Exception as e:
+                status = 'ERROR'
+                available = False
+            
+            results.append({
+                'day': day['day_label'],
+                'date': day['date'],
+                'projection_hours': day['projection_hours'],
+                'url': url,
+                'status': status,
+                'available': available
+            })
+        
+        return jsonify({
+            'success': True,
+            'run_info': forecast_data['run_info'],
+            'images': results,
+            'current_time_utc': datetime.now(ZoneInfo("UTC")).isoformat()
+        })
     except Exception as e:
         return jsonify({
             'success': False,
