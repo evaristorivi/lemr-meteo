@@ -486,13 +486,11 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                     cielo_desc = desc
                     break
         
-        lines.append(
-            f"🌡️ {t_min}/{t_max}°C · "
-            f"🌧️ precip {pp_value if pp_value is not None else 'N/A'}% · "
-            f"💨 viento máx {viento_kmh if viento_kmh is not None else 'N/A'} km/h ({viento_dir}) · "
-            f"🌬️ racha máx {racha_max if racha_max is not None else 'N/A'} km/h · "
-            f"💧 humedad {hr_text}"
-        )
+        lines.append(f"🌡️ Temperatura: {t_min}/{t_max}°C")
+        lines.append(f"🌧️ Precipitación: {pp_value if pp_value is not None else 'N/A'}%")
+        lines.append(f"💨 Viento máx: {viento_kmh if viento_kmh is not None else 'N/A'} km/h ({viento_dir})")
+        lines.append(f"🌬️ Racha máx: {racha_max if racha_max is not None else 'N/A'} km/h")
+        lines.append(f"💧 Humedad: {hr_text}")
         if cielo_desc:
             lines.append(f"☁️ {cielo_desc}")
         
