@@ -437,54 +437,107 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     pred_asturias_manana_label = f"📅 {format_date_spanish(tomorrow_date)}\n{pred_asturias_manana}" if pred_asturias_manana else f"Sin datos para {tomorrow_date.strftime('%d/%m/%Y')}"
     pred_asturias_pasado_manana_label = f"📅 {format_date_spanish(day_after_tomorrow_date)}\n{pred_asturias_pasado_manana}" if pred_asturias_pasado_manana else f"Sin datos para {day_after_tomorrow_date.strftime('%d/%m/%Y')}"
 
-    # ── Predicción AEMET municipal Llanera ──
+    # ── Predicción AEMET municipal Llanera (4 días separados) ──
+    def _format_llanera_day(d):
+        """Formatea un día de datos de Llanera."""
+        lines = []
+        
+        temp = d.get("temperatura", {}) or {}
+        t_min = temp.get("minima", "N/A")
+        t_max = temp.get("maxima", "N/A")
+
+        prob_precip = d.get("probPrecipitacion", []) or []
+        pp_24 = next((p for p in prob_precip if p.get("periodo") == "00-24"), None)
+        pp_value = pp_24.get("value") if isinstance(pp_24, dict) else None
+        if pp_value is None and prob_precip:
+            vals = [p.get("value") for p in prob_precip if isinstance(p, dict) and p.get("value") is not None]
+            pp_value = max(vals) if vals else None
+
+        viento = d.get("viento", []) or []
+        viento_items = [v for v in viento if isinstance(v, dict)]
+        viento_max_item = max(viento_items, key=lambda v: v.get("velocidad") or 0) if viento_items else None
+        viento_dir = (viento_max_item or {}).get("direccion") or "VRB"
+        viento_kmh = (viento_max_item or {}).get("velocidad")
+
+        rachas = d.get("rachaMax", []) or []
+        rachas_vals = []
+        for r in rachas:
+            if isinstance(r, dict):
+                value = r.get("value")
+                if isinstance(value, (int, float)):
+                    rachas_vals.append(value)
+                elif isinstance(value, str) and value.strip().isdigit():
+                    rachas_vals.append(int(value.strip()))
+        racha_max = max(rachas_vals) if rachas_vals else None
+
+        # Extraer humedad relativa
+        humedad_rel = d.get("humedadRelativa", {}) or {}
+        hr_maxima = humedad_rel.get("maxima")
+        hr_minima = humedad_rel.get("minima")
+        hr_text = f"{hr_minima}-{hr_maxima}%" if hr_minima and hr_maxima else "N/A"
+
+        # Extraer estado del cielo
+        cielo = d.get("estadoCielo", []) or []
+        cielo_desc = None
+        for c in cielo:
+            if isinstance(c, dict):
+                desc = c.get("descripcion")
+                if desc and desc not in ["", "N/A"]:
+                    cielo_desc = desc
+                    break
+        
+        lines.append(
+            f"🌡️ {t_min}/{t_max}°C · "
+            f"🌧️ precip {pp_value if pp_value is not None else 'N/A'}% · "
+            f"💨 viento máx {viento_kmh if viento_kmh is not None else 'N/A'} km/h ({viento_dir}) · "
+            f"🌬️ racha máx {racha_max if racha_max is not None else 'N/A'} km/h · "
+            f"💧 humedad {hr_text}"
+        )
+        if cielo_desc:
+            lines.append(f"☁️ {cielo_desc}")
+        
+        return "\n".join(lines)
+    
     pred_llanera = get_prediccion_llanera()
-    pred_llanera_text = ""
+    pred_llanera_dia0 = ""
+    pred_llanera_dia1 = ""
+    pred_llanera_dia2 = ""
+    pred_llanera_dia3 = ""
+    icon_llanera_0 = "🏔️"
+    icon_llanera_1 = "🏔️"
+    icon_llanera_2 = "🏔️"
+    icon_llanera_3 = "🏔️"
+    
     if pred_llanera:
         try:
-            nombre = pred_llanera.get("nombre", "Llanera")
             dias = pred_llanera.get("prediccion", {}).get("dia", [])
-            lines = [f"Predicción AEMET para {nombre}:"]
-            for d in dias[:3]:
-                fecha = d.get("fecha", "")[:10]
-
-                temp = d.get("temperatura", {}) or {}
-                t_min = temp.get("minima", "N/A")
-                t_max = temp.get("maxima", "N/A")
-
-                prob_precip = d.get("probPrecipitacion", []) or []
-                pp_24 = next((p for p in prob_precip if p.get("periodo") == "00-24"), None)
-                pp_value = pp_24.get("value") if isinstance(pp_24, dict) else None
-                if pp_value is None and prob_precip:
-                    vals = [p.get("value") for p in prob_precip if isinstance(p, dict) and p.get("value") is not None]
-                    pp_value = max(vals) if vals else None
-
-                viento = d.get("viento", []) or []
-                viento_items = [v for v in viento if isinstance(v, dict)]
-                viento_max_item = max(viento_items, key=lambda v: v.get("velocidad") or 0) if viento_items else None
-                viento_dir = (viento_max_item or {}).get("direccion") or "VRB"
-                viento_kmh = (viento_max_item or {}).get("velocidad")
-
-                rachas = d.get("rachaMax", []) or []
-                rachas_vals = []
-                for r in rachas:
-                    if isinstance(r, dict):
-                        value = r.get("value")
-                        if isinstance(value, (int, float)):
-                            rachas_vals.append(value)
-                        elif isinstance(value, str) and value.strip().isdigit():
-                            rachas_vals.append(int(value.strip()))
-                racha_max = max(rachas_vals) if rachas_vals else None
-
-                lines.append(
-                    f"  {fecha}: 🌡️ {t_min}/{t_max}°C · "
-                    f"🌧️ precip {pp_value if pp_value is not None else 'N/A'}% · "
-                    f"💨 viento máx {viento_kmh if viento_kmh is not None else 'N/A'} km/h ({viento_dir}) · "
-                    f"🌬️ racha máx {racha_max if racha_max is not None else 'N/A'} km/h"
-                )
-            pred_llanera_text = "\n".join(lines)
+            
+            # Día 0 (hoy)
+            if len(dias) > 0:
+                pred_llanera_dia0 = _format_llanera_day(dias[0])
+                icon_llanera_0 = get_weather_icon_from_text(pred_llanera_dia0)
+                pred_llanera_dia0 = f"📅 {format_date_spanish(today_date)}\n{pred_llanera_dia0}"
+            
+            # Día 1 (mañana)
+            if len(dias) > 1:
+                pred_llanera_dia1 = _format_llanera_day(dias[1])
+                icon_llanera_1 = get_weather_icon_from_text(pred_llanera_dia1)
+                pred_llanera_dia1 = f"📅 {format_date_spanish(tomorrow_date)}\n{pred_llanera_dia1}"
+            
+            # Día 2 (pasado mañana)
+            if len(dias) > 2:
+                pred_llanera_dia2 = _format_llanera_day(dias[2])
+                icon_llanera_2 = get_weather_icon_from_text(pred_llanera_dia2)
+                pred_llanera_dia2 = f"📅 {format_date_spanish(day_after_tomorrow_date)}\n{pred_llanera_dia2}"
+            
+            # Día 3 (tercer día)
+            if len(dias) > 3:
+                day3_date = today_date + timedelta(days=3)
+                pred_llanera_dia3 = _format_llanera_day(dias[3])
+                icon_llanera_3 = get_weather_icon_from_text(pred_llanera_dia3)
+                pred_llanera_dia3 = f"📅 {format_date_spanish(day3_date)}\n{pred_llanera_dia3}"
         except Exception:
-            pred_llanera_text = str(pred_llanera)[:500]
+            pred_llanera_dia0 = f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
 
     # ── Construir días con mapas AEMET integrados (slots UTC reales disponibles) ──
     sig_index = {}
@@ -555,7 +608,10 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "asturias_hoy": (pred_asturias_hoy[:180] if pred_asturias_hoy else ""),
                 "asturias_manana": (pred_asturias_manana[:180] if pred_asturias_manana else ""),
                 "asturias_pasado_manana": (pred_asturias_pasado_manana[:180] if pred_asturias_pasado_manana else ""),
-                "llanera": (pred_llanera_text[:80] if pred_llanera_text else ""),
+                "llanera_dia0": (pred_llanera_dia0[:80] if pred_llanera_dia0 else ""),
+                "llanera_dia1": (pred_llanera_dia1[:80] if pred_llanera_dia1 else ""),
+                "llanera_dia2": (pred_llanera_dia2[:80] if pred_llanera_dia2 else ""),
+                "llanera_dia3": (pred_llanera_dia3[:80] if pred_llanera_dia3 else ""),
             }
         else:
             # OpenAI: recibe texto AEMET completo
@@ -563,7 +619,10 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "asturias_hoy": pred_asturias_hoy or "",
                 "asturias_manana": pred_asturias_manana or "",
                 "asturias_pasado_manana": pred_asturias_pasado_manana or "",
-                "llanera": pred_llanera_text or "",
+                "llanera_dia0": pred_llanera_dia0 or "",
+                "llanera_dia1": pred_llanera_dia1 or "",
+                "llanera_dia2": pred_llanera_dia2 or "",
+                "llanera_dia3": pred_llanera_dia3 or "",
             }
 
         # Calcular clasificaciones de condiciones de vuelo antes de pasarlas a la IA
@@ -641,7 +700,14 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "asturias_manana_icon": icon_manana,
             "asturias_pasado_manana": pred_asturias_pasado_manana_label,
             "asturias_pasado_manana_icon": icon_pasado,
-            "llanera": pred_llanera_text,
+            "llanera_dia0": pred_llanera_dia0,
+            "llanera_dia0_icon": icon_llanera_0,
+            "llanera_dia1": pred_llanera_dia1,
+            "llanera_dia1_icon": icon_llanera_1,
+            "llanera_dia2": pred_llanera_dia2,
+            "llanera_dia2_icon": icon_llanera_2,
+            "llanera_dia3": pred_llanera_dia3,
+            "llanera_dia3_icon": icon_llanera_3,
         },
         "windy": windy_section,
         "ai": {

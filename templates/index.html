@@ -657,8 +657,20 @@
         <p id="pred-ast-pas" class="pred-text"></p>
       </article>
       <article class="card">
-        <h2>🏔️ Predicción AEMET — Llanera (La Morgal)</h2>
-        <p id="pred-llanera" class="pred-text"></p>
+        <h2 id="pred-llanera-0-title">🏔️ Predicción AEMET — Llanera (La Morgal) hoy</h2>
+        <p id="pred-llanera-0" class="pred-text"></p>
+      </article>
+      <article class="card">
+        <h2 id="pred-llanera-1-title">🏔️ Predicción AEMET — Llanera (La Morgal) mañana</h2>
+        <p id="pred-llanera-1" class="pred-text"></p>
+      </article>
+      <article class="card">
+        <h2 id="pred-llanera-2-title">🏔️ Predicción AEMET — Llanera (La Morgal) pasado mañana</h2>
+        <p id="pred-llanera-2" class="pred-text"></p>
+      </article>
+      <article class="card">
+        <h2 id="pred-llanera-3-title">🏔️ Predicción AEMET — Llanera (La Morgal) 3º día</h2>
+        <p id="pred-llanera-3" class="pred-text"></p>
       </article>
     </section>
 
@@ -950,7 +962,10 @@
       document.getElementById("pred-ast-hoy").textContent = pred.asturias_hoy || "No disponible";
       document.getElementById("pred-ast-man").textContent = pred.asturias_manana || "No disponible";
       document.getElementById("pred-ast-pas").textContent = pred.asturias_pasado_manana || "No disponible";
-      document.getElementById("pred-llanera").textContent = pred.llanera || "No disponible";
+      document.getElementById("pred-llanera-0").textContent = pred.llanera_dia0 || "No disponible";
+      document.getElementById("pred-llanera-1").textContent = pred.llanera_dia1 || "No disponible";
+      document.getElementById("pred-llanera-2").textContent = pred.llanera_dia2 || "No disponible";
+      document.getElementById("pred-llanera-3").textContent = pred.llanera_dia3 || "No disponible";
       
       // Actualizar iconos dinámicos en los títulos
       if (pred.asturias_hoy_icon) {
@@ -961,6 +976,18 @@
       }
       if (pred.asturias_pasado_manana_icon) {
         document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
+      }
+      if (pred.llanera_dia0_icon) {
+        document.getElementById("pred-llanera-0-title").textContent = `${pred.llanera_dia0_icon} Predicción AEMET — Llanera (La Morgal) hoy`;
+      }
+      if (pred.llanera_dia1_icon) {
+        document.getElementById("pred-llanera-1-title").textContent = `${pred.llanera_dia1_icon} Predicción AEMET — Llanera (La Morgal) mañana`;
+      }
+      if (pred.llanera_dia2_icon) {
+        document.getElementById("pred-llanera-2-title").textContent = `${pred.llanera_dia2_icon} Predicción AEMET — Llanera (La Morgal) pasado mañana`;
+      }
+      if (pred.llanera_dia3_icon) {
+        document.getElementById("pred-llanera-3-title").textContent = `${pred.llanera_dia3_icon} Predicción AEMET — Llanera (La Morgal) 3º día`;
       }
 
       // IA - Convertir markdown a HTML
