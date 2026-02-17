@@ -1001,8 +1001,8 @@
         state.data = d;
         render(state.data);
         
-        // Cargar datos de Ogimet después de renderizar
-        loadOgimetWeek();
+        // Cargar datos de Ogimet de forma diferida (no bloquea la carga inicial)
+        setTimeout(() => loadOgimetWeek(), 100);
       } catch {
         setLoadStatus("⚠️ Error al cargar datos iniciales.", true);
       }
@@ -1041,6 +1041,7 @@
             <img src="${day.image_url}" 
                  alt="Mapa Ogimet ${day.day_label}" 
                  class="ogimet-map-preview"
+                 loading="lazy"
                  onerror="if(!this.dataset.failed){this.dataset.failed='1';this.style.display='none';const err=document.createElement('div');err.className='ogimet-info';err.style.color='var(--warn)';err.textContent='⚠️ Imagen no disponible';this.parentElement.appendChild(err);}">
             <div class="ogimet-info">
               ${day.valid_time} UTC
