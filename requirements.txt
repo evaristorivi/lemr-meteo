@@ -11,3 +11,6 @@ requests>=2.32.0,<3.0
 
 # APIs externas: flexible (cambian frecuentemente)
 openai>=2.21.0
+
+# Conteo exacto de tokens para estimación del payload
+tiktoken>=0.7.0
