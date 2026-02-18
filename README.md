@@ -290,3 +290,18 @@ sudo systemctl restart lemr-meteo
 
 La salida es apoyo a la decisión, no sustituye briefing oficial ni manual de vuelo del ULM.
 Ante duda, **NO VOLAR**.
+
+---
+
+## ⚠️ Aviso legal
+
+Proyecto personal y experimental desarrollado por [Evaristo R.](https://www.evaristorivieccio.com/) para investigar aplicaciones de IA en meteorología.
+
+Aunque utiliza datos de fuentes oficiales, los análisis generados por IA **no constituyen información oficial** y pueden contener errores.
+
+Este sitio no está afiliado ni respaldado por LEMR, La Morgal ni ninguna entidad oficial.  
+Contenido únicamente informativo y educativo.
+
+El uso de la información se realiza bajo responsabilidad del usuario.
+
+---
