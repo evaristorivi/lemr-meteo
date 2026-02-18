@@ -24,7 +24,7 @@ AI_MODEL_CASCADE = [
     'gpt-4o',                          # ⭐ Mejor calidad, límite bajo (50/día)
     'gpt-4o-mini',                     # 🥈 Buena calidad, límite medio (150/día)
     'meta-llama-3.1-405b-instruct',   # 🔥 Gran modelo open source (límite alto)
-    'phi-4',                           # 🚀 Modelo pequeño pero eficiente de Microsoft
+    'phi-4',                           # 🚀 Modelo Microsoft (8k ctx — funciona si payload < 8000)
 ]
 
 # AEMET OpenData
