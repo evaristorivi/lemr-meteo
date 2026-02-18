@@ -184,10 +184,11 @@ def get_weather_icon_from_text(prediction_text: str) -> str:
                                              "aguacero", "precipitaciones abundantes"]):
         return "🌧️"
     
-    # Lluvia / Precipitación general
-    if any(word in text_lower for word in ["lluvia", "lluvias", "precipitación", "precipitaciones", 
-                                             "llovizna", "mojado"]):
-        return "🌦️"
+    # Lluvia / Precipitación general (pero NO si dice "sin precipitación")
+    if not any(phrase in text_lower for phrase in ["sin precipitacion", "sin lluvia", "no precipita"]):
+        if any(word in text_lower for word in ["lluvia", "lluvias", "precipitación", "precipitaciones", 
+                                                 "llovizna", "mojado"]):
+            return "🌦️"
     
     # Viento fuerte
     if any(word in text_lower for word in ["viento fuerte", "vientos fuertes", "vendaval", "temporal", 
@@ -196,24 +197,28 @@ def get_weather_icon_from_text(prediction_text: str) -> str:
     
     # Muy nuboso / Cubierto (antes de nuboso general)
     if any(word in text_lower for word in ["muy nuboso", "cubierto", "cielos cubiertos", "nubosidad abundante",
-                                             "bastante nuboso"]):
+                                             "bastante nuboso", "cielo muy nuboso"]):
         return "☁️"
     
     # Poco nuboso (debe ir antes de "nuboso" general)
-    if any(word in text_lower for word in ["poco nuboso", "algunas nubes", "escasa nubosidad"]):
+    if any(word in text_lower for word in ["poco nuboso", "algunas nubes", "escasa nubosidad", 
+                                             "cielo poco nuboso", "cielo: poco nuboso"]):
         return "🌤️"
     
     # Intervalos nubosos / Parcialmente nuboso
-    if any(word in text_lower for word in ["intervalos nubosos", "nubosidad variable", "parcialmente nuboso"]):
+    if any(word in text_lower for word in ["intervalos nubosos", "nubosidad variable", "parcialmente nuboso",
+                                             "cielo con intervalos", "cielo: intervalos"]):
         return "⛅"
     
     # Nuboso general (después de las variantes específicas)
-    if any(word in text_lower for word in ["nuboso", "nubosidad", "nubes", "cielos nubosos"]):
+    if any(word in text_lower for word in ["nuboso", "nubosidad", "nubes", "cielos nubosos", 
+                                             "cielo nuboso", "cielo: nuboso"]):
         return "⛅"
     
     # Despejado / Soleado
     if any(word in text_lower for word in ["despejado", "despejados", "cielos despejados", "soleado", 
-                                             "buen tiempo", "sin nubes"]):
+                                             "buen tiempo", "sin nubes", "cielo despejado", "cielo: despejado",
+                                             "cielo limpio", "poco o ningún"]):
         return "☀️"
     
     # Default: si no detectamos nada específico, usar símbolo genérico
@@ -386,7 +391,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     )
 
     if not weather_data:
-        raise RuntimeError("No se pudieron obtener datos meteorológicos de Open-Meteo.")
+        print("⚠️ Open-Meteo no disponible — continuando con datos parciales (sin condiciones actuales ni pronóstico)")
+        weather_data = {"current": {}, "daily_forecast": [], "hourly_forecast": []}
 
     # Generar METAR sintético para LEMR desde datos Open-Meteo
     current = weather_data.get("current", {})
@@ -486,13 +492,37 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                     cielo_desc = desc
                     break
         
+        # Determinar emoji dinámico según precipitación y cielo
+        weather_icon = "🌦️"  # Default
+        if pp_value is not None and pp_value >= 30:
+            # Hay precipitación significativa: combinar cielo con indicador de lluvia
+            if cielo_desc:
+                # Añadir "lluvia" al texto para que la función detecte precipitación
+                combined_text = f"{cielo_desc} con lluvia"
+                weather_icon = get_weather_icon_from_text(combined_text)
+            else:
+                # Sin descripción de cielo, usar emoji de lluvia según intensidad
+                weather_icon = "🌧️" if pp_value >= 70 else "🌦️"
+        elif pp_value is not None and pp_value > 0:
+            # Precipitación baja (1-29%): mostrar cielo pero con símbolo de clima variable
+            if cielo_desc:
+                weather_icon = get_weather_icon_from_text(cielo_desc)
+            else:
+                weather_icon = "🌤️"
+        elif cielo_desc:
+            # Sin precipitación: usar emoji según estado del cielo únicamente
+            weather_icon = get_weather_icon_from_text(cielo_desc)
+        else:
+            weather_icon = "🌤️"  # Default amigable si no hay datos
+        
         lines.append(f"🌡️ Temperatura: {t_min}/{t_max}°C")
-        lines.append(f"🌧️ Precipitación: {pp_value if pp_value is not None else 'N/A'}%")
+        # Línea combinada con emoji dinámico
+        precip_text = f"{pp_value}%" if pp_value is not None else "N/A"
+        cielo_text = cielo_desc if cielo_desc else "N/A"
+        lines.append(f"{weather_icon} {cielo_text} · Precip: {precip_text}")
         lines.append(f"💨 Viento máx: {viento_kmh if viento_kmh is not None else 'N/A'} km/h ({viento_dir})")
         lines.append(f"🌬️ Racha máx: {racha_max if racha_max is not None else 'N/A'} km/h")
         lines.append(f"💧 Humedad: {hr_text}")
-        if cielo_desc:
-            lines.append(f"☁️ {cielo_desc}")
         
         return "\n".join(lines)
     
