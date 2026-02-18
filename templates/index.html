@@ -646,7 +646,7 @@
         <a href="#condiciones">🌤️ Actual</a>
         <a href="#windy">🌬️ Windy</a>
         <a href="#pronostico">📅 3 días</a>
-        <a href="#aemet">🌦️ AEMET</a>
+        <a href="#aemet-asturias">🌦️ AEMET</a>
         <a href="#analisis-ia">👨‍✈️ IA</a>
         <a href="#mapa-analisis">🗺️ Mapa</a>
         <a href="#ogimet-semana">📆 7 días</a>
@@ -737,13 +737,14 @@
 
     <section class="card" id="analisis-ia">
       <h2>👨‍✈️ Análisis IA</h2>
-      <p id="expert-final" class="analysis"></p>
+      <div id="expert-final" class="analysis"></div>
     </section>
 
     <!-- MAPA ANÁLISIS EN SUPERFICIE -->
-    <section class="card" id="mapa-analisis" style="display:none">
+    <section class="card" id="mapa-analisis">
       <h2>🗺️ Mapa de análisis en superficie (isobaras + frentes)</h2>
-      <img id="analysis-map-img" class="map analysis-map" alt="Mapa de análisis AEMET" />
+      <img id="analysis-map-img" class="map analysis-map" alt="Mapa de análisis AEMET" style="display:none" />
+      <p id="analysis-map-unavailable" class="muted" style="text-align:center">🗺️ Mapa no disponible en este momento</p>
     </section>
 
     <!-- OGIMET - VISTA SEMANAL -->
@@ -779,6 +780,31 @@
       <a href="https://www.ogimet.com" target="_blank">Ogimet</a>.
       Actualización automática · cada hora de 06:00 a 23:00 (Europe/Madrid).
     </div>
+
+    <footer style="
+      margin-top: 24px;
+      padding: 20px 16px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.7;
+    ">
+      <p style="margin: 0 0 6px;">
+        ⚠️ <strong style="color: var(--text);">Aviso legal</strong> · Proyecto personal y experimental desarrollado por <a href="https://www.evaristorivieccio.com/" target="_blank" rel="noopener noreferrer">Evaristo R.</a> para investigar aplicaciones de IA en meteorología.
+        Aunque utiliza datos de fuentes oficiales, los análisis generados por IA no constituyen información oficial y pueden contener errores.
+      </p>
+      <p style="margin: 0 0 6px;">
+        Este sitio no está afiliado ni respaldado por LEMR, La Morgal ni ninguna entidad oficial.
+        Contenido únicamente informativo y educativo.
+      </p>
+      <p style="margin: 0 0 6px;">
+        El uso de la información se realiza bajo responsabilidad del usuario.
+      </p>
+      <p style="margin: 0; font-size: 0.73rem; color: var(--muted);">
+        🍪 Este sitio no utiliza cookies ni almacena datos personales de ningún tipo.
+      </p>
+    </footer>
   </main>
 
   <!-- Botón flotante de vuelta al inicio -->
@@ -1066,10 +1092,11 @@
       }
 
       // Mapa de análisis
-      const amSection = document.getElementById("mapa-analisis");
+      const analysisImg = document.getElementById("analysis-map-img");
+      const analysisUnavailable = document.getElementById("analysis-map-unavailable");
       if (data.analysis_map_url) {
-        amSection.style.display = "";
-        const analysisImg = document.getElementById("analysis-map-img");
+        analysisImg.style.display = "";
+        analysisUnavailable.style.display = "none";
         analysisImg.classList.remove("rotated");
         analysisImg.onload = () => {
           if (analysisImg.naturalHeight > analysisImg.naturalWidth) {
@@ -1078,7 +1105,8 @@
         };
         analysisImg.src = data.analysis_map_url;
       } else {
-        amSection.style.display = "none";
+        analysisImg.style.display = "none";
+        analysisUnavailable.style.display = "";
       }
 
       // Predicciones AEMET textuales
