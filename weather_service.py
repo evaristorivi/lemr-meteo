@@ -60,8 +60,22 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
             'forecast_days': 4  # Hoy + 3 días siguientes
         }
         
-        response = requests.get(config.OPEN_METEO_API, params=params, timeout=10)
-        response.raise_for_status()
+        # Intentar hasta 2 veces con timeout generoso (red lenta / servidor ocupado)
+        last_exc = None
+        response = None
+        for _attempt in range(2):
+            try:
+                response = requests.get(config.OPEN_METEO_API, params=params, timeout=20)
+                response.raise_for_status()
+                break
+            except requests.exceptions.Timeout as _e:
+                last_exc = _e
+                print(f"⏱️ Open-Meteo timeout (intento {_attempt + 1}/2), reintentando...")
+            except requests.exceptions.RequestException as _e:
+                last_exc = _e
+                break
+        if response is None or not response.ok:
+            raise last_exc or RuntimeError("Open-Meteo no respondió")
         
         data = response.json()
         
