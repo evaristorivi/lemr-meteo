@@ -34,6 +34,10 @@ AEMET_API_KEY = os.getenv('AEMET_API_KEY', '')
 WINDY_POINT_FORECAST_API_KEY = os.getenv('WINDY_POINT_FORECAST_API_KEY', '')
 WINDY_MODEL = os.getenv('WINDY_MODEL', 'gfs')
 
+# Telegram monitorización
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
+
 # Aeropuertos
 LEAS_ICAO = 'LEAS'  # Aeropuerto de Asturias
 LEMR_ICAO = 'LEMR'  # Aeródromo La Morgal

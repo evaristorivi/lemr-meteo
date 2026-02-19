@@ -494,6 +494,233 @@ def get_prediccion_llanera_horaria() -> Optional[dict]:
     return None
 
 
+# ──────────────── Avisos CAP Asturias ──────────────────────────────────────
+
+def get_avisos_cap_asturias() -> Optional[str]:
+    """
+    Obtiene avisos meteorológicos CAP activos para Asturias (área 33).
+    Devuelve cadena compacta con los avisos activos, o None si no hay.
+    """
+    try:
+        meta = _aemet_get("/api/avisos_cap/ultimoelaborado/area/33")
+        if not meta or not meta.get("datos"):
+            return None
+        data = _fetch_datos_url(meta["datos"])
+        if not data:
+            return None
+
+        # data puede ser lista de avisos o dict con una lista
+        avisos = data if isinstance(data, list) else data.get("avisos", []) if isinstance(data, dict) else []
+        if not avisos:
+            return None
+
+        now = datetime.now(MADRID_TZ)
+        lines = []
+        niveles_peso = {"rojo": 3, "naranja": 2, "amarillo": 1}
+
+        for aviso in avisos:
+            if not isinstance(aviso, dict):
+                continue
+            # Filtrar solo avisos vigentes
+            nivel = (aviso.get("nivel") or aviso.get("nivel_aviso") or "").lower()
+            if not nivel or nivel == "verde":
+                continue
+
+            parametro = (
+                aviso.get("parametro")
+                or aviso.get("fenomeno")
+                or aviso.get("phenomenon")
+                or "METEOROLÓGICO"
+            ).upper()
+
+            effective_raw = aviso.get("effective") or aviso.get("onset") or ""
+            expires_raw = aviso.get("expires") or aviso.get("expiry") or ""
+
+            # Intentar parsear fechas para filtrar avisos caducados
+            try:
+                if expires_raw:
+                    expires_dt = datetime.fromisoformat(expires_raw.replace("Z", "+00:00"))
+                    if expires_dt < now:
+                        continue
+            except Exception:
+                pass
+
+            # Formatear intervalo horario
+            try:
+                eff_str = datetime.fromisoformat(effective_raw.replace("Z", "+00:00")).strftime("%d/%m %H:%Mh") if effective_raw else "?"
+                exp_str = datetime.fromisoformat(expires_raw.replace("Z", "+00:00")).strftime("%d/%m %H:%Mh") if expires_raw else "?"
+                intervalo = f"{eff_str}→{exp_str}"
+            except Exception:
+                intervalo = ""
+
+            descripcion = (aviso.get("descripcion") or aviso.get("description") or "").strip()
+            umbral = (aviso.get("umbral") or "").strip()
+
+            nivel_ico = {"rojo": "🔴", "naranja": "🟠", "amarillo": "🟡"}.get(nivel, "⚠️")
+            linea = f"{nivel_ico} AVISO {nivel.upper()} {parametro}"
+            if umbral:
+                linea += f": {umbral}"
+            elif descripcion:
+                linea += f": {descripcion[:80]}"
+            if intervalo:
+                linea += f" — {intervalo}"
+            lines.append((niveles_peso.get(nivel, 0), linea))
+
+        if not lines:
+            return None
+
+        # Ordenar por peso descendente (rojo primero)
+        lines.sort(key=lambda x: x[0], reverse=True)
+        return "\n".join(l for _, l in lines)
+
+    except Exception as exc:
+        print(f"⚠️ get_avisos_cap_asturias error: {exc}")
+        return None
+
+
+# ──────────────── Parser Llanera horaria → compact ─────────────────────────
+
+def parse_llanera_horaria_to_compact() -> Optional[str]:
+    """
+    Llama a get_prediccion_llanera_horaria() y devuelve un string compacto
+    con las franjas operativas (09-21h) de hoy y mañana, apto para la IA.
+    Máximo ~150 tokens.
+    """
+    try:
+        raw = get_prediccion_llanera_horaria()
+        if not raw:
+            return None
+
+        dias = raw.get("prediccion", {}).get("dia", [])
+        if not days_available(dias):
+            return None
+
+        now = datetime.now(MADRID_TZ)
+        today_str = now.strftime("%Y-%m-%d")
+        tomorrow_str = (now.date() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        result_lines: List[str] = []
+
+        for dia in dias:
+            fecha_raw = (dia.get("fecha") or "")[:10]
+            if fecha_raw not in (today_str, tomorrow_str):
+                continue
+
+            label = "HOY" if fecha_raw == today_str else "MAÑ"
+
+            # Construir índice hora → datos para las horas operativas
+            def _period_map(field_list) -> dict:
+                """{'09': value, '10': value, ...}"""
+                out = {}
+                for item in (field_list or []):
+                    if isinstance(item, dict):
+                        per = str(item.get("periodo") or "").zfill(2)
+                        out[per] = item
+                return out
+
+            cielo_map = _period_map(dia.get("estadoCielo", []))
+            precip_map = _period_map(dia.get("precipitacion", []))
+            prob_map = _period_map(dia.get("probPrecipitacion", []))
+            temp_map = _period_map(dia.get("temperatura", []))
+
+            # vientoAndRachaMax alterna entradas viento {direccion, velocidad}
+            # con entradas racha {value} para el mismo periodo — separar en dos mapas
+            _raw_vam = dia.get("vientoAndRachaMax", []) or []
+            viento_map: dict = {}  # periodo -> {direccion, velocidad}
+            racha_map: dict = {}   # periodo -> str racha km/h
+            for _vi in _raw_vam:
+                if not isinstance(_vi, dict):
+                    continue
+                _per = str(_vi.get("periodo") or "").zfill(2)
+                if "velocidad" in _vi or "direccion" in _vi:
+                    viento_map[_per] = _vi
+                elif "value" in _vi:
+                    racha_map[_per] = str(_vi["value"]).strip()
+
+            # Determinar primera hora a mostrar (solo para hoy, desde hora actual+1)
+            first_hour = max(9, now.hour + 1) if fecha_raw == today_str else 9
+
+            hora_lines: List[str] = []
+            for h in range(first_hour, 22):
+                hh = f"{h:02d}"
+                parts: List[str] = []
+
+                # viento y racha
+                v_item = viento_map.get(hh)
+                if v_item:
+                    vel_raw = v_item.get("velocidad")
+                    vel = vel_raw[0] if isinstance(vel_raw, list) and vel_raw else vel_raw
+                    dir_raw = v_item.get("direccion")
+                    direc = dir_raw[0] if isinstance(dir_raw, list) and dir_raw else dir_raw
+                    racha = racha_map.get(hh, "")
+                    if vel is not None:
+                        try:
+                            v_str = f"{direc or 'VRB'}/{int(float(vel))}km/h"
+                        except (ValueError, TypeError):
+                            v_str = f"{direc or 'VRB'}/?km/h"
+                        if racha and racha not in ("", "0"):
+                            v_str += f"(R{racha})"
+                        parts.append(v_str)
+
+                # temperatura
+                t_item = temp_map.get(hh)
+                if t_item:
+                    t_val = t_item.get("value")
+                    if t_val is not None:
+                        parts.append(f"{t_val}°C")
+
+                # precip prob / intensidad
+                pb_item = prob_map.get(hh)
+                prob_val = pb_item.get("value") if pb_item else None
+                pr_item = precip_map.get(hh)
+                prec_val = str(pr_item.get("value") or "").strip() if pr_item else ""
+                if prob_val and int(prob_val or 0) >= 20:
+                    pr_str = f"💧{prob_val}%"
+                    if prec_val and prec_val not in ("", "0"):
+                        pr_str += f"/{prec_val}mm"
+                    parts.append(pr_str)
+
+                # cielo (solo si nuboso/lluvioso descriptor corto)
+                c_item = cielo_map.get(hh)
+                if c_item:
+                    desc = (c_item.get("descripcion") or "").strip()
+                    # Acortar descriptor largo
+                    _short = {
+                        "Despejado": "☀️",
+                        "Poco nuboso": "🌤",
+                        "Intervalos nubosos": "⛅",
+                        "Nuboso": "🌥",
+                        "Muy nuboso": "☁️",
+                        "Cubierto": "☁️☁️",
+                        "Chubascos": "🌧",
+                        "Lluvia": "🌧",
+                        "Tormenta": "⛈",
+                        "Niebla": "🌫",
+                        "Nieve": "❄️",
+                    }
+                    ico = next((v for k, v in _short.items() if k.lower() in desc.lower()), None)
+                    if ico:
+                        parts.append(ico)
+
+                if parts:
+                    hora_lines.append(f"  {hh}h " + " ".join(parts))
+
+            if hora_lines:
+                result_lines.append(f"{label} {fecha_raw}:")
+                result_lines.extend(hora_lines)
+
+        return "\n".join(result_lines) if result_lines else None
+
+    except Exception as exc:
+        print(f"⚠️ parse_llanera_horaria_to_compact error: {exc}")
+        return None
+
+
+def days_available(dias) -> bool:
+    """Comprueba que la lista de días no está vacía."""
+    return bool(dias and isinstance(dias, list))
+
+
 # ──────────────── Utilidad: resumen rápido test ────────────────────────────
 
 if __name__ == "__main__":

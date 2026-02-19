@@ -7,6 +7,7 @@ from typing import Optional, Dict
 from threading import Lock
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from telegram_monitor import send_alert as _tg_alert
 
 
 _RATE_LIMIT_LOCK = Lock()
@@ -292,6 +293,21 @@ def _is_timeout_error(exc: Exception) -> bool:
         or "timed out" in text
         or "read timeout" in text
         or "connection timeout" in text
+    )
+
+
+def _is_context_length_error(exc: Exception) -> bool:
+    """Detecta si el error es por superar la ventana de contexto del modelo."""
+    text = str(exc).lower()
+    return (
+        "context_length_exceeded" in text
+        or "maximum context length" in text
+        or "context window" in text
+        or "reduce your message" in text
+        or "too many tokens" in text
+        or "tokens exceed" in text
+        or "input is too long" in text
+        or "prompt is too long" in text
     )
 
 
@@ -614,6 +630,20 @@ def _create_chat_completion_with_fallback(
                 # Rate limit: bloquear este modelo para el resto del ciclo
                 _lock_primary_for_cycle(provider, model_name)
                 print(f"🔒 {model_name} alcanzó límite de rate-limit (bloqueado hasta próximo ciclo)")
+                _tg_alert(
+                    f"Modelo IA {model_name} ha alcanzado su rate-limit (429). Saltando al siguiente modelo de la cascada.",
+                    source=f"ia_{model_name}",
+                    level="WARNING",
+                )
+            elif _is_context_length_error(exc):
+                # Prompt demasiado largo: avisar para que se ajuste el truncado
+                print(f"📏 {model_name} rechazó el prompt por exceso de tokens: {error_msg[:120]}")
+                _tg_alert(
+                    f"Modelo IA {model_name} rechazo el prompt por exceso de tokens (context window). "
+                    f"Error: {error_msg[:250]}",
+                    source=f"ia_{model_name}",
+                    level="ERROR",
+                )
             elif _is_timeout_error(exc):
                 # Timeout: NO bloquear (puede ser temporal/saturación)
                 print(f"⏱️ {model_name} dio timeout ({error_msg[:80]}) - continuando con siguiente modelo")
@@ -643,6 +673,8 @@ def interpret_fused_forecast_with_ai(
     location: str = "La Morgal (LEMR)",
     flight_category_leas: Optional[Dict] = None,
     flight_category_lemr: Optional[Dict] = None,
+    avisos_cap: Optional[str] = None,
+    llanera_horaria_compact: Optional[str] = None,
 ) -> Optional[str]:
     """
     Genera un veredicto experto fusionando Windy + AEMET + METAR + Open-Meteo.
@@ -774,9 +806,10 @@ def interpret_fused_forecast_with_ai(
         ]
         aemet_llan = "\n".join(p for p in _llan_parts if p)
         
-        # Optimización: reducir AEMET para GitHub Models (límite 60k tokens/min)
+        # Optimización: reducir AEMET para GitHub Models (límite por request)
         is_github = provider.lower() == "github"
-        aemet_limit = 800 if is_github else 1200  # 800 para GitHub Models (balance calidad/tokens)
+        aemet_limit = 300 if is_github else 1200  # 300 chars por sección AEMET en GitHub
+        hor_limit = 400 if is_github else 700    # cap para Llanera horaria
 
         map_urls = [u for u in (significant_map_urls or []) if u][:4]
         
@@ -901,6 +934,9 @@ Windy Point Forecast (resumen 4 días):
 Windy próximas 24 horas:
 {chr(10).join(hourly_lines) if hourly_lines else 'Sin datos'}
 
+⚠️ AVISOS AEMET ACTIVOS (CAP):
+{avisos_cap if avisos_cap else 'Sin avisos activos'}
+
 AEMET Asturias HOY:
 {aemet_hoy[:aemet_limit] if aemet_hoy else 'No disponible'}
 
@@ -910,13 +946,9 @@ AEMET Asturias MAÑANA:
 AEMET Asturias PASADO MAÑANA:
 {aemet_pas[:aemet_limit] if aemet_pas else 'No disponible'}
 
-AEMET Llanera:
-{aemet_llan[:aemet_limit] if aemet_llan else 'No disponible'}
-
-Lectura sinóptica/mapa AEMET previa:
-(Sin mapas en análisis de fusión para reducir payload)
-
-Objetivo: comparación razonada entre Windy vs AEMET (solo texto) vs METAR/Open-Meteo para DECISIÓN DE VUELO ULM en LEMR.
+{'' if is_github else f'AEMET Llanera:{chr(10)}{aemet_llan[:aemet_limit] if aemet_llan else chr(32)}{chr(10)}'}
+AEMET Llanera horaria (hoy+mañana franjas operativas):
+{llanera_horaria_compact[:hor_limit] if llanera_horaria_compact else 'No disponible'}
 
 ⚙️ **RENDIMIENTO**: Temp >25°C o presión <1010 hPa → menciona mayor carrera de despegue y peor ascenso. Temp <15°C + presión >1020 hPa → aire denso, rendimiento óptimo.
 
@@ -932,17 +964,20 @@ Objetivo: comparación razonada entre Windy vs AEMET (solo texto) vs METAR/Open-
   * Si quedan **> 2 horas**: HOY es viable, analiza viento y condiciones meteorológicas
 - Si {hora_actual} está DESPUÉS del cierre: marca HOY como "🕐 YA NO DISPONIBLE - fuera de horario operativo"
 
-Formato obligatorio:
+Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por línea en blanco):
 0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
+
 0.1) **METAR LEMR explicado** (versión corta para novatos - máximo 2 líneas, sin jerga, indicando que es estimado/local)
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
-   OBLIGATORIO: Compara explícitamente qué decía el pronóstico para HOY vs qué está pasando AHORA MISMO:
-   - Ejemplo: "Pronóstico HOY: viento máx 26 km/h, rachas máx 35 km/h → REALIDAD AHORA: viento 24.1 km/h, rachas 42.8 km/h ⚠️ (rachas más fuertes de lo esperado)"
-   - Ejemplo: "Pronóstico HOY: nubosidad variable → REALIDAD AHORA: 100% nublado (peor de lo esperado)"
-   - Ejemplo: "Pronóstico HOY: temp máx 15°C → REALIDAD AHORA: 14.6°C (dentro de lo esperado)"
-   - Si las condiciones actuales son MEJORES o PEORES que el pronóstico, menciónalo claramente
-   - Este análisis es CRÍTICO para decidir si HOY es viable AHORA vs lo que se esperaba
+   OBLIGATORIO: En UN SOLO BLOQUE compacto, compara el pronóstico de hoy vs la realidad actual.
+   Formato: una única sección con los parámetros clave todos juntos. NO repitas "Pronóstico HOY:" en cada línea.
+   Ejemplo correcto:
+   "Pronóstico HOY: viento máx 26 km/h · rachas máx 35 km/h · nubosidad variable · temp máx 15°C
+    Realidad a las 14:30: viento 24 km/h · rachas 42 km/h ⚠️ · cielo cubierto (peor) · temp 14.6°C ✅
+    → Rachas más fuertes de lo esperado. Resto dentro de lo previsto."
+   - Usa "✅ mejor / ⚠️ peor / 〰️ según lo esperado" para cada parámetro
+   - Si las condiciones actuales son MEJORES o PEORES que el pronóstico, menciónalo en la última línea resumen
 
 1) **COINCIDENCIAS** clave entre fuentes para los 4 días (¿qué dicen TODAS las fuentes para los próximos 4 días?)
    - Analiza las coincidencias entre Open-Meteo, Windy y AEMET para los 4 días completos
@@ -988,26 +1023,22 @@ Formato obligatorio:
 
 5) **VEREDICTO POR DÍA** (los 4 días completos):
    - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ⚠️ TIEMPO LIMITADO / 🕐 CIERRE INMINENTE / ❌ NO APTO / 🕐 YA NO DISPONIBLE
-     ⚠️ CRÍTICO: Para HOY usa las "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
-     ⚠️ CRÍTICO: Si el "ANÁLISIS RIESGO CONVECTIVO" dice "CRÍTICO" o "ALTO" → ES ❌ NO APTO INMEDIATO (aunque otros parámetros sean buenos)
+     ⚠️ CRÍTICO: Para HOY usa "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
     - Evalúa PRIMERO el tiempo restante hasta el cierre:
-      * Si < 1h: marca "🕐 CIERRE INMINENTE - Ya no merece la pena" (aunque las condiciones meteorológicas sean buenas)
-      * Si 1-2h: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve" (si las condiciones son aceptables)
-      * Si > 2h: evalúa normalmente según condiciones meteorológicas (✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO)
-    - DESPUÉS del tiempo, evalúa el riesgo convectivo:
-      * Si "ANÁLISIS RIESGO CONVECTIVO" = CRÍTICO/ALTO → ❌ NO APTO, veto de vuelo por riesgo de tormentas
-      * Si = MODERADO → ⚠️ PRECAUCIÓN, no es ideal
+      * Si < 1h: marca "🕐 CIERRE INMINENTE - Ya no merece la pena"
+      * Si 1-2h: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve"
+      * Si > 2h: evalúa normalmente (✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO)
+    - DESPUÉS evalúa el riesgo convectivo:
+      * Si "ANÁLISIS RIESGO CONVECTIVO" = CRÍTICO/ALTO → ❌ NO APTO inmediato
+      * Si = MODERADO → ⚠️ PRECAUCIÓN
       * Si = BAJO/NULO → continúa evaluación normal
-    - Si es ANTES de apertura, NO marques "YA NO DISPONIBLE": evalúa HOY igualmente y aclara que el aeródromo aún no está abierto.
-     - Si las condiciones actuales son MEJORES que el pronóstico: indícalo (ej: "mejor de lo esperado")
-     - Si las condiciones actuales son PEORES que el pronóstico: indícalo (ej: "rachas más fuertes de lo previsto")
+    - Si es ANTES de apertura, NO marques "YA NO DISPONIBLE": evalúa HOY y aclara que aún no está abierto.
+     - Si las condiciones actuales son MEJORES/PEORES que el pronóstico: menciónalo brevemente
    - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **DENTRO DE 3 DÍAS**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **JUSTIFICACIÓN MULTIFACTOR (OBLIGATORIA)**:
-     * Para HOY: cita los valores ACTUALES EN TIEMPO REAL (viento, rachas, nubosidad, CAPE AHORA a las {hora_actual})
-     * Para HOY: MENCIONA SIEMPRE el tiempo restante hasta el cierre y su hora (ej: "quedan 3h hasta cierre a las 20:00")
-     * Para HOY: Si hay riesgo convectivo (CRÍTICO/ALTO), menciónalo como factor de veto
+     * Para HOY: cita valores ACTUALES (viento, rachas, nubosidad, CAPE a las {hora_actual}) y tiempo restante hasta cierre
      * Para MAÑANA/PASADO: cita el pronóstico esperado incluyendo CAPE máximo si hay potencial convectivo
      * Cita explícitamente: viento medio (kt), rachas (kt), diferencia rachas-medio (kt)
      * Cita: nubosidad (techo ft, cobertura FEW/SCT/BKN/OVC)
@@ -1036,21 +1067,28 @@ Formato obligatorio:
      * Escapa la conclusión exacta del análisis dado: si dice "posibilidad muy alta de tormentas" / "riesgo convectivo significativo" → reporta explícitamente
      * CAPE > 2000 J/kg es convección extrema (superceldas), CAPE 500-2000 es convección fuerte (tormentas potentes), CAPE < 250 es débil
      * Si CAPE > 500 + Precip > 0 + diferencia rachas > 8 kt + nubosidad > 50% → convección probable → ❌ NO APTO
-   Formato obligatorio (SIEMPRE incluir convección si aplica):
-   **HOY**: [lista de riesgos: incluir convección ACTUAL si procede, CAPE actual, diferencia rachas, etc.]
-   **MAÑANA**: [lista de riesgos: incluir CAPE máximo previsto si hay potencial convectivo]
-   **PASADO MAÑANA**: [lista de riesgos: incluir CAPE máximo previsto si hay potencial convectivo]
-   **DENTRO DE 3 DÍAS**: [lista de riesgos: incluir CAPE máximo previsto si hay potencial convectivo]
+   Formato obligatorio (SIEMPRE incluir convección si aplica, CADA DÍA EN SU PROPIA LÍNEA con salto de línea entre cada **DÍA**):
+   **HOY**: [lista de riesgos]
+
+   **MAÑANA**: [lista de riesgos]
+
+   **PASADO MAÑANA**: [lista de riesgos]
+
+   **DENTRO DE 3 DÍAS**: [lista de riesgos]
+   ⚠️ FORMATO CRÍTICO: Cada día DEBE empezar en una línea nueva. NO los pongas en la misma línea ni separados por punto y seguido.
 
 7) **FRANJAS HORARIAS RECOMENDADAS** — OBLIGATORIO PARA LOS 4 DÍAS (HOY / MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS):
    - NO omitas ningún día. Si no hay ventana segura para ese día, escribe "NO RECOMENDADA".
    - Mañana: primeras horas (09:00-14:00 típico) | Tarde: horas posteriores (17:00-20:00 típico)
-   - Considera amanecer, atardecer, horario operativo (invierno 09:00-20:00, verano 09:00-21:45) y condiciones meteorológicas.
-   Formato CORRECTO:
-   **HOY**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ✅ (o "NO RECOMENDADA")
-   **MAÑANA**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ⚠️ (o "NO RECOMENDADA")
-   **PASADO MAÑANA**: Mañana 09:00-14:00 ⚠️ | Tarde 17:00-20:00 ❌ (o "NO RECOMENDADA")
-   **DENTRO DE 3 DÍAS**: Mañana XXX ✅/⚠️/❌ | Tarde XXX ✅/⚠️/❌ (o "NO RECOMENDADA")
+   - Considera amanecer, atardecer, horario operativo (ver DATOS FIJOS) y condiciones meteorológicas.
+   Formato CORRECTO (CADA DÍA EN SU PROPIA LÍNEA con salto de línea entre cada **DÍA**, NO en la misma línea):
+   **HOY**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ✅
+
+   **MAÑANA**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ⚠️
+
+   **PASADO MAÑANA**: Mañana 09:00-14:00 ⚠️ | Tarde 17:00-20:00 ❌
+
+   **DENTRO DE 3 DÍAS**: Mañana XXX ✅/⚠️/❌ | Tarde XXX ✅/⚠️/❌
 
 8) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    - Indica claramente: "HOY", "MAÑANA", "PASADO MAÑANA" o "DENTRO DE 3 DÍAS"
@@ -1074,8 +1112,7 @@ Formato obligatorio:
 10) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
 
 Reglas CRÍTICAS:
-- **ANÁLISIS DE PISTA: SOLO PARA HOY** (con viento actual real). Para días futuros no hay dirección disponible, omitir cálculo de componentes.
-- **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: Detecta invierno/verano, valida {hora_actual} contra límites operativos
+- **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
 - **ANÁLISIS COMPLETO MULTIFACTOR (OBLIGATORIO para cada día)**:
   1. Viento medio (convertido a kt)
   2. Rachas y diferencia con viento medio
@@ -1093,7 +1130,7 @@ Reglas CRÍTICAS:
   * BKN/OVC < 2000 ft = ⚠️ PRECAUCIÓN
   * Precipitación activa = ❌ NO APTO (salvo llovizna muy ligera)
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
-- Convierte km/h a kt cuando compares con límites ULM Y cuando calcules componentes de viento
+- ⚠️ UNIDADES CRUCE: Los datos de Open-Meteo y Windy llegan en **km/h**. Para citar en kt: divide entre 1.852 (ej: 33 km/h = 17.8 kt). NUNCA pongas la etiqueta 'kt' a un valor que está en km/h sin hacer la conversión. En METAR los valores ya están en kt.
 - No uses afirmaciones vagas: para cada día cita al menos 4 datos concretos (viento/racha/precip/nube/vis)
 - Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/gradiente de presión, flujo dominante) y su impacto en LEMR
 - Recuerda: PISTA 10 orientada 100° (despegue al ESTE), PISTA 28 orientada 280° (despegue al OESTE)

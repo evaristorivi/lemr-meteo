@@ -23,11 +23,14 @@ from aemet_service import (
     get_prediccion_asturias_manana,
     get_prediccion_asturias_pasado_manana,
     get_prediccion_llanera,
+    get_avisos_cap_asturias,
+    parse_llanera_horaria_to_compact,
 )
 from metar_service import get_metar, classify_flight_category
 from metar_generator import generate_metar_lemr, get_metar_disclaimer
 from weather_service import get_weather_forecast, weather_code_to_description
 from windy_service import get_windy_point_forecast
+from telegram_monitor import send_alert as _tg_alert
 
 app = Flask(__name__)
 
@@ -382,6 +385,13 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     aemet_count_start = get_aemet_request_count()
     
     metar_leas = get_metar(config.LEAS_ICAO)
+    if not metar_leas:
+        print("⚠️ METAR LEAS no disponible — sin observación en tiempo real del aeropuerto")
+        _tg_alert(
+            "METAR LEAS (Asturias) no disponible. Sin observacion en tiempo real del aeropuerto cercano.",
+            source="metar",
+            level="WARNING",
+        )
     selected_windy_model = _sanitize_windy_model(windy_model)
 
     weather_data = get_weather_forecast(
@@ -392,6 +402,11 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     if not weather_data:
         print("⚠️ Open-Meteo no disponible — continuando con datos parciales (sin condiciones actuales ni pronóstico)")
+        _tg_alert(
+            "Open-Meteo no devolvio datos. El pronostico LEMR se generara sin condiciones actuales ni datos horarios.",
+            source="openmeteo",
+            level="ERROR",
+        )
         weather_data = {"current": {}, "daily_forecast": [], "hourly_forecast": []}
 
     # Generar METAR sintético para LEMR desde datos Open-Meteo
@@ -424,6 +439,12 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     # ── Predicción Windy Point Forecast ──
     windy_section = _build_windy_section(selected_windy_model)
+    if not windy_section.get("hourly"):
+        _tg_alert(
+            f"Windy Point Forecast sin datos horarios (modelo: {selected_windy_model}). El analisis IA carecera de pronostico Windy.",
+            source="windy",
+            level="WARNING",
+        )
 
     # ── Mapas significativos AEMET (hoy/mañana/pasado, AM y PM) ──
     sig_maps = get_significant_maps_for_three_days(ambito="esp")
@@ -438,6 +459,11 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         print(f"✅ Mapa análisis obtenido (URL para IA + base64 para navegador)")
     else:
         print("⚠️ No se pudo obtener mapa de análisis de AEMET")
+        _tg_alert(
+            "Mapa de analisis en superficie AEMET no disponible (posible caida del servicio AEMET).",
+            source="aemet_maps",
+            level="WARNING",
+        )
 
     # ── Predicción AEMET textual Asturias ──
     # Obtener fechas esperadas para cada sección
@@ -449,7 +475,15 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     pred_asturias_hoy = get_prediccion_asturias_hoy() or ""
     pred_asturias_manana = get_prediccion_asturias_manana() or ""
     pred_asturias_pasado_manana = get_prediccion_asturias_pasado_manana() or ""
-    
+
+    if not pred_asturias_hoy and not pred_asturias_manana and not pred_asturias_pasado_manana:
+        print("⚠️ AEMET: predicciones textuales Asturias todas vacías — posible API key caducada o servicio caído")
+        _tg_alert(
+            "AEMET predicciones textuales Asturias todas vacias (hoy + manana + pasado). Posible API key caducada o servicio AEMET caido.",
+            source="aemet",
+            level="WARNING",
+        )
+
     # Determinar iconos dinámicos basados en el contenido de las predicciones
     icon_hoy = get_weather_icon_from_text(pred_asturias_hoy)
     icon_manana = get_weather_icon_from_text(pred_asturias_manana)
@@ -544,6 +578,13 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         return "\n".join(lines)
     
     pred_llanera = get_prediccion_llanera()
+    if not pred_llanera:
+        print("⚠️ AEMET: predicción municipal Llanera no disponible")
+        _tg_alert(
+            "AEMET prediccion municipal Llanera (33035) no disponible. Sin datos diarios de Llanera.",
+            source="aemet",
+            level="WARNING",
+        )
     pred_llanera_dia0 = ""
     pred_llanera_dia1 = ""
     pred_llanera_dia2 = ""
@@ -583,6 +624,12 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 pred_llanera_dia3 = f"📅 {format_date_spanish(day3_date)}\n{pred_llanera_dia3}"
         except Exception:
             pred_llanera_dia0 = f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
+
+    # ── Avisos CAP y Llanera horaria (para la IA) ──
+    avisos_cap = get_avisos_cap_asturias()
+    if avisos_cap:
+        print(f"⚠️ AEMET AVISOS CAP activos: {avisos_cap[:80]}")
+    llanera_horaria_compact = parse_llanera_horaria_to_compact()
 
     # ── Construir días con mapas AEMET integrados (slots UTC reales disponibles) ──
     sig_index = {}
@@ -674,18 +721,30 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
         flight_cat_lemr = classify_flight_category(metar_lemr) if metar_lemr else None
 
-        fused_ai = interpret_fused_forecast_with_ai(
-            metar_leas=metar_leas or "",
-            metar_lemr=metar_lemr or "",
-            weather_data=weather_data,
-            windy_data=windy_section or {},
-            aemet_prediccion=aemet_pred_short,
-            map_analysis_text="" if (is_mini or is_github) else (analysis_map_url or ""),
-            significant_map_urls=map_urls_for_ai,
-            location=config.LA_MORGAL_COORDS["name"],
-            flight_category_leas=flight_cat_leas,
-            flight_category_lemr=flight_cat_lemr,
-        )
+        try:
+            fused_ai = interpret_fused_forecast_with_ai(
+                metar_leas=metar_leas or "",
+                metar_lemr=metar_lemr or "",
+                weather_data=weather_data,
+                windy_data=windy_section or {},
+                aemet_prediccion=aemet_pred_short,
+                map_analysis_text="" if (is_mini or is_github) else (analysis_map_url or ""),
+                significant_map_urls=map_urls_for_ai,
+                location=config.LA_MORGAL_COORDS["name"],
+                flight_category_leas=flight_cat_leas,
+                flight_category_lemr=flight_cat_lemr,
+                avisos_cap=avisos_cap,
+                llanera_horaria_compact=llanera_horaria_compact,
+            )
+        except Exception as _ai_exc:
+            print(f"\u274c Error en an\u00e1lisis IA: {_ai_exc}")
+            _tg_alert(
+                f"Analisis IA fallo (todos los modelos agotados). Error: {str(_ai_exc)[:300]}",
+                source="ia",
+                level="ERROR",
+                exc=_ai_exc,
+            )
+            fused_ai = "\u26a0\ufe0f An\u00e1lisis IA no disponible temporalmente (error en todos los modelos)."
     else:
         # Si no se incluye IA, igualmente calcular las clasificaciones
         flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
@@ -782,6 +841,12 @@ def _background_regenerate_cache(cache_key: str, windy_model: str, include_ai: b
         print(f"✅ Caché regenerada en background para ciclo {cache_key}")
     except Exception as exc:
         print(f"❌ Error regenerando caché en background: {exc}")
+        _tg_alert(
+            f"Error critico en ciclo de actualizacion automatica (background). Error: {str(exc)[:300]}",
+            source="general",
+            level="ERROR",
+            exc=exc,
+        )
 
 
 def get_report_payload(force: bool = False, windy_model: str | None = None, include_ai: bool = True) -> dict:
@@ -871,6 +936,12 @@ def api_ogimet_week():
         forecast_data = get_ogimet_week_forecast()
         return jsonify(forecast_data)
     except Exception as e:
+        _tg_alert(
+            f"Ogimet /api/ogimet/week lanzo excepcion: {str(e)[:300]}",
+            source="general",
+            level="ERROR",
+            exc=e,
+        )
         return jsonify({
             'success': False,
             'error': str(e)

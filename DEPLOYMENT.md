@@ -225,7 +225,48 @@ sudo chown -R www-data:www-data /var/www/lemr-meteo
 - Si usas subdirectorio, asegúrate de que la ruta `/meteo` está correctamente configurada
 - Revisa los logs de Apache: `sudo tail -f /var/log/apache2/error.log`
 
-## 📚 Más información
+## � Alertas Telegram (Opcional)
+
+Puedes recibir alertas en Telegram cuando la app detecta errores en las fuentes de datos o en el análisis IA.
+
+### Eventos monitorizados
+
+| Nivel | Evento |
+|-------|--------|
+| `ERROR` | Open-Meteo no responde o devuelve datos inválidos |
+| `WARNING` | Windy responde pero sin datos horarios |
+| `ERROR` | Todos los modelos IA de la cascada fallan |
+| `ERROR` | Excepción en la actualización de caché en segundo plano |
+
+Anti-spam: se envía como máximo **1 alerta por fuente cada 30 minutos**.
+
+### Configuración
+
+**Paso 1:** Crea un bot con `@BotFather` en Telegram. Guarda el token que te dé.
+
+**Paso 2:** Envía un mensaje a tu nuevo bot y visita:
+```
+https://api.telegram.org/bot<TU_TOKEN>/getUpdates
+```
+Copia el valor de `id` dentro del objeto `chat`.
+
+**Paso 3:** Añade las variables al `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TELEGRAM_CHAT_ID=123456789
+```
+
+**Paso 4:** Reinicia el servicio:
+```bash
+sudo systemctl restart lemr-meteo
+```
+
+> Si no configuras estas variables, el sistema funciona con normalidad sin enviar alertas.
+
+---
+
+## �📚 Más información
 
 Ver [README.md](README.md) para documentación completa.
 
