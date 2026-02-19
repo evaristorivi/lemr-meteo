@@ -83,8 +83,9 @@ Variables **opcionales** pero recomendadas:
 
 ```env
 # API de AEMET (gratis en https://opendata.aemet.es)
-# SIN ESTO: faltarán predicciones textuales de Asturias y Llanera
-# CON ESTO: tendrás predicciones oficiales AEMET completas
+# SIN ESTO: faltarán predicciones textuales oficiales de Asturias
+# CON ESTO: tendrás predicciones AEMET completas para Asturias
+# NOTA: La predicción de 4 días de La Morgal usa Open-Meteo (siempre disponible)
 AEMET_API_KEY=tu_aemet_key_aqui
 ```
 
@@ -238,7 +239,6 @@ Puedes recibir alertas en Telegram cuando la app detecta errores en las fuentes 
 | `WARNING` | `metar` | METAR LEAS (aeropuerto Asturias) no disponible |
 | `WARNING` | `aemet_maps` | Mapa de análisis en superficie AEMET no disponible |
 | `WARNING` | `aemet` | Las 3 predicciones textuales de Asturias vacías a la vez |
-| `WARNING` | `aemet` | Predicción municipal Llanera (33035) no disponible |
 | `WARNING` | `ia_<modelo>` | Un modelo IA alcanza su límite de peticiones (429) |
 | `ERROR` | `ia_<modelo>` | Un modelo IA rechaza el prompt por exceso de tokens (context window) |
 | `ERROR` | `ia` | Todos los modelos IA de la cascada fallan |
@@ -304,7 +304,8 @@ No. LEMR Meteo es una app Flask ligera que:
 
 Sí, pero **perderás funcionalidades**:
 - ✅ **Funcionarán**: METAR, predicción Open-Meteo, análisis IA, mapas significativos AEMET
-- ❌ **NO funcionarán**: Predicciones textuales oficiales de AEMET para Asturias y Llanera
+- ❌ **NO funcionarán**: Predicciones textuales oficiales de AEMET para Asturias
+- ✅ **Sí funcionará**: Predicción 4 días La Morgal (usa Open-Meteo, sin AEMET)
 
 La API de AEMET es **gratuita** (regístrate en https://opendata.aemet.es). Se recomienda usarla para obtener todas las funcionalidades.
 

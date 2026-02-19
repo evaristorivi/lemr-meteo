@@ -193,13 +193,24 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                     continue
                 gusts = [h['wind_gusts'] for h in rows_p if h.get('wind_gusts') is not None]
                 winds = [h['wind_speed']  for h in rows_p if h.get('wind_speed')  is not None]
-                cl_lo = [h['cloud_cover_low'] for h in rows_p if h.get('cloud_cover_low') is not None]
-                if gusts:
-                    result[f'gust_{period_key}_max']      = round(max(gusts))
-                if winds:
-                    result[f'wind_{period_key}_max']      = round(max(winds))
-                if cl_lo:
-                    result[f'cloud_low_{period_key}_max'] = round(max(cl_lo))
+                cl_lo = [h['cloud_cover_low']  for h in rows_p if h.get('cloud_cover_low')  is not None]
+                cl_mi = [h['cloud_cover_mid']  for h in rows_p if h.get('cloud_cover_mid')  is not None]
+                cl_hi = [h['cloud_cover_high'] for h in rows_p if h.get('cloud_cover_high') is not None]
+                pp    = [h['precipitation_prob'] for h in rows_p if h.get('precipitation_prob') is not None]
+                # turbulencia mecánica por período (diff racha-viento en kt)
+                turb_p = []
+                for h in rows_p:
+                    w = h.get('wind_speed')
+                    g = h.get('wind_gusts')
+                    if w is not None and g is not None:
+                        turb_p.append((g - w) / 1.852)
+                if gusts:  result[f'gust_{period_key}_max']       = round(max(gusts))
+                if winds:  result[f'wind_{period_key}_max']       = round(max(winds))
+                if cl_lo:  result[f'cloud_low_{period_key}_max']  = round(max(cl_lo))
+                if cl_mi:  result[f'cloud_mid_{period_key}_max']  = round(max(cl_mi))
+                if cl_hi:  result[f'cloud_high_{period_key}_max'] = round(max(cl_hi))
+                if pp:     result[f'precip_prob_{period_key}_max'] = round(max(pp))
+                if turb_p: result[f'turb_diff_{period_key}_max']  = round(max(turb_p), 1)
 
             # Hora del pico de rachas (útil para planificar franja horaria)
             gust_by_hour = [(h.get('wind_gusts', 0), h['time'][11:16])

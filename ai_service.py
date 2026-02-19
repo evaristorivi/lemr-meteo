@@ -706,8 +706,8 @@ def interpret_fused_forecast_with_ai(
             cl_high = row.get('cloud_high_max')
             clouds_str = ""
             if cl_low is not None:
-                low_tag = " 🔴BKN" if cl_low > 50 else ""
-                clouds_str = f", nubes_dia BAJA {cl_low}%{low_tag}/MED {cl_mid}%/ALT {cl_high}%"
+                low_tag = " 🔴BKN/OVC" if cl_low > 50 else ""
+                clouds_str = f", nubes_capa_baja(<2000ft) {cl_low}%{low_tag} / capa_media {cl_mid}% / capa_alta {cl_high}%"
 
             # --- hora amanecer/atardecer: solo la hora HH:MM ---
             sunrise_raw = row.get('sunrise', 'N/A')
@@ -716,11 +716,15 @@ def interpret_fused_forecast_with_ai(
             sunset_hm   = sunset_raw.split('T')[1][:5]  if sunset_raw  and 'T' in sunset_raw  else sunset_raw
 
             # --- patrón mañana→tarde (solo si hay variación significativa) ---
-            man_gust = row.get('gust_man_max')
+            man_gust  = row.get('gust_man_max')
             tard_gust = row.get('gust_tard_max')
-            man_cl   = row.get('cloud_low_man_max')
-            tard_cl  = row.get('cloud_low_tard_max')
-            peak_h   = row.get('peak_gust_hour')
+            man_cl    = row.get('cloud_low_man_max')
+            tard_cl   = row.get('cloud_low_tard_max')
+            man_pp    = row.get('precip_prob_man_max')
+            tard_pp   = row.get('precip_prob_tard_max')
+            man_turb  = row.get('turb_diff_man_max')
+            tard_turb = row.get('turb_diff_tard_max')
+            peak_h    = row.get('peak_gust_hour')
             trend_parts = []
             if man_gust is not None and tard_gust is not None:
                 diff = tard_gust - man_gust
@@ -729,7 +733,16 @@ def interpret_fused_forecast_with_ai(
                     trend_parts.append(f"rachas mañ {man_gust:.0f}→tard {tard_gust:.0f}km/h {arrow}")
             if man_cl is not None and tard_cl is not None and abs(tard_cl - man_cl) >= 20:
                 arrow = "📈" if tard_cl > man_cl else "📉"
-                trend_parts.append(f"nube_baja mañ {man_cl:.0f}%→tard {tard_cl:.0f}% {arrow}")
+                trend_parts.append(f"nube_baja(<2000ft) mañ {man_cl:.0f}%→tard {tard_cl:.0f}% {arrow}")
+            if man_pp is not None and tard_pp is not None and abs(tard_pp - man_pp) >= 20:
+                arrow = "📈" if tard_pp > man_pp else "📉"
+                trend_parts.append(f"precip_prob mañ {man_pp:.0f}%→tard {tard_pp:.0f}% {arrow}")
+            elif man_pp or tard_pp:
+                if man_pp and man_pp >= 20: trend_parts.append(f"precip mañ {man_pp:.0f}%")
+                if tard_pp and tard_pp >= 20: trend_parts.append(f"precip tard {tard_pp:.0f}%")
+            if man_turb is not None and tard_turb is not None and abs(tard_turb - man_turb) >= 3:
+                arrow = "📈" if tard_turb > man_turb else "📉"
+                trend_parts.append(f"turb mañ {man_turb}kt→tard {tard_turb}kt {arrow}")
             if peak_h and (man_gust or tard_gust):
                 trend_parts.append(f"pico {peak_h}h")
             trend_str = ("\n  ↕️ tendencia: " + ", ".join(trend_parts)) if trend_parts else ""
@@ -774,14 +787,7 @@ def interpret_fused_forecast_with_ai(
         aemet_hoy = (aemet_prediccion or {}).get("asturias_hoy", "")
         aemet_man = (aemet_prediccion or {}).get("asturias_manana", "")
         aemet_pas = (aemet_prediccion or {}).get("asturias_pasado_manana", "")
-        # Llanera: el dict tiene llanera_dia0..3, combinar los disponibles
-        _llan_parts = [
-            (aemet_prediccion or {}).get("llanera_dia0", ""),
-            (aemet_prediccion or {}).get("llanera_dia1", ""),
-            (aemet_prediccion or {}).get("llanera_dia2", ""),
-            (aemet_prediccion or {}).get("llanera_dia3", ""),
-        ]
-        aemet_llan = "\n".join(p for p in _llan_parts if p)
+        # Nota: La predicción de La Morgal 4 días es Open-Meteo y ya está en om_lines (no duplicar)
         
         # Optimización: reducir AEMET para GitHub Models (límite por request)
         is_github = provider.lower() == "github"
@@ -923,7 +929,6 @@ AEMET Asturias MAÑANA:
 AEMET Asturias PASADO MAÑANA:
 {aemet_pas[:aemet_limit] if aemet_pas else 'No disponible'}
 
-{'' if is_github else f'AEMET Llanera:{chr(10)}{aemet_llan[:aemet_limit] if aemet_llan else chr(32)}{chr(10)}'}
 AEMET Llanera horaria (hoy+mañana franjas operativas):
 {llanera_horaria_compact[:hor_limit] if llanera_horaria_compact else 'No disponible'}
 
@@ -1168,13 +1173,6 @@ Reglas CRÍTICAS:
         aemet_hoy = aemet_prediccion.get('asturias_hoy', '') if aemet_prediccion else ''
         aemet_man = aemet_prediccion.get('asturias_manana', '') if aemet_prediccion else ''
         aemet_pas = aemet_prediccion.get('asturias_pasado_manana', '') if aemet_prediccion else ''
-        _llan_fb = [
-            (aemet_prediccion or {}).get('llanera_dia0', ''),
-            (aemet_prediccion or {}).get('llanera_dia1', ''),
-            (aemet_prediccion or {}).get('llanera_dia2', ''),
-            (aemet_prediccion or {}).get('llanera_dia3', ''),
-        ]
-        aemet_llan = '\n'.join(p for p in _llan_fb if p)
         
         if aemet_hoy or aemet_man or aemet_pas:
             fallback_sections.append("\n**PREDICCIONES AEMET ASTURIAS:**")
@@ -1184,9 +1182,6 @@ Reglas CRÍTICAS:
                 fallback_sections.append(f"\nMAÑANA:\n{aemet_man[:300]}{'...' if len(aemet_man) > 300 else ''}")
             if aemet_pas:
                 fallback_sections.append(f"\nPASADO MAÑANA:\n{aemet_pas[:300]}{'...' if len(aemet_pas) > 300 else ''}")
-        
-        if aemet_llan:
-            fallback_sections.append(f"\n**PREDICCIÓN AEMET LLANERA:**\n{aemet_llan[:300]}{'...' if len(aemet_llan) > 300 else ''}")
         
         # Notas finales
         fallback_sections.append("\n⚠️ **IMPORTANTE:**")

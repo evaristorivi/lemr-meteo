@@ -22,7 +22,6 @@ from aemet_service import (
     get_prediccion_asturias_hoy,
     get_prediccion_asturias_manana,
     get_prediccion_asturias_pasado_manana,
-    get_prediccion_llanera,
     get_avisos_cap_asturias,
     parse_llanera_horaria_to_compact,
 )
@@ -548,35 +547,50 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 w_str += f"  ·  Racha: {round(wind_gusts)} km/h"
             out.append(w_str)
 
-        turb = day.get("turb_diff_max_kt")
-        if turb is not None:
-            turb_label = "leve" if turb < 8 else ("moderada ⚠️" if turb < 12 else "severa ❌")
-            out.append(f"🌬️ Turbulencia mec.: {turb} kt ({turb_label})")
-
-        cl_lo = day.get("cloud_low_max")
-        cl_mi = day.get("cloud_mid_max")
+        # Nube alta a nivel día (baja y media se detallan por período abajo)
         cl_hi = day.get("cloud_high_max")
-        if any(v is not None for v in [cl_lo, cl_mi, cl_hi]):
-            nube_parts = []
-            if cl_lo is not None: nube_parts.append(f"baja {cl_lo}%")
-            if cl_mi is not None: nube_parts.append(f"media {cl_mi}%")
-            if cl_hi is not None: nube_parts.append(f"alta {cl_hi}%")
-            out.append("☁️ Nubes — " + "  ·  ".join(nube_parts))
+        if cl_hi is not None:
+            out.append(f"☁️ Nube alta: {cl_hi}%")
 
-        wm = day.get("wind_man_max")
-        gm = day.get("gust_man_max")
-        wt = day.get("wind_tard_max")
-        gt = day.get("gust_tard_max")
-        if wm is not None or gm is not None:
+        wm  = day.get("wind_man_max")
+        gm  = day.get("gust_man_max")
+        wt  = day.get("wind_tard_max")
+        gt  = day.get("gust_tard_max")
+        cl_lo_m = day.get("cloud_low_man_max")
+        cl_mi_m = day.get("cloud_mid_man_max")
+        cl_lo_t = day.get("cloud_low_tard_max")
+        cl_mi_t = day.get("cloud_mid_tard_max")
+        pp_m = day.get("precip_prob_man_max")
+        pp_t = day.get("precip_prob_tard_max")
+        turb_m = day.get("turb_diff_man_max")
+        turb_t = day.get("turb_diff_tard_max")
+
+        def _turb_label(kt):
+            if kt is None: return None
+            if kt > 12: return f"{kt} kt ❌ severa"
+            if kt > 8:  return f"{kt} kt ⚠️ mod."
+            return f"{kt} kt leve"
+
+        if any(v is not None for v in [wm, gm, cl_lo_m, cl_mi_m, pp_m, turb_m]):
             parts = []
-            if wm is not None: parts.append(f"viento {round(wm)} km/h")
-            if gm is not None: parts.append(f"racha {round(gm)} km/h")
-            out.append("🕗 Mañana → " + "  ·  ".join(parts))
-        if wt is not None or gt is not None:
+            if wm is not None: parts.append(f"💨 Viento: {round(wm)} km/h")
+            if gm is not None: parts.append(f"🌬️ Racha: {round(gm)} km/h")
+            if cl_lo_m is not None: parts.append(f"☁️ Nube baja: {cl_lo_m}%")
+            if cl_mi_m is not None: parts.append(f"☁️ Nube media: {cl_mi_m}%")
+            if pp_m: parts.append(f"💧 Precip: {pp_m}%")
+            tl = _turb_label(turb_m)
+            if tl: parts.append(f"🌀 Turbulencia: {tl}")
+            out.append("🕗 Mañana\n  " + "\n  ".join(parts))
+        if any(v is not None for v in [wt, gt, cl_lo_t, cl_mi_t, pp_t, turb_t]):
             parts = []
-            if wt is not None: parts.append(f"viento {round(wt)} km/h")
-            if gt is not None: parts.append(f"racha {round(gt)} km/h")
-            out.append("🕑 Tarde → " + "  ·  ".join(parts))
+            if wt is not None: parts.append(f"💨 Viento: {round(wt)} km/h")
+            if gt is not None: parts.append(f"🌬️ Racha: {round(gt)} km/h")
+            if cl_lo_t is not None: parts.append(f"☁️ Nube baja: {cl_lo_t}%")
+            if cl_mi_t is not None: parts.append(f"☁️ Nube media: {cl_mi_t}%")
+            if pp_t: parts.append(f"💧 Precip: {pp_t}%")
+            tl = _turb_label(turb_t)
+            if tl: parts.append(f"🌀 Turbulencia: {tl}")
+            out.append("🕑 Tarde\n  " + "\n  ".join(parts))
 
         fl_m = day.get("freezing_level_min_m")
         fl_ft = day.get("freezing_level_min_ft")
@@ -773,10 +787,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "asturias_hoy": (pred_asturias_hoy[:180] if pred_asturias_hoy else ""),
                 "asturias_manana": (pred_asturias_manana[:180] if pred_asturias_manana else ""),
                 "asturias_pasado_manana": (pred_asturias_pasado_manana[:180] if pred_asturias_pasado_manana else ""),
-                "llanera_dia0": (pred_llanera_dia0[:80] if pred_llanera_dia0 else ""),
-                "llanera_dia1": (pred_llanera_dia1[:80] if pred_llanera_dia1 else ""),
-                "llanera_dia2": (pred_llanera_dia2[:80] if pred_llanera_dia2 else ""),
-                "llanera_dia3": (pred_llanera_dia3[:80] if pred_llanera_dia3 else ""),
             }
         else:
             # OpenAI: recibe texto AEMET completo
@@ -784,10 +794,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 "asturias_hoy": pred_asturias_hoy or "",
                 "asturias_manana": pred_asturias_manana or "",
                 "asturias_pasado_manana": pred_asturias_pasado_manana or "",
-                "llanera_dia0": pred_llanera_dia0 or "",
-                "llanera_dia1": pred_llanera_dia1 or "",
-                "llanera_dia2": pred_llanera_dia2 or "",
-                "llanera_dia3": pred_llanera_dia3 or "",
             }
 
         # Calcular clasificaciones de condiciones de vuelo antes de pasarlas a la IA

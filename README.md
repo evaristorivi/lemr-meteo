@@ -52,7 +52,7 @@ WEB_PORT=8000  # Para desarrollo local
 AEMET_API_KEY=tu_aemet_key
 ```
 
-Sin esto funcionarán los mapas AEMET pero no las predicciones textuales de Asturias y Llanera.
+Sin esto funcionarán los mapas AEMET pero no las predicciones textuales de Asturias. La predicción de 4 días de La Morgal siempre está disponible (usa Open-Meteo).
 
 **Opcional** — alertas en Telegram cuando falla alguna fuente o modelo IA:
 
