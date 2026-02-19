@@ -38,7 +38,73 @@
   
   <!-- Canonical URL -->
   <link rel="canonical" href="https://lemr-meteo.evaristorivieccio.com/" />
-  
+
+  <!-- JSON-LD Structured Data (Schema.org) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://lemr-meteo.evaristorivieccio.com/#website",
+        "url": "https://lemr-meteo.evaristorivieccio.com/",
+        "name": "LEMR Meteo",
+        "description": "Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET, mapas de viento y condiciones para vuelo.",
+        "inLanguage": "es-ES",
+        "author": {
+          "@type": "Person",
+          "name": "Evaristo Romano Rivieccio"
+        },
+        "publisher": {
+          "@type": "Person",
+          "name": "Evaristo Romano Rivieccio"
+        }
+      },
+      {
+        "@type": "WebApplication",
+        "@id": "https://lemr-meteo.evaristorivieccio.com/#app",
+        "url": "https://lemr-meteo.evaristorivieccio.com/",
+        "name": "LEMR Meteo — Meteorología Aeródromo de La Morgal",
+        "description": "Consulta en tiempo real el METAR, pronóstico AEMET, mapas de viento Windy y análisis con IA del Aeródromo de La Morgal (LEMR), Asturias.",
+        "applicationCategory": "WeatherApplication",
+        "operatingSystem": "All",
+        "browserRequirements": "Requires JavaScript",
+        "inLanguage": "es-ES",
+        "isAccessibleForFree": true,
+        "image": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
+        "screenshot": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
+        "author": {
+          "@type": "Person",
+          "name": "Evaristo Romano Rivieccio"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "EUR"
+        },
+        "featureList": [
+          "METAR en tiempo real",
+          "Pronóstico AEMET",
+          "Mapas de viento Windy",
+          "Análisis meteorológico con IA",
+          "Categorías de vuelo VFR/MVFR/IFR/LIFR"
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Inicio",
+            "item": "https://lemr-meteo.evaristorivieccio.com/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
   <!-- Marked.js para renderizar markdown del análisis IA -->
   <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
   
