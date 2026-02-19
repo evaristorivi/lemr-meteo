@@ -45,7 +45,6 @@ WEB_PORT=8000  # Para desarrollo local
 
 > 📚 **Nota sobre modelos IA:** El sistema usa automáticamente una cascada de modelos (gpt-4o → gpt-4o-mini → llama → phi-4). No necesitas configurar nada.
 
-> 💡 **Nota:** El puerto 8000 es para desarrollo local. En producción se usa 8001 por defecto.
 
 **Muy recomendado** (gratis en https://opendata.aemet.es):
 
