@@ -40,38 +40,6 @@ def get_metar(icao_code: str) -> Optional[str]:
         return None
 
 
-def get_taf(icao_code: str) -> Optional[str]:
-    """
-    Obtiene el TAF (Terminal Aerodrome Forecast) de un aeropuerto
-    
-    Args:
-        icao_code: Código ICAO del aeropuerto
-    
-    Returns:
-        String con el TAF o None si hay error
-    """
-    try:
-        url = 'https://aviationweather.gov/api/data/taf'
-        params = {
-            'ids': icao_code,
-            'format': 'raw'
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        
-        taf = response.text.strip()
-        
-        if taf and not taf.startswith('No'):
-            return taf
-        else:
-            return None
-            
-    except requests.exceptions.RequestException as e:
-        print(f"Error obteniendo TAF para {icao_code}: {e}")
-        return None
-
-
 def parse_metar_components(metar: str) -> Dict[str, str]:
     """
     Extrae componentes básicos del METAR para facilitar su interpretación

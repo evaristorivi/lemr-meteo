@@ -110,12 +110,6 @@ def get_cloud_groups(
     return " ".join(groups)
 
 
-# Alias de compatibilidad para código existente que llame a get_cloud_group
-def get_cloud_group(cloud_cover_percent: int, elevation_m: int = 180) -> str:
-    """Compatibilidad: genera un único grupo de nubes con altura fija."""
-    return get_cloud_groups(cloud_cover_percent)
-
-
 def get_weather_phenomena(weather_code: int) -> str:
     """
     Mapea weather_code de Open-Meteo a fenómenos meteorológicos METAR.

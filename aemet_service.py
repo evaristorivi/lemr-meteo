@@ -233,25 +233,6 @@ def get_significant_map_url(
     return None
 
 
-def get_significant_map_image_b64(
-    target_date: date,
-    period: str = "am",
-    ambito: str = "esp",
-) -> Optional[str]:
-    """
-    Descarga un mapa significativo y devuelve su contenido como base64
-    (útil para incrustar directamente en <img src="data:image/png;base64,...">
-    cuando la URL temporal AEMET haya caducado).
-    """
-    url = get_significant_map_url(target_date, period, ambito)
-    if not url:
-        return None
-    raw = _fetch_datos_url(url, as_bytes=True)
-    if raw:
-        return base64.b64encode(raw).decode("ascii")
-    return None
-
-
 def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
     """
     Obtiene los mapas significativos para hoy y mañana
@@ -367,28 +348,6 @@ def get_analysis_map_b64() -> Optional[str]:
             time.sleep(2)  # Esperar antes de reintentar
     
     print(f"❌ No se pudo descargar el mapa de análisis después de {max_attempts} intentos")
-    return None
-
-
-def get_analysis_map_b64_compat() -> Optional[str]:
-    """
-    Devuelve base64 del mapa de análisis.
-    (Nombre mantenido por compatibilidad con get_analysis_map_b64)
-    """
-    return get_analysis_map_b64()
-
-
-# ──────────────────── Observaciones convencionales ─────────────────────────
-
-
-def get_conventional_observations() -> Optional[list]:
-    """
-    Descarga las observaciones convencionales actuales de todas las estaciones.
-    Puede contener datos cercanos a La Morgal.
-    """
-    meta = _aemet_get("/api/observacion/convencional/todas")
-    if meta and meta.get("datos"):
-        return _fetch_datos_url(meta["datos"])
     return None
 
 

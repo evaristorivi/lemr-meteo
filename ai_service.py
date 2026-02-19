@@ -345,29 +345,6 @@ def _map_weather_code(code: Optional[int]) -> str:
         return "⛅ DESPEJADO"
 
 
-def _classify_lifted_index(li: Optional[float]) -> str:
-    """
-    Clasifica el Lifted Index para estabilidad atmosférica.
-    LI < 0 indica aire inestable facilitando convección.
-    
-    Args:
-        li: Lifted Index value
-    
-    Returns:
-        Clasificación: ESTABLE, INESTABLE DÉBIL, PROBABLE, FUERTE
-    """
-    if li is None:
-        return "DESCONOCIDO"
-    elif li > 0:
-        return "🟢 ESTABLE"  # Bueno
-    elif li > -2:
-        return "🟡 DÉBIL"  # Débil inestabilidad
-    elif li > -6:
-        return "🟠 PROBABLE"  # Tormentas probables
-    else:
-        return "🔴 FUERTE"  # Tormentas fuertes
-
-
 def _compute_cloud_base_summary(hourly_data: Optional[list]) -> Dict:
     """
     Estima base de nubes a partir de (Temp - Dewpoint) × 400 ft.
@@ -952,18 +929,6 @@ AEMET Llanera horaria (hoy+mañana franjas operativas):
 
 ⚙️ **RENDIMIENTO**: Temp >25°C o presión <1010 hPa → menciona mayor carrera de despegue y peor ascenso. Temp <15°C + presión >1020 hPa → aire denso, rendimiento óptimo.
 
-⚠️ VALIDACIÓN HORARIA PARA HOY (CRÍTICA):
-- Determina si {fecha_actual} es temporada invierno (oct-mar) o verano (abr-sep)
-- Si invierno: horario operativo es 09:00-20:00 | Si verano: 09:00-21:45
-- Compara {hora_actual} (hora actual) contra el horario operativo
-- Si {hora_actual} está ANTES de la apertura: NO marques HOY como no disponible; indica "aún no abierto" y evalúa HOY desde la hora de apertura
-- Si {hora_actual} está DENTRO del horario operativo: 
-  * Calcula el tiempo restante hasta el cierre
-  * Si quedan **< 1 hora**: marca "🕐 CIERRE INMINENTE - Ya no merece la pena (cierra pronto, tiempo insuficiente)"
-  * Si quedan **1-2 horas**: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve (cierra en X minutos, va justo)"
-  * Si quedan **> 2 horas**: HOY es viable, analiza viento y condiciones meteorológicas
-- Si {hora_actual} está DESPUÉS del cierre: marca HOY como "🕐 YA NO DISPONIBLE - fuera de horario operativo"
-
 Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por línea en blanco):
 0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
 
@@ -979,76 +944,32 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
    - Usa "✅ mejor / ⚠️ peor / 〰️ según lo esperado" para cada parámetro
    - Si las condiciones actuales son MEJORES o PEORES que el pronóstico, menciónalo en la última línea resumen
 
-1) **COINCIDENCIAS** clave entre fuentes para los 4 días (¿qué dicen TODAS las fuentes para los próximos 4 días?)
-   - Analiza las coincidencias entre Open-Meteo, Windy y AEMET para los 4 días completos
-   - Ejemplo: "Todas las fuentes coinciden en vientos moderados HOY y MAÑANA, y vientos fuertes PASADO MAÑANA"
-   - Ejemplo: "Todas las fuentes coinciden en cielos despejados los 4 días"
-   - Si solo coinciden en algunos días, indícalo: "Coinciden en buen tiempo HOY y MAÑANA, pero difieren en PASADO MAÑANA"
+1) **COINCIDENCIAS** clave entre fuentes para los 4 días (¿qué dicen TODAS las fuentes?).
+   - Ejemplo: "Todas las fuentes coinciden en vientos moderados HOY y MAÑANA, fuertes PASADO MAÑANA"
+   - Si solo coinciden en algunos días, indícalo.
 
-2) **DISCREPANCIAS** clave entre fuentes para los 4 días y explicación meteorológica probable
-   - Analiza las discrepancias entre Open-Meteo, Windy y AEMET para los 4 días completos
-   - Ejemplo: "Windy prevé rachas de 87 km/h DENTRO DE 3 DÍAS, mientras que Open-Meteo solo prevé 45 km/h - posible diferencia en el modelo de borrasca"
-   - Ejemplo: "Open-Meteo prevé lluvia MAÑANA por la tarde, pero Windy solo indica nubosidad - posible discrepancia en la progresión del frente"
-   - Si hay discrepancias significativas, explica la causa meteorológica probable (frentes, borrascas, modelos diferentes)
+2) **DISCREPANCIAS** clave entre fuentes y explicación meteorológica probable.
+   - Ejemplo: "Windy prevé rachas de 87 km/h DENTRO DE 3 DÍAS, Open-Meteo 45 km/h - diferencia en modelo de borrasca"
+   - Si hay discrepancias, explica la causa probable (frentes, borrascas, modelos diferentes).
 
-3) **📊 EVOLUCIÓN METEOROLÓGICA POR DÍA** (análisis temporal conciso para los 4 días):
-   Para cada día (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
-   - **Carácter del día**: ESTABLE / CAMBIANTE / INESTABLE / DETERIORO PROGRESIVO / MEJORA PROGRESIVA
-   - **Mañana vs Tarde**: ¿Mejora o empeora? (ej: "Mañana tranquila, tarde ventosa" o "Estable todo el día")
-   - **Tendencia del viento**: ¿Rota? ¿Cambia de pista probable? (ej: "Viento rola de W a NW → cambio pista 28→10 tarde")
-   - **Formato compacto**: Max 1 línea por día (ej: "HOY: ESTABLE, viento constante W todo el día, pista 28 | MAÑANA: DETERIORO tarde, viento aumenta — dirección no disponible | PASADO MAÑANA: ...")
-   - Nota: la pista probable solo se puede indicar para HOY (usando viento actual). Para días futuros, omite la indicación de pista.
+3) **📊 EVOLUCIÓN METEOROLÓGICA POR DÍA** — 1 línea por día: carácter (ESTABLE/CAMBIANTE/INESTABLE/DETERIORO/MEJORA), mañana vs tarde, tendencia viento. Pista solo para HOY.
+   Ej: "HOY: ESTABLE, viento W constante, pista 28 | MAÑANA: DETERIORO tarde | PASADO MAÑANA: ... | DENTRO DE 3 DÍAS: ..."
 
-4) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY — dirección de viento no disponible para días futuros):
-   
-   **HOY ({fecha_actual}):**
-    - Valida si {hora_actual} está antes de apertura, dentro de horario o después de cierre (detecta invierno/verano automáticamente)
-    - Calcula el tiempo restante hasta el cierre
-    - Si está ANTES de apertura: indica "aún no abierto" y evalúa HOY desde la hora de apertura
-    - Si está DENTRO: Analiza viento ACTUAL (usa "CONDICIONES ACTUALES", no pronóstico) Y tiempo restante
-    - Si está DESPUÉS de cierre: "YA NO DISPONIBLE - fuera de horario operativo"
-   - Indica: "PISTA 10" o "PISTA 28" (basado en dirección viento ACTUAL)
-   - Componentes: headwind/tailwind y crosswind para AMBAS pistas (con datos ACTUALES)
-    - Ejemplo si antes de abrir: "HOY → AÚN NO ABIERTO (son las {hora_actual}, abre a las 09:00), pero evaluable desde apertura"
-    - Ejemplo si tras cierre: "HOY → YA NO DISPONIBLE (son las {hora_actual}, aeródromo cierra a las 20:00)"
-    - Ejemplo si < 1h restante: "HOY → 🕐 CIERRE INMINENTE (quedan 45 min, cierra a las 20:00) - Ya no merece la pena"
-    - Ejemplo si 1-2h restante: "HOY → ⚠️ TIEMPO LIMITADO (quedan 1h 30min, cierra a las 20:00) - Solo vuelo muy breve"
-    - Ejemplo si > 2h restante viable: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas ACTUALES 23 kt, headwind 13 kt, crosswind 3 kt) ✅ - viable hasta cierre a las 20:00"
-   
-   **MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS:**
-   - ⚠️ No hay datos estructurados de dirección de viento para días futuros.
-   - NO calcules headwind/crosswind ni indiques pista en servicio para estos días.
-   - Si el texto de AEMET menciona explícitamente la dirección del viento para algún día, puedes citarlo como referencia orientativa (indicando la fuente), pero sin cálculos de componentes.
-   - Omite esta subsección para los días futuros.
+4) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
+   Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL (no pronóstico).
+   - Antes apertura: "AÚN NO ABIERTO, evaluable desde apertura"
+   - <1h hasta cierre: "🕐 CIERRE INMINENTE - no merece la pena"
+   - 1-2h: "⚠️ TIEMPO LIMITADO - solo vuelo breve"
+   - >2h: PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
+   - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
+   MAÑANA/PASADO/3 DÍAS: sin datos de dirección → omite cálculo de pista.
 
-5) **VEREDICTO POR DÍA** (los 4 días completos):
-   - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ⚠️ TIEMPO LIMITADO / 🕐 CIERRE INMINENTE / ❌ NO APTO / 🕐 YA NO DISPONIBLE
-     ⚠️ CRÍTICO: Para HOY usa "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
-    - Evalúa PRIMERO el tiempo restante hasta el cierre:
-      * Si < 1h: marca "🕐 CIERRE INMINENTE - Ya no merece la pena"
-      * Si 1-2h: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve"
-      * Si > 2h: evalúa normalmente (✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO)
-    - DESPUÉS evalúa el riesgo convectivo:
-      * Si "ANÁLISIS RIESGO CONVECTIVO" = CRÍTICO/ALTO → ❌ NO APTO inmediato
-      * Si = MODERADO → ⚠️ PRECAUCIÓN
-      * Si = BAJO/NULO → continúa evaluación normal
-    - Si es ANTES de apertura, NO marques "YA NO DISPONIBLE": evalúa HOY y aclara que aún no está abierto.
-     - Si las condiciones actuales son MEJORES/PEORES que el pronóstico: menciónalo brevemente
-   - **MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
-   - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
-   - **DENTRO DE 3 DÍAS**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
-   - **JUSTIFICACIÓN MULTIFACTOR (OBLIGATORIA)**:
-     * Para HOY: cita valores ACTUALES (viento, rachas, nubosidad, CAPE a las {hora_actual}) y tiempo restante hasta cierre
-     * Para MAÑANA/PASADO: cita el pronóstico esperado incluyendo CAPE máximo si hay potencial convectivo
-     * Cita explícitamente: viento medio (kt), rachas (kt), diferencia rachas-medio (kt)
-     * Cita: nubosidad (techo ft, cobertura FEW/SCT/BKN/OVC)
-     * Cita: precipitación (tipo, intensidad)
-     * Cita: visibilidad (km)
-     * Cita: componentes headwind/crosswind para pista recomendada
-   - **CRITERIO ESTRICTO**:
-     * ✅ APTO: Todos los parámetros dentro de límites cómodos + riesgo convectivo NULO/BAJO
-     * ⚠️ PRECAUCIÓN: 1 parámetro en límite (ej: rachas 18-20 kt) O riesgo convectivo MODERADO
-     * ❌ NO APTO: 2+ parámetros en límite O 1 factor crítico (rachas > 22 kt, lluvia, techo < 800 ft) O riesgo convectivo CRÍTICO/ALTO
+5) **VEREDICTO POR DÍA** (los 4 días):
+   HOY: usa CONDICIONES ACTUALES (no pronóstico). Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS condiciones.
+   - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
+   MAÑANA/PASADO/3 DÍAS: basado en pronóstico.
+   Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad, headwind/crosswind.
+   Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <800 ft / convección ALTA/CRÍTICA)
 
 6) **RIESGOS CRÍTICOS** — OBLIGATORIO PARA LOS 4 DÍAS (HOY / MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS):
    ⚠️ NO omitas ningún día. Aunque el riesgo sea bajo, indícalo explícitamente.
@@ -1062,11 +983,7 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
    - **Crosswind excesivo**: si > 12 kt para pista recomendada
    - **Turbulencia mecánica**: diferencia (gusts - wind_mean) ≥8 kt = moderada (precaución), >12 kt = severa (NO VOLAR). Rachas absolutas: >20 kt = precaución, >22 kt = límite estructural ULM.
    - **Densidad del aire**: Temp >25°C + presión <1010 hPa = baja densidad → ⚠️ rendimiento reducido. Temp <10°C + presión >1020 hPa = alta densidad → ✅ mejor rendimiento
-   - **Estabilidad atmosférica / CONVECCIÓN**: 
-     * Si ANÁLISIS RIESGO CONVECTIVO muestra "CRÍTICO" o "ALTO" → es factor de ❌ NO APTO INMEDIATO
-     * Escapa la conclusión exacta del análisis dado: si dice "posibilidad muy alta de tormentas" / "riesgo convectivo significativo" → reporta explícitamente
-     * CAPE > 2000 J/kg es convección extrema (superceldas), CAPE 500-2000 es convección fuerte (tormentas potentes), CAPE < 250 es débil
-     * Si CAPE > 500 + Precip > 0 + diferencia rachas > 8 kt + nubosidad > 50% → convección probable → ❌ NO APTO
+   - **Convección**: CRÍTICO/ALTO → ❌ NO APTO inmediato. Cita la conclusión del ANÁLISIS RIESGO CONVECTIVO recibido.
    Formato obligatorio (SIEMPRE incluir convección si aplica, CADA DÍA EN SU PROPIA LÍNEA con salto de línea entre cada **DÍA**):
    **HOY**: [lista de riesgos]
 
