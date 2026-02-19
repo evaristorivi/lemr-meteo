@@ -149,10 +149,9 @@
       border-radius: 18px;
       padding: 20px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 20px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 14px;
     }
 
     .hero-content {
@@ -687,10 +686,6 @@
     }
 
     @media (max-width: 768px) {
-      .hero {
-        flex-direction: column;
-        align-items: flex-start;
-      }
       .nav-menu {
         width: 100%;
         justify-content: flex-start;
