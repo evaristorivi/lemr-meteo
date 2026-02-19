@@ -225,20 +225,27 @@ sudo chown -R www-data:www-data /var/www/lemr-meteo
 - Si usas subdirectorio, asegúrate de que la ruta `/meteo` está correctamente configurada
 - Revisa los logs de Apache: `sudo tail -f /var/log/apache2/error.log`
 
-## � Alertas Telegram (Opcional)
+## 📱 Alertas Telegram (Opcional)
 
 Puedes recibir alertas en Telegram cuando la app detecta errores en las fuentes de datos o en el análisis IA.
 
 ### Eventos monitorizados
 
-| Nivel | Evento |
-|-------|--------|
-| `ERROR` | Open-Meteo no responde o devuelve datos inválidos |
-| `WARNING` | Windy responde pero sin datos horarios |
-| `ERROR` | Todos los modelos IA de la cascada fallan |
-| `ERROR` | Excepción en la actualización de caché en segundo plano |
+| Nivel | Fuente | Evento |
+|-------|--------|--------|
+| `ERROR` | `openmeteo` | Open-Meteo no responde o devuelve datos inválidos |
+| `WARNING` | `windy` | Windy responde pero sin datos horarios |
+| `WARNING` | `metar` | METAR LEAS (aeropuerto Asturias) no disponible |
+| `WARNING` | `aemet_maps` | Mapa de análisis en superficie AEMET no disponible |
+| `WARNING` | `aemet` | Las 3 predicciones textuales de Asturias vacías a la vez |
+| `WARNING` | `aemet` | Predicción municipal Llanera (33035) no disponible |
+| `WARNING` | `ia_<modelo>` | Un modelo IA alcanza su límite de peticiones (429) |
+| `ERROR` | `ia_<modelo>` | Un modelo IA rechaza el prompt por exceso de tokens (context window) |
+| `ERROR` | `ia` | Todos los modelos IA de la cascada fallan |
+| `ERROR` | `general` | Excepción en la actualización de caché en segundo plano |
+| `ERROR` | `general` | Excepción en el endpoint `/api/ogimet/week` |
 
-Anti-spam: se envía como máximo **1 alerta por fuente cada 30 minutos**.
+Anti-spam: se envía como máximo **1 alerta por fuente cada 30 minutos**. Las alertas por modelo IA (`ia_gpt-4o`, `ia_gpt-4o-mini`, etc.) tienen contador independiente.
 
 ### Configuración
 

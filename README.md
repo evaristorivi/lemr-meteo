@@ -55,6 +55,15 @@ AEMET_API_KEY=tu_aemet_key
 
 Sin esto funcionarán los mapas AEMET pero no las predicciones textuales de Asturias y Llanera.
 
+**Opcional** — alertas en Telegram cuando falla alguna fuente o modelo IA:
+
+```env
+TELEGRAM_BOT_TOKEN=123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TELEGRAM_CHAT_ID=123456789
+```
+
+Crea el bot con `@BotFather`, obtén el `chat_id` visitando `https://api.telegram.org/bot<TOKEN>/getUpdates`. Si no se configura, el sistema funciona con normalidad sin enviar alertas. Ver [DEPLOYMENT.md](DEPLOYMENT.md#-alertas-telegram-opcional) para la lista completa de eventos monitorizados.
+
 Recomendación para publicación/despliegue:
 - Regenera todos los tokens/claves si han estado expuestos (`GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`).
 - No subas nunca `.env` al repositorio (usa solo `.env.example`).
