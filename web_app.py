@@ -359,7 +359,7 @@ def _build_windy_section(selected_windy_model: str) -> dict:
         "lat": windy_data.get("lat") if windy_data else config.LA_MORGAL_COORDS["lat"],
         "lon": windy_data.get("lon") if windy_data else config.LA_MORGAL_COORDS["lon"],
         "available_models": SUPPORTED_WINDY_MODELS,
-        "hourly": windy_data.get("hourly", [])[:12] if windy_data else [],
+        "hourly": windy_data.get("hourly", [])[:24] if windy_data else [],
         "daily_summary": windy_data.get("daily_summary", []) if windy_data else [],
         "error": windy_data.get("error") if windy_data else None,
         "map_embed_url": windy_data.get("map_embed_url") if windy_data else (
@@ -396,7 +396,24 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     # Generar METAR sintético para LEMR desde datos Open-Meteo
     current = weather_data.get("current", {})
-    metar_lemr = generate_metar_lemr(current, icao="LEMR", elevation_m=config.LA_MORGAL_AERODROME["elevation_m"])
+    hourly_om = weather_data.get("hourly_forecast", [])
+    # Pasar capas de nubes y visibilidad de la primera hora hourly (más preciso que inferir del código)
+    _h0 = hourly_om[0] if hourly_om else {}
+    _cloud_layers = {
+        'low':  _h0.get('cloud_cover_low'),
+        'mid':  _h0.get('cloud_cover_mid'),
+        'high': _h0.get('cloud_cover_high'),
+    } if _h0 else None
+    _visibility_km = _h0.get('visibility')  # ya en km (convertido en weather_service)
+    _dewpoint_c = _h0.get('dewpoint')  # dewpoint directo del modelo (más preciso que Magnus)
+    metar_lemr = generate_metar_lemr(
+        current,
+        icao="LEMR",
+        elevation_m=config.LA_MORGAL_AERODROME["elevation_m"],
+        cloud_layers=_cloud_layers,
+        visibility_km=_visibility_km,
+        dewpoint_c=_dewpoint_c,
+    )
     if metar_lemr:
         print(f"✅ METAR sintético LEMR generado: {metar_lemr}")
     else:

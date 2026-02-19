@@ -35,26 +35,42 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                 'pressure_msl',
                 'wind_speed_10m',
                 'wind_direction_10m',
-                'wind_gusts_10m'
+                'wind_gusts_10m',
+                'cape'
             ],
             'hourly': [
                 'temperature_2m',
+                'dewpoint_2m',
                 'precipitation_probability',
                 'weather_code',
                 'cloud_cover',
+                'cloud_cover_low',
+                'cloud_cover_mid',
+                'cloud_cover_high',
                 'visibility',
                 'wind_speed_10m',
-                'wind_direction_10m'
+                'wind_direction_10m',
+                'wind_gusts_10m',
+                'freezing_level_height',
+                'snow_depth',
+                'is_day'
             ],
             'daily': [
                 'temperature_2m_max',
                 'temperature_2m_min',
+                'dewpoint_2m_max',
+                'dewpoint_2m_min',
                 'sunrise',
                 'sunset',
                 'precipitation_sum',
+                'precipitation_hours',
                 'wind_speed_10m_max',
                 'wind_gusts_10m_max',
-                'weather_code'
+                'wind_direction_10m_dominant',
+                'weather_code',
+                'cape_max',
+                'precipitation_probability_max',
+                'sunshine_duration'
             ],
             'timezone': 'Europe/Madrid',
             'forecast_days': 4  # Hoy + 3 días siguientes
@@ -94,6 +110,7 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
             'wind_speed': current.get('wind_speed_10m'),
             'wind_direction': current.get('wind_direction_10m'),
             'wind_gusts': current.get('wind_gusts_10m'),
+            'cape': current.get('cape'),  # Convective Available Potential Energy (J/kg)
         }
         
         # Añadir pronóstico por horas (próximas 24 horas)
@@ -101,35 +118,126 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
         hourly_forecast = []
         
         if hourly.get('time'):
-            for i in range(min(24, len(hourly['time']))):
+            for i in range(len(hourly['time'])):
                 hourly_forecast.append({
                     'time': hourly['time'][i],
                     'temperature': hourly['temperature_2m'][i] if hourly.get('temperature_2m') else None,
+                    'dewpoint': hourly['dewpoint_2m'][i] if hourly.get('dewpoint_2m') else None,
                     'precipitation_prob': hourly['precipitation_probability'][i] if hourly.get('precipitation_probability') else None,
                     'weather_code': hourly['weather_code'][i] if hourly.get('weather_code') else None,
                     'cloud_cover': hourly['cloud_cover'][i] if hourly.get('cloud_cover') else None,
+                    'cloud_cover_low': hourly['cloud_cover_low'][i] if hourly.get('cloud_cover_low') else None,
+                    'cloud_cover_mid': hourly['cloud_cover_mid'][i] if hourly.get('cloud_cover_mid') else None,
+                    'cloud_cover_high': hourly['cloud_cover_high'][i] if hourly.get('cloud_cover_high') else None,
                     'visibility': hourly['visibility'][i] / 1000 if hourly.get('visibility') else None,  # Convertir metros a km
                     'wind_speed': hourly['wind_speed_10m'][i] if hourly.get('wind_speed_10m') else None,
                     'wind_direction': hourly['wind_direction_10m'][i] if hourly.get('wind_direction_10m') else None,
+                    'wind_gusts': hourly['wind_gusts_10m'][i] if hourly.get('wind_gusts_10m') else None,
+                    'freezing_level_height': hourly['freezing_level_height'][i] if hourly.get('freezing_level_height') else None,
+                    'snow_depth': hourly['snow_depth'][i] if hourly.get('snow_depth') else None,
+                    'is_day': hourly['is_day'][i] if hourly.get('is_day') else None,  # 1 = dia, 0 = noche
                 })
         
+        # Índice de horas diurnas por fecha para cálculos Phase 4
+        # Filtra solo horas con is_day==1 para análisis relevante para pilotos
+        hourly_day_by_date: dict = {}
+        for h in hourly_forecast:
+            if h.get('is_day') != 1:
+                continue
+            date_key = h['time'][:10]  # 'YYYY-MM-DD'
+            hourly_day_by_date.setdefault(date_key, []).append(h)
+
+        def _phase4_summary(day_rows: list) -> dict:
+            """Calcula resumen de parámetros Phase 4 para una lista de horas diurnas."""
+            result = {}
+
+            # 1️⃣ Freezing level mínimo del día (metros y pies)
+            fl_vals = [(h['freezing_level_height'], h['time']) for h in day_rows if h.get('freezing_level_height') is not None]
+            if fl_vals:
+                min_fl_m, min_fl_t = min(fl_vals, key=lambda x: x[0])
+                result['freezing_level_min_m'] = round(min_fl_m)
+                result['freezing_level_min_ft'] = round(min_fl_m * 3.28084)
+                result['freezing_level_min_time'] = min_fl_t[11:16]  # 'HH:MM'
+
+            # 2️⃣ Turbulencia mecánica: máx diferencia racha-viento (kt) del día
+            turb_diffs = []
+            for h in day_rows:
+                wind_kmh = h.get('wind_speed')
+                gust_kmh = h.get('wind_gusts')
+                if wind_kmh is not None and gust_kmh is not None:
+                    diff_kt = (gust_kmh - wind_kmh) / 1.852
+                    turb_diffs.append(diff_kt)
+            if turb_diffs:
+                result['turb_diff_max_kt'] = round(max(turb_diffs), 1)
+
+            # 5️⃣ Nieve máxima del día (m → cm)
+            snow_vals = [h['snow_depth'] for h in day_rows if h.get('snow_depth') is not None]
+            if snow_vals:
+                max_snow_m = max(snow_vals)
+                result['snow_max_cm'] = round(max_snow_m * 100, 1)
+
+            # 6️⃣ Nubes por capa: cobertura máxima del día
+            for key, field in [('cloud_low_max', 'cloud_cover_low'),
+                                ('cloud_mid_max', 'cloud_cover_mid'),
+                                ('cloud_high_max', 'cloud_cover_high')]:
+                vals = [h[field] for h in day_rows if h.get(field) is not None]
+                if vals:
+                    result[key] = round(max(vals))
+
+            # 7️⃣ Patrón temporal mañana (09-13h) vs tarde (14-21h)
+            # Permite detectar si el día empeora/mejora a lo largo de la jornada
+            for period_key, h_min, h_max in [('man', 9, 13), ('tard', 14, 21)]:
+                rows_p = [h for h in day_rows
+                          if h.get('time') and h_min <= int(h['time'][11:13]) <= h_max]
+                if not rows_p:
+                    continue
+                gusts = [h['wind_gusts'] for h in rows_p if h.get('wind_gusts') is not None]
+                winds = [h['wind_speed']  for h in rows_p if h.get('wind_speed')  is not None]
+                cl_lo = [h['cloud_cover_low'] for h in rows_p if h.get('cloud_cover_low') is not None]
+                if gusts:
+                    result[f'gust_{period_key}_max']      = round(max(gusts))
+                if winds:
+                    result[f'wind_{period_key}_max']      = round(max(winds))
+                if cl_lo:
+                    result[f'cloud_low_{period_key}_max'] = round(max(cl_lo))
+
+            # Hora del pico de rachas (útil para planificar franja horaria)
+            gust_by_hour = [(h.get('wind_gusts', 0), h['time'][11:16])
+                            for h in day_rows if h.get('wind_gusts') is not None]
+            if gust_by_hour:
+                result['peak_gust_hour'] = max(gust_by_hour, key=lambda x: x[0])[1]
+
+            return result
+
         # Añadir pronóstico diario (4 días)
         daily = data.get('daily', {})
         daily_forecast = []
         
         if daily.get('time'):
             for i in range(len(daily['time'])):
-                daily_forecast.append({
-                    'date': daily['time'][i],
+                date_str = daily['time'][i]
+                entry = {
+                    'date': date_str,
                     'temp_max': daily['temperature_2m_max'][i] if daily.get('temperature_2m_max') else None,
                     'temp_min': daily['temperature_2m_min'][i] if daily.get('temperature_2m_min') else None,
+                    'dewpoint_max': daily['dewpoint_2m_max'][i] if daily.get('dewpoint_2m_max') else None,
+                    'dewpoint_min': daily['dewpoint_2m_min'][i] if daily.get('dewpoint_2m_min') else None,
                     'sunrise': daily['sunrise'][i] if daily.get('sunrise') else None,
                     'sunset': daily['sunset'][i] if daily.get('sunset') else None,
                     'precipitation': daily['precipitation_sum'][i] if daily.get('precipitation_sum') else None,
+                    'precipitation_hours': daily['precipitation_hours'][i] if daily.get('precipitation_hours') else None,
                     'wind_max': daily['wind_speed_10m_max'][i] if daily.get('wind_speed_10m_max') else None,
                     'wind_gusts_max': daily['wind_gusts_10m_max'][i] if daily.get('wind_gusts_10m_max') else None,
+                    'wind_direction_dominant': daily['wind_direction_10m_dominant'][i] if daily.get('wind_direction_10m_dominant') else None,
                     'weather_code': daily['weather_code'][i] if daily.get('weather_code') else None,
-                })
+                    'cape_max': daily['cape_max'][i] if daily.get('cape_max') else None,
+                    'precipitation_prob_max': daily['precipitation_probability_max'][i] if daily.get('precipitation_probability_max') else None,
+                    'sunshine_duration': daily['sunshine_duration'][i] if daily.get('sunshine_duration') else None,
+                }
+                # Enriquecer con resúmenes Phase 4 calculados en Python
+                day_rows = hourly_day_by_date.get(date_str, [])
+                entry.update(_phase4_summary(day_rows))
+                daily_forecast.append(entry)
         
         return {
             'current': current_weather,

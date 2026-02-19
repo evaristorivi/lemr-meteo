@@ -62,15 +62,25 @@ def _build_day_summary(hourly: List[dict]) -> List[dict]:
         max_gust = max((r.get("gust_kmh") or 0) for r in rows)
         avg_temp = round(sum((r.get("temp_c") or 0) for r in rows) / max(len(rows), 1), 1)
         total_precip = round(sum((r.get("precip_3h_mm") or 0) for r in rows), 1)
-        result.append(
-            {
-                "date": day,
-                "max_wind_kmh": round(max_wind, 1),
-                "max_gust_kmh": round(max_gust, 1),
-                "avg_temp_c": avg_temp,
-                "precip_total_mm": total_precip,
-            }
-        )
+
+        # Desglose mañana (09-13h) vs tarde (14-21h) para detectar tendencias
+        man_rows  = [r for r in rows if r.get("time_local") and  9 <= int(r["time_local"][11:13]) <= 13]
+        tard_rows = [r for r in rows if r.get("time_local") and 14 <= int(r["time_local"][11:13]) <= 21]
+        man_gust  = round(max((r.get("gust_kmh") or 0) for r in man_rows),  1) if man_rows  else None
+        tard_gust = round(max((r.get("gust_kmh") or 0) for r in tard_rows), 1) if tard_rows else None
+
+        entry = {
+            "date": day,
+            "max_wind_kmh": round(max_wind, 1),
+            "max_gust_kmh": round(max_gust, 1),
+            "avg_temp_c": avg_temp,
+            "precip_total_mm": total_precip,
+        }
+        if man_gust is not None:
+            entry["gust_man_max"] = man_gust
+        if tard_gust is not None:
+            entry["gust_tard_max"] = tard_gust
+        result.append(entry)
     return result
 
 

@@ -115,13 +115,7 @@ Tu trabajo es analizar datos meteorológicos y proporcionar interpretaciones cla
 5. NUNCA uses directamente km/h en fórmulas que esperan nudos
 6. MUESTRA SIEMPRE la conversión explícitamente antes de calcular
 
-Ejemplo CORRECTO:
-"Viento: 33.8 km/h = 18.3 kt (conversión: 33.8 ÷ 1.852)
-Componente crosswind = 18.3 × sin(59°) = 15.7 kt"
-
-Ejemplo INCORRECTO ❌:
-"Viento: 33.8 km/h ≈ 18.3 kt
-Componente crosswind = 33.8 × sin(59°) = 28.9 kt" ← ESTO ESTÁ MAL, usó km/h en vez de kt
+Ejemplo: "Viento: 33.8 km/h = 18.3 kt (conversión: 33.8 ÷ 1.852), Crosswind = 18.3 × sin(59°) = 15.7 kt"
 
 LEGISLACIÓN ULM ACTUALIZADA 2024-2026 (OBLIGATORIO):
 - ✈️ SOLO VUELO DIURNO: Entre salida y puesta de sol
@@ -134,7 +128,7 @@ LEGISLACIÓN ULM ACTUALIZADA 2024-2026 (OBLIGATORIO):
 LÍMITES OPERACIONALES TÍPICOS ULM (consultar manual específico de cada modelo):
 - ⚠️ Viento medio máximo: 15-18 kt (modelos robustos hasta 20-22 kt)
 - ⚠️ Rachas absolutas: NO SUPERAR 20-22 kt (peligro estructural)
-- ⚠️ Diferencia rachas-viento medio: > 10 kt = ALTO RIESGO (turbulencia mecánica)
+- ⚠️ Diferencia rachas-viento medio: ≥ 8 kt = Moderada (precaución), > 12 kt = Severa (NO VOLAR)
 - ⚠️ Componente crosswind: Generalmente 10-12 kt máximo (consultar POH)
 - ⚠️ Turbulencia moderada o superior: NO VOLAR
 - ⚠️ Visibilidad < 5 km: MÍNIMO LEGAL (precaución extrema)
@@ -142,6 +136,8 @@ LÍMITES OPERACIONALES TÍPICOS ULM (consultar manual específico de cada modelo
 - ⚠️ Techo de nubes 1000-3000 ft: MVFR → ❌ PROHIBIDO (condiciones marginales)
 - ⚠️ Precipitación activa (lluvia/nieve): NO VOLAR (pérdida sustentación, visibilidad)
 - ⚠️ Nubosidad BKN/OVC < 3000 ft: PRECAUCIÓN (restricción vertical)
+
+⚠️ CONVECCIÓN/TORMENTAS: Si CAPE > 500 J/kg + Precip > 0 + Racha diff > 12 kt + Nubes > 50% → ❌ NO VOLAR. Incluso con CAPE bajo, turbulencia ≥ 8 kt es precaución. CAPE: <250 débil, 250-500 moderada, 500-2000 fuerte, >2000 extrema.
 
 CONSIDERACIONES GENERALES ULM:
 - Bajo peso: muy afectados por ráfagas y turbulencias
@@ -171,10 +167,36 @@ REGLA DE PLANIFICACIÓN DE HORARIOS (CRÍTICA):
     2) Horario de APERTURA del aeródromo de La Morgal
 - Si una buena ventana meteorológica cae fuera de horario operativo, debes descartarla.
 
-USO DE LEAS COMO REFERENCIA PARA LEMR:
-- LEMR no dispone de METAR operativo continuo.
-- Usa METAR/TAF de LEAS + pronóstico local + mapas sinópticos para inferir condiciones probables en LEMR.
-- Explica explícitamente la incertidumbre de esa extrapolación (distancia, orografía, microclima local).
+USO DE LEAS: LEMR sin METAR continuo. Usa LEAS + pronóstico local para inferir condiciones LEMR. Nota: diferencias por distancia/orografía.
+
+⚠️ PARÁMETROS CRÍTICOS PHASE 4:
+
+1️⃣ FREEZING LEVEL HEIGHT: Convierte m a ft (dividir entre 0.3048 o multiplicar por 3.28). 
+   - <1500m (<4920 ft): ⚠️ RIESGO RIME ICE (hielo en motor/superficies). 
+   - 1500-2500m: Cierta exposición si hay humedad visible.
+   - >2500m: Riesgo bajo.
+
+2️⃣ TURBULENCIA MECÁNICA (gusts - wind_mean):
+   - <8 kt: Ligera (tolerable).
+   - 8-12 kt: Moderada → ⚠️ Precaución aumentada, vuelo difícil para ULM.
+   - >12 kt: Severa → ❌ NO VOLAR (riesgo estructural/control).
+
+3️⃣ PRECIPITATION HOURS (duración lluvia en 24h):
+   - 0-2h: Lluvia ligera/dispersa, viable.
+   - 2-6h: Lluvia moderada sostenida, precaución.
+   - >10h: Lluvia persistente → NO VOLAR.
+
+4️⃣ SUNSHINE DURATION: Convierte seg a horas (divid entre 3600).
+   - <4h: Débil potencial térmico.
+   - 4-6h: Moderado, térmicas pequeñas.
+   - >8h: Excelente para termaling.
+
+5️⃣ SNOW DEPTH: Invierno solo (≥5cm afecta pista).
+   - >20cm: Cierre probable de pista.
+
+6️⃣ CLOUD LAYERS DIFERENCIADOS (bajo: <3000 ft, medio: 3-6km, alto: >6km):
+   - Bajo BKN/OVC: Restricción severa de altitude ULM.
+   - Medio/Alto: Afecta visuales térmicas pero menos crítico.
 """
 
 
@@ -271,6 +293,268 @@ def _is_timeout_error(exc: Exception) -> bool:
         or "read timeout" in text
         or "connection timeout" in text
     )
+
+
+def _map_weather_code(code: Optional[int]) -> str:
+    """
+    Mapea código WMO a emoji + descripción compacta para IA.
+    
+    Args:
+        code: Código WMO weather code
+    
+    Returns:
+        String con emoji + descripción (ej: "🌧️ LLUVIA")
+    """
+    if code is None:
+        return "⛅ VARIABLE"
+    
+    # Mapeo comprimido a categorías críticas para ULM
+    if code in (95, 96, 99):
+        return "⛈️ TORMENTA"
+    elif code in (80, 81, 82, 85, 86):
+        return "🌧️ CHUBASCOS"
+    elif code in (61, 63, 65):
+        return "🌧️ LLUVIA"
+    elif code in (51, 53, 55):
+        return "🌫️ LLOVIZNA"
+    elif code in (71, 73, 75, 77):
+        return "🌨️ NIEVE"
+    elif code in (45, 48):
+        return "🌫️ NIEBLA"
+    elif code in (2, 3):
+        return "☁️ NUBLADO"
+    elif code in (1,):
+        return "🌥️ PARCIAL"
+    else:
+        return "⛅ DESPEJADO"
+
+
+def _classify_lifted_index(li: Optional[float]) -> str:
+    """
+    Clasifica el Lifted Index para estabilidad atmosférica.
+    LI < 0 indica aire inestable facilitando convección.
+    
+    Args:
+        li: Lifted Index value
+    
+    Returns:
+        Clasificación: ESTABLE, INESTABLE DÉBIL, PROBABLE, FUERTE
+    """
+    if li is None:
+        return "DESCONOCIDO"
+    elif li > 0:
+        return "🟢 ESTABLE"  # Bueno
+    elif li > -2:
+        return "🟡 DÉBIL"  # Débil inestabilidad
+    elif li > -6:
+        return "🟠 PROBABLE"  # Tormentas probables
+    else:
+        return "🔴 FUERTE"  # Tormentas fuertes
+
+
+def _compute_cloud_base_summary(hourly_data: Optional[list]) -> Dict:
+    """
+    Estima base de nubes a partir de (Temp - Dewpoint) × 400 ft.
+    Solo para datos HORARIOS (HOY).
+    
+    Args:
+        hourly_data: Lista de dicts con 'temperature', 'dewpoint'
+    
+    Returns:
+        Dict con min_ft, hour_min, avg_ft, risk_level
+    """
+    if not hourly_data:
+        return {'min_ft': None, 'avg_ft': None, 'risk': 'DESCONOCIDO', 'summary': 'Sin datos'}
+    
+    cloud_bases = []
+    for row in hourly_data[:24]:
+        temp = row.get('temperature')
+        dewpoint = row.get('dewpoint')
+        if temp is not None and dewpoint is not None and temp >= dewpoint:
+            cloud_base_ft = (temp - dewpoint) * 400
+            cloud_bases.append({'ft': cloud_base_ft, 'time': row.get('time', '')})
+    
+    if not cloud_bases:
+        return {'min_ft': None, 'avg_ft': None, 'risk': 'DESCONOCIDO', 'summary': 'Sin datos'}
+    
+    min_row = min(cloud_bases, key=lambda x: x['ft'])
+    min_ft = int(min_row['ft'])
+    hour_str = min_row['time'].split('T')[1][:5] if 'T' in min_row['time'] else '??:??'
+    avg_ft = int(sum(c['ft'] for c in cloud_bases) / len(cloud_bases))
+    
+    # Clasificar riesgo
+    if min_ft < 1000:
+        risk = 'ALTO'
+    elif min_ft < 2000:
+        risk = 'MODERADO'
+    else:
+        risk = 'BAJO'
+    
+    return {
+        'min_ft': min_ft,
+        'hour_min': hour_str,
+        'avg_ft': avg_ft,
+        'risk': risk,
+        'summary': f"mín {min_ft} ft ({hour_str}) | media {avg_ft} ft | {risk}"
+    }
+
+
+def _compute_visibility_summary(hourly_data: Optional[list]) -> Dict:
+    """
+    Calcula visibilidad mínima y media del día (HOY).
+    Solo para datos HORARIOS.
+    
+    Args:
+        hourly_data: Lista de dicts con 'visibility' (en km)
+    
+    Returns:
+        Dict con min_km, hour_min, avg_km, risk_level
+    """
+    if not hourly_data:
+        return {'min_km': None, 'avg_km': None, 'risk': 'DESCONOCIDO', 'summary': 'Sin datos'}
+    
+    visibilities = []
+    for row in hourly_data[:24]:
+        vis = row.get('visibility')
+        if vis is not None and vis > 0:
+            visibilities.append({'km': vis, 'time': row.get('time', '')})
+    
+    if not visibilities:
+        return {'min_km': None, 'avg_km': None, 'risk': 'DESCONOCIDO', 'summary': 'Sin datos'}
+    
+    min_row = min(visibilities, key=lambda x: x['km'])
+    min_km = min_row['km']
+    hour_str = min_row['time'].split('T')[1][:5] if 'T' in min_row['time'] else '??:??'
+    avg_km = sum(v['km'] for v in visibilities) / len(visibilities)
+    
+    # Clasificar riesgo (límite legal ULM 5km)
+    if min_km < 3:
+        risk = 'ALTO'
+    elif min_km < 5:
+        risk = 'MODERADO'
+    else:
+        risk = 'BAJO'
+    
+    return {
+        'min_km': round(min_km, 1),
+        'hour_min': hour_str,
+        'avg_km': round(avg_km, 1),
+        'risk': risk,
+        'summary': f"mín {min_km:.1f} km ({hour_str}) | media {avg_km:.1f} km | {risk}"
+    }
+
+
+def _detect_convective_risk(
+    cape: Optional[float],
+    precipitation: Optional[float],
+    wind_speed_kmh: Optional[float],
+    wind_gusts_kmh: Optional[float],
+    cloud_cover_low: Optional[float],
+    weather_code: Optional[int] = None,
+    lifted_index: Optional[float] = None,
+) -> Dict:
+    """
+    Detecta riesgo de convección probable (tormentas) basado en múltiples indicadores.
+    
+    Criterios de convección probable:
+    1. CAPE > 500 J/kg (energía disponible para convección)
+    2. Precipitación > 0 mm/h (desarrollo convectivo)
+    3. Racha ≥ viento medio + 8–10 kt (patrón de downdrafts)
+    4. Nubosidad BAJA > 50% (estratos/stratus fractus = peligro ULM)
+    5. Weather code 95-99 = TORMENTA (veto automático)
+    6. Lifted Index < -6 = Tormentas fuertes (indicador complementario)
+    
+    Args:
+        cape: CAPE value (J/kg)
+        precipitation: Precipitation rate (mm/h)
+        wind_speed_kmh: Mean wind speed (km/h)
+        wind_gusts_kmh: Wind gust speed (km/h)
+        cloud_cover_low: Low cloud cover percentage (estratos)
+        weather_code: WMO weather code (95-99 = tormenta)
+        lifted_index: Atmospheric stability index
+    
+    Returns:
+        Dict with convection risk assessment
+    """
+    result = {
+        'has_convective_risk': False,
+        'risk_level': 'NULO',  # NULO, BAJO, MODERADO, ALTO, CRÍTICO
+        'indicators': [],
+        'summary': ''
+    }
+    
+    if all(v is None for v in [cape, precipitation, wind_speed_kmh, wind_gusts_kmh, cloud_cover_low, weather_code, lifted_index]):
+        result['summary'] = 'Datos insuficientes para evaluar riesgo convectivo'
+        return result
+    
+    # FILTRO CRÍTICO: Weather code 95-99 = TORMENTA AUTOMÁTICA
+    if weather_code and weather_code in (95, 96, 99):
+        result['risk_level'] = 'CRÍTICO'
+        result['has_convective_risk'] = True
+        result['indicators'].append("🔴 CÓDIGO 95-99: TORMENTA ACTIVA")
+        result['summary'] = '⚠️⚠️ RIESGO CONVECTIVO CRÍTICO - Código WMO 95-99 detectado. Tormenta activa en zona. ❌ NO VOLAR'
+        return result
+    
+    indicators_met = 0
+    
+    # Indicador 1: CAPE > 500 J/kg
+    if cape and cape > 500:
+        result['indicators'].append(f"🔴 CAPE {cape:.0f} J/kg")
+        indicators_met += 1
+    elif cape and cape > 250:
+        result['indicators'].append(f"🟡 CAPE {cape:.0f} J/kg")
+    
+    # Indicador 2: Precipitación > 0 mm/h
+    if precipitation and precipitation > 0:
+        result['indicators'].append(f"🔴 Precip {precipitation:.1f} mm/h")
+        indicators_met += 1
+    
+    # Indicador 3: Diferencia rachas-viento medio ≥ 8-10 kt
+    if wind_speed_kmh and wind_gusts_kmh and wind_speed_kmh > 0:
+        wind_speed_kt = wind_speed_kmh / 1.852
+        wind_gusts_kt = wind_gusts_kmh / 1.852
+        gust_diff_kt = wind_gusts_kt - wind_speed_kt
+        
+        if gust_diff_kt >= 8:
+            result['indicators'].append(f"🔴 Racha Δ {gust_diff_kt:.1f} kt")
+            indicators_met += 1
+        elif gust_diff_kt >= 5:
+            result['indicators'].append(f"🟡 Racha Δ {gust_diff_kt:.1f} kt")
+    
+    # Indicador 4: Nubosidad BAJA creciente (>50%) - MÁS CRÍTICO PARA ULM
+    if cloud_cover_low and cloud_cover_low > 50:
+        result['indicators'].append(f"🟡 Nubes baja {cloud_cover_low:.0f}%")
+        if cloud_cover_low > 75:
+            indicators_met += 0.5  # Nubosidad baja estratos = riesgo para ULM
+    
+    # Indicador 5: Lifted Index < -6 = Tormentas fuertes (complementa CAPE)
+    if lifted_index and lifted_index < -6:
+        result['indicators'].append(f"🔴 Lifted Index {lifted_index:.1f} (tormentas fuertes)")
+        indicators_met += 1
+    elif lifted_index and lifted_index < -3:
+        result['indicators'].append(f"🟡 Lifted Index {lifted_index:.1f} (probable)")
+    
+    # Determinar nivel de riesgo basado en indicadores cumplidos
+    if indicators_met >= 3:
+        result['risk_level'] = 'CRÍTICO'
+        result['has_convective_risk'] = True
+        result['summary'] = '⚠️⚠️ RIESGO CONVECTIVO CRÍTICO - Más de 3 indicadores presentes. Posibilidad muy alta de tormentas/cumulonimbos. ❌ NO VOLAR'
+    elif indicators_met >= 2.5:
+        result['risk_level'] = 'ALTO'
+        result['has_convective_risk'] = True
+        result['summary'] = '⚠️ RIESGO CONVECTIVO ALTO - Múltiples indicadores presentes. Posibilidad significativa de desarrollo convectivo. Reconsiderar vuelo.'
+    elif indicators_met >= 1.5:
+        result['risk_level'] = 'MODERADO'
+        result['has_convective_risk'] = True
+        result['summary'] = '⚠️ RIESGO CONVECTIVO MODERADO - Algunos indicadores presentes. Monitora evolución meteorológica.'
+    elif result['indicators']:
+        result['risk_level'] = 'BAJO'
+        result['summary'] = '🟡 RIESGO CONVECTIVO BAJO - Indicadores débiles o aislados.'
+    else:
+        result['risk_level'] = 'NULO'
+        result['summary'] = '✅ Sin indicadores de convección probable.'
+    
+    return result
 
 
 def _create_chat_completion_with_fallback(
@@ -372,6 +656,7 @@ def interpret_fused_forecast_with_ai(
     try:
         current = weather_data.get("current", {}) if weather_data else {}
         daily = weather_data.get("daily_forecast", []) if weather_data else []
+        hourly_om = weather_data.get("hourly_forecast", []) if weather_data else []
         windy_daily = windy_data.get("daily_summary", []) if windy_data else []
         windy_hourly = windy_data.get("hourly", []) if windy_data else []
 
@@ -379,26 +664,102 @@ def interpret_fused_forecast_with_ai(
         labels = ["HOY", "MAÑANA", "PASADO MAÑANA", "DENTRO DE 3 DÍAS"]
         for idx, row in enumerate(daily[:4]):
             label = labels[idx] if idx < len(labels) else f"DÍA +{idx}"
+            weather_emoji = _map_weather_code(row.get('weather_code'))
+
+            # --- campos base ---
+            cape_max = row.get('cape_max')
+            cape_str = f", CAPE máx {cape_max:.0f} J/kg" if cape_max is not None else ""
+            precip_h = row.get('precipitation_hours')
+            precip_h_str = f", precip {precip_h:.0f}h" if precip_h is not None else ""
+            sun_sec = row.get('sunshine_duration')
+            sun_h_str = f", sol {sun_sec / 3600:.1f}h" if sun_sec is not None else ""
+
+            # --- Phase 4 pre-calculados en Python (solo horas diurnas) ---
+            fl_m = row.get('freezing_level_min_m')
+            fl_str = ""
+            if fl_m is not None:
+                fl_ft = row.get('freezing_level_min_ft', round(fl_m * 3.28084))
+                fl_tag = ("⚠️ RIME" if fl_m < 1500
+                          else "🟡 exp" if fl_m < 2500
+                          else "🟢 ok")
+                fl_str = f", FL_min {fl_m}m/{fl_ft}ft {fl_tag}"
+            turb = row.get('turb_diff_max_kt')
+            turb_str = ""
+            if turb is not None:
+                turb_tag = ("🔴 SEVERA" if turb > 12
+                            else "🟡 MOD" if turb > 8
+                            else "🟢 lig")
+                turb_str = f", turb_diff_max {turb}kt {turb_tag}"
+            snow = row.get('snow_max_cm')
+            snow_str = f", nieve {snow}cm" if snow and snow > 0 else ""
+            cl_low  = row.get('cloud_low_max')
+            cl_mid  = row.get('cloud_mid_max')
+            cl_high = row.get('cloud_high_max')
+            clouds_str = ""
+            if cl_low is not None:
+                low_tag = " 🔴BKN" if cl_low > 50 else ""
+                clouds_str = f", nubes_dia BAJA {cl_low}%{low_tag}/MED {cl_mid}%/ALT {cl_high}%"
+
+            # --- hora amanecer/atardecer: solo la hora HH:MM ---
+            sunrise_raw = row.get('sunrise', 'N/A')
+            sunset_raw  = row.get('sunset',  'N/A')
+            sunrise_hm  = sunrise_raw.split('T')[1][:5] if sunrise_raw and 'T' in sunrise_raw else sunrise_raw
+            sunset_hm   = sunset_raw.split('T')[1][:5]  if sunset_raw  and 'T' in sunset_raw  else sunset_raw
+
+            # --- patrón mañana→tarde (solo si hay variación significativa) ---
+            man_gust = row.get('gust_man_max')
+            tard_gust = row.get('gust_tard_max')
+            man_cl   = row.get('cloud_low_man_max')
+            tard_cl  = row.get('cloud_low_tard_max')
+            peak_h   = row.get('peak_gust_hour')
+            trend_parts = []
+            if man_gust is not None and tard_gust is not None:
+                diff = tard_gust - man_gust
+                if abs(diff) >= 10:  # solo si la diferencia es operacionalmente relevante
+                    arrow = "📈" if diff > 0 else "📉"
+                    trend_parts.append(f"rachas mañ {man_gust:.0f}→tard {tard_gust:.0f}km/h {arrow}")
+            if man_cl is not None and tard_cl is not None and abs(tard_cl - man_cl) >= 20:
+                arrow = "📈" if tard_cl > man_cl else "📉"
+                trend_parts.append(f"nube_baja mañ {man_cl:.0f}%→tard {tard_cl:.0f}% {arrow}")
+            if peak_h and (man_gust or tard_gust):
+                trend_parts.append(f"pico {peak_h}h")
+            trend_str = ("\n  ↕️ tendencia: " + ", ".join(trend_parts)) if trend_parts else ""
+
             om_lines.append(
-                f"- {label}: temp {row.get('temp_min')}-{row.get('temp_max')}°C, "
-                f"viento máx {row.get('wind_max')} km/h, rachas máx {row.get('wind_gusts_max')} km/h, "
-                f"amanecer {row.get('sunrise')}, atardecer {row.get('sunset')}"
+                f"- {label}: {weather_emoji} temp {row.get('temp_min')}-{row.get('temp_max')}°C"
+                f", viento_max {row.get('wind_max')} km/h rachas_max {row.get('wind_gusts_max')} km/h"
+                f"{cape_str}{precip_h_str}{sun_h_str}"
+                f"{fl_str}{turb_str}{snow_str}{clouds_str}"
+                f", ☀️ {sunrise_hm} 🌇 {sunset_hm}"
+                f"{trend_str}"
             )
 
         windy_lines = []
         for row in windy_daily[:4]:
+            w_man  = row.get('gust_man_max')
+            w_tard = row.get('gust_tard_max')
+            w_trend = ""
+            if w_man is not None and w_tard is not None and abs(w_tard - w_man) >= 10:
+                arrow = "📈" if w_tard > w_man else "📉"
+                w_trend = f", rachas mañ {w_man:.0f}→tard {w_tard:.0f}km/h {arrow}"
             windy_lines.append(
                 f"- {row.get('date')}: viento máx {row.get('max_wind_kmh')} km/h, "
                 f"rachas máx {row.get('max_gust_kmh')} km/h, precip {row.get('precip_total_mm')} mm"
+                f"{w_trend}"
             )
 
         hourly_lines = []
-        for row in windy_hourly[:24]:  # Ampliado a 24 horas para mejor planificación
+        for row in windy_hourly[:24]:
             t = row.get("time_local", "")
             hh = t.split("T")[1][:5] if "T" in t else t
+            cloud = row.get('cloud_cover_pct')
+            precip = row.get('precip_3h_mm')
+            cloud_str  = f", nubes {cloud:.0f}%" if cloud is not None else ""
+            precip_str = f", precip {precip:.1f}mm" if precip and precip > 0.1 else ""
             hourly_lines.append(
                 f"- {hh}: {row.get('wind_kmh')} km/h ({row.get('wind_dir_deg')}°), "
                 f"rachas {row.get('gust_kmh')} km/h"
+                f"{cloud_str}{precip_str}"
             )
 
         aemet_hoy = (aemet_prediccion or {}).get("asturias_hoy", "")
@@ -415,7 +776,7 @@ def interpret_fused_forecast_with_ai(
         
         # Optimización: reducir AEMET para GitHub Models (límite 60k tokens/min)
         is_github = provider.lower() == "github"
-        aemet_limit = 600 if is_github else 1200  # Mitad de tamaño para GitHub Models
+        aemet_limit = 800 if is_github else 1200  # 800 para GitHub Models (balance calidad/tokens)
 
         map_urls = [u for u in (significant_map_urls or []) if u][:4]
         
@@ -425,16 +786,79 @@ def interpret_fused_forecast_with_ai(
         fecha_actual = now_local.strftime("%Y-%m-%d")
 
         # Formatear condiciones actuales Open-Meteo
+        # Omitir campos ya presentes en el METAR sintético (temp/dewpoint, viento kt, QNH, nubosidad)
+        # para no duplicar tokens; conservar los que el METAR no expresa.
         current_lines = []
         if current:
             current_lines.append(f"  - Hora: {current.get('time', 'N/A')}")
-            current_lines.append(f"  - Temperatura: {current.get('temperature', 'N/A')}°C (sensación {current.get('feels_like', 'N/A')}°C)")
-            current_lines.append(f"  - Humedad: {current.get('humidity', 'N/A')}%")
-            current_lines.append(f"  - Viento: {current.get('wind_speed', 'N/A')} km/h desde {current.get('wind_direction', 'N/A')}°")
-            current_lines.append(f"  - Rachas: {current.get('wind_gusts', 'N/A')} km/h")
-            current_lines.append(f"  - Nubosidad: {current.get('cloud_cover', 'N/A')}%")
-            current_lines.append(f"  - Presión: {current.get('pressure', 'N/A')} hPa")
+            current_lines.append(f"  - Temperatura: {current.get('temperature', 'N/A')}°C")  # útil para densidad/LCL
+            current_lines.append(f"  - Viento: {current.get('wind_speed', 'N/A')} km/h desde {current.get('wind_direction', 'N/A')}° (rachas {current.get('wind_gusts', 'N/A')} km/h)")  # km/h para cálculos ULM
             current_lines.append(f"  - Precipitación: {current.get('precipitation', 'N/A')} mm")
+            current_lines.append(f"  - CAPE (energía convectiva): {current.get('cape', 'N/A')} J/kg")
+        
+        # Detectar riesgo convectivo (tormentas) con los datos actuales
+        convection_risk = _detect_convective_risk(
+            cape=current.get('cape') if current else None,
+            precipitation=current.get('precipitation') if current else None,
+            wind_speed_kmh=current.get('wind_speed') if current else None,
+            wind_gusts_kmh=current.get('wind_gusts') if current else None,
+            cloud_cover_low=hourly_om[0].get('cloud_cover_low') if hourly_om else None,
+            weather_code=current.get('weather_code') if current else None,
+            lifted_index=None  # Open-Meteo no proporciona lifted_index directamente
+        )
+        
+        # Calcular resúmenes de techo y visibilidad (HOY solamente)
+        cloud_base_summary = _compute_cloud_base_summary(hourly_om[:24] if hourly_om else None)
+        visibility_summary = _compute_visibility_summary(hourly_om[:24] if hourly_om else None)
+        weathercode_emoji = _map_weather_code(current.get('weather_code') if current else None)
+        
+        # Formato compacto del análisis convectivo
+        convection_analysis = f"⚠️ RIESGO CONVECTIVO: {convection_risk['risk_level']}"
+        if convection_risk['indicators']:
+            convection_analysis += f"\n  • {' | '.join(convection_risk['indicators'][:3])}"  # Máximo 3 indicadores para ahorrar tokens
+        convection_analysis += f"\n  → {convection_risk['summary']}"
+        
+        # Agregar resúmenes de techo, visibilidad y condición actual
+        if cloud_base_summary['min_ft']:
+            current_lines.append(f"  - ⬇️ Techo est: mín {cloud_base_summary['min_ft']} ft ({cloud_base_summary['hour_min']}) | media {cloud_base_summary['avg_ft']} ft | {cloud_base_summary['risk']}")
+        if visibility_summary['min_km']:
+            current_lines.append(f"  - 👁️ Visibilidad: mín {visibility_summary['min_km']} km ({visibility_summary['hour_min']}) | media {visibility_summary['avg_km']} km | {visibility_summary['risk']}")
+        current_lines.append(f"  - ☁️ Condición: {weathercode_emoji}")
+
+        # Phase 4 ya está pre-calculado en weather_service y viaja dentro de daily (om_lines)
+        # No se necesita procesamiento adicional aquí
+
+        # Open-Meteo horario HOY — solo franjas operativas relevantes desde ahora en adelante
+        # Invierno (oct-mar): 09:00-20:00 | Verano (abr-sep): 09:00-21:45
+        _is_summer = now_local.month in range(4, 10)
+        _close_hour = 21 if _is_summer else 20
+        _cur_hour = now_local.hour
+        om_hoy_hourly_lines = []
+        for _h in hourly_om:
+            _t = _h.get('time', '')
+            if not _t or _t[:10] != fecha_actual:
+                continue
+            _hh = int(_t[11:13]) if len(_t) >= 13 else -1
+            # Solo horas desde la actual hasta el cierre del aeródromo
+            if _hh < max(9, _cur_hour) or _hh > _close_hour:
+                continue
+            if _h.get('is_day') != 1:
+                continue
+            _wind  = _h.get('wind_speed')
+            _gusts = _h.get('wind_gusts')
+            _cl_lo = _h.get('cloud_cover_low')
+            _vis   = _h.get('visibility')
+            _wcode = _h.get('weather_code')
+            _wx    = _map_weather_code(_wcode)
+            _parts = [f"{_t[11:16]}:"]
+            if _wind is not None and _gusts is not None:
+                _parts.append(f"{_wind:.0f}/{_gusts:.0f}km/h")
+            if _cl_lo is not None:
+                _parts.append(f"nube_baja {_cl_lo:.0f}%")
+            if _vis is not None and _vis < 10:
+                _parts.append(f"vis {_vis:.1f}km")
+            _parts.append(_wx)
+            om_hoy_hourly_lines.append("  " + " ".join(_parts))
 
         user_message = f"""Actúa como experto en meteorología aeronáutica ULM para {location} y crea una síntesis OPERATIVA final de alta precisión.
 
@@ -463,8 +887,12 @@ ULM: Solo vuela en VFR. En IFR y LIFR está prohibido. En MVFR al ser condicione
 
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
+{convection_analysis}
 
-Open-Meteo (resumen 4 días):
+Open-Meteo HOY horas pendientes (hasta cierre {_close_hour:02d}:00) — viento/rachas km/h, nube_baja, vis si <10km:
+{chr(10).join(om_hoy_hourly_lines) if om_hoy_hourly_lines else 'Sin datos horarios o aeródromo ya cerrado'}
+
+Open-Meteo (resumen 4 días) — incl. Phase 4: freezing_level, turbulencia, snow, nubes por capa, sol, precip_hours:
 {chr(10).join(om_lines) if om_lines else 'Sin datos'}
 
 Windy Point Forecast (resumen 4 días):
@@ -561,10 +989,15 @@ Formato obligatorio:
 5) **VEREDICTO POR DÍA** (los 4 días completos):
    - **HOY**: ✅ APTO / ⚠️ PRECAUCIÓN / ⚠️ TIEMPO LIMITADO / 🕐 CIERRE INMINENTE / ❌ NO APTO / 🕐 YA NO DISPONIBLE
      ⚠️ CRÍTICO: Para HOY usa las "CONDICIONES ACTUALES" (datos reales a las {hora_actual}), NO el pronóstico diario.
+     ⚠️ CRÍTICO: Si el "ANÁLISIS RIESGO CONVECTIVO" dice "CRÍTICO" o "ALTO" → ES ❌ NO APTO INMEDIATO (aunque otros parámetros sean buenos)
     - Evalúa PRIMERO el tiempo restante hasta el cierre:
       * Si < 1h: marca "🕐 CIERRE INMINENTE - Ya no merece la pena" (aunque las condiciones meteorológicas sean buenas)
       * Si 1-2h: marca "⚠️ TIEMPO LIMITADO - Solo para vuelo muy breve" (si las condiciones son aceptables)
       * Si > 2h: evalúa normalmente según condiciones meteorológicas (✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO)
+    - DESPUÉS del tiempo, evalúa el riesgo convectivo:
+      * Si "ANÁLISIS RIESGO CONVECTIVO" = CRÍTICO/ALTO → ❌ NO APTO, veto de vuelo por riesgo de tormentas
+      * Si = MODERADO → ⚠️ PRECAUCIÓN, no es ideal
+      * Si = BAJO/NULO → continúa evaluación normal
     - Si es ANTES de apertura, NO marques "YA NO DISPONIBLE": evalúa HOY igualmente y aclara que el aeródromo aún no está abierto.
      - Si las condiciones actuales son MEJORES que el pronóstico: indícalo (ej: "mejor de lo esperado")
      - Si las condiciones actuales son PEORES que el pronóstico: indícalo (ej: "rachas más fuertes de lo previsto")
@@ -572,47 +1005,52 @@ Formato obligatorio:
    - **PASADO MAÑANA**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **DENTRO DE 3 DÍAS**: ✅ APTO / ⚠️ PRECAUCIÓN / ❌ NO APTO (basado en pronóstico)
    - **JUSTIFICACIÓN MULTIFACTOR (OBLIGATORIA)**:
-     * Para HOY: cita los valores ACTUALES EN TIEMPO REAL (viento, rachas, nubosidad AHORA a las {hora_actual})
+     * Para HOY: cita los valores ACTUALES EN TIEMPO REAL (viento, rachas, nubosidad, CAPE AHORA a las {hora_actual})
      * Para HOY: MENCIONA SIEMPRE el tiempo restante hasta el cierre y su hora (ej: "quedan 3h hasta cierre a las 20:00")
-     * Para MAÑANA/PASADO: cita el pronóstico esperado
+     * Para HOY: Si hay riesgo convectivo (CRÍTICO/ALTO), menciónalo como factor de veto
+     * Para MAÑANA/PASADO: cita el pronóstico esperado incluyendo CAPE máximo si hay potencial convectivo
      * Cita explícitamente: viento medio (kt), rachas (kt), diferencia rachas-medio (kt)
      * Cita: nubosidad (techo ft, cobertura FEW/SCT/BKN/OVC)
      * Cita: precipitación (tipo, intensidad)
      * Cita: visibilidad (km)
      * Cita: componentes headwind/crosswind para pista recomendada
    - **CRITERIO ESTRICTO**:
-     * ✅ APTO: Todos los parámetros dentro de límites cómodos
-     * ⚠️ PRECAUCIÓN: 1 parámetro en límite (ej: rachas 18-20 kt)
-     * ❌ NO APTO: 2+ parámetros en límite O 1 factor crítico (rachas > 22 kt, lluvia, techo < 800 ft)
+     * ✅ APTO: Todos los parámetros dentro de límites cómodos + riesgo convectivo NULO/BAJO
+     * ⚠️ PRECAUCIÓN: 1 parámetro en límite (ej: rachas 18-20 kt) O riesgo convectivo MODERADO
+     * ❌ NO APTO: 2+ parámetros en límite O 1 factor crítico (rachas > 22 kt, lluvia, techo < 800 ft) O riesgo convectivo CRÍTICO/ALTO
 
 6) **RIESGOS CRÍTICOS** — OBLIGATORIO PARA LOS 4 DÍAS (HOY / MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS):
    ⚠️ NO omitas ningún día. Aunque el riesgo sea bajo, indícalo explícitamente.
-   Para cada día cita: rachas, nubosidad, precipitación, visibilidad y turbulenicia.
-   ⚠️ Para HOY: usa los valores de "CONDICIONES ACTUALES" (rachas, nubosidad, viento AHORA MISMO)
+   Para cada día cita: rachas, nubosidad, precipitación, visibilidad y turbulencia.
+   ⚠️ Para HOY: usa los valores de "CONDICIONES ACTUALES" (rachas, nubosidad, viento AHORA MISMO, CAPE ACTUAL)
    Factores a evaluar por día:
    - **Rachas**: diferencia con viento medio, valor absoluto (cita valores actuales para HOY)
    - **Precipitación**: tipo (lluvia/nieve/granizo), intensidad (-/mod/+)
    - **Nubosidad**: techo bajo (ft AGL), cobertura extensa (BKN/OVC)
    - **Visibilidad**: si < 8 km (precaución), si < 5 km (límite legal)
    - **Crosswind excesivo**: si > 12 kt para pista recomendada
-   - **Turbulencia mecánica por viento**: >15 kt precaución, >20 kt significativa, >25 kt fuerte/peligrosa
+   - **Turbulencia mecánica**: diferencia (gusts - wind_mean) ≥8 kt = moderada (precaución), >12 kt = severa (NO VOLAR). Rachas absolutas: >20 kt = precaución, >22 kt = límite estructural ULM.
    - **Densidad del aire**: Temp >25°C + presión <1010 hPa = baja densidad → ⚠️ rendimiento reducido. Temp <10°C + presión >1020 hPa = alta densidad → ✅ mejor rendimiento
-   - **Estabilidad atmosférica**: térmicas fuertes, convección, turbulencia orográfica
-   Formato obligatorio:
-   **HOY**: [lista de riesgos con valores]
-   **MAÑANA**: [lista de riesgos con valores]
-   **PASADO MAÑANA**: [lista de riesgos con valores]
-   **DENTRO DE 3 DÍAS**: [lista de riesgos con valores]
+   - **Estabilidad atmosférica / CONVECCIÓN**: 
+     * Si ANÁLISIS RIESGO CONVECTIVO muestra "CRÍTICO" o "ALTO" → es factor de ❌ NO APTO INMEDIATO
+     * Escapa la conclusión exacta del análisis dado: si dice "posibilidad muy alta de tormentas" / "riesgo convectivo significativo" → reporta explícitamente
+     * CAPE > 2000 J/kg es convección extrema (superceldas), CAPE 500-2000 es convección fuerte (tormentas potentes), CAPE < 250 es débil
+     * Si CAPE > 500 + Precip > 0 + diferencia rachas > 8 kt + nubosidad > 50% → convección probable → ❌ NO APTO
+   Formato obligatorio (SIEMPRE incluir convección si aplica):
+   **HOY**: [lista de riesgos: incluir convección ACTUAL si procede, CAPE actual, diferencia rachas, etc.]
+   **MAÑANA**: [lista de riesgos: incluir CAPE máximo previsto si hay potencial convectivo]
+   **PASADO MAÑANA**: [lista de riesgos: incluir CAPE máximo previsto si hay potencial convectivo]
+   **DENTRO DE 3 DÍAS**: [lista de riesgos: incluir CAPE máximo previsto si hay potencial convectivo]
 
 7) **FRANJAS HORARIAS RECOMENDADAS** — OBLIGATORIO PARA LOS 4 DÍAS (HOY / MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS):
    - NO omitas ningún día. Si no hay ventana segura para ese día, escribe "NO RECOMENDADA".
+   - Mañana: primeras horas (09:00-14:00 típico) | Tarde: horas posteriores (17:00-20:00 típico)
    - Considera amanecer, atardecer, horario operativo (invierno 09:00-20:00, verano 09:00-21:45) y condiciones meteorológicas.
-   - Para HOY: ten en cuenta la hora actual ({hora_actual}) y el tiempo restante hasta cierre.
-   Formato obligatorio:
-   **HOY**: MAÑANA 09:00-XX:00 ✅/⚠️ | TARDE XX:00-XX:00 ✅/⚠️ (o "NO RECOMENDADA")
-   **MAÑANA**: MAÑANA 09:00-XX:00 ✅/⚠️ | TARDE XX:00-XX:00 ✅/⚠️ (o "NO RECOMENDADA")
-   **PASADO MAÑANA**: MAÑANA 09:00-XX:00 ✅/⚠️ | TARDE XX:00-XX:00 ✅/⚠️ (o "NO RECOMENDADA")
-   **DENTRO DE 3 DÍAS**: MAÑANA 09:00-XX:00 ✅/⚠️ | TARDE XX:00-XX:00 ✅/⚠️ (o "NO RECOMENDADA")
+   Formato CORRECTO:
+   **HOY**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ✅ (o "NO RECOMENDADA")
+   **MAÑANA**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ⚠️ (o "NO RECOMENDADA")
+   **PASADO MAÑANA**: Mañana 09:00-14:00 ⚠️ | Tarde 17:00-20:00 ❌ (o "NO RECOMENDADA")
+   **DENTRO DE 3 DÍAS**: Mañana XXX ✅/⚠️/❌ | Tarde XXX ✅/⚠️/❌ (o "NO RECOMENDADA")
 
 8) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    - Indica claramente: "HOY", "MAÑANA", "PASADO MAÑANA" o "DENTRO DE 3 DÍAS"

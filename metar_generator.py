@@ -36,34 +36,84 @@ def kmh_to_knots(speed_kmh: float) -> int:
     return round(speed_kmh * 0.539957)
 
 
-def get_cloud_group(cloud_cover_percent: int, elevation_m: int = 180) -> str:
+def _cover_to_oktas_code(pct: int) -> Optional[str]:
+    """Devuelve el código de cobertura METAR para un porcentaje dado, o None si es SKC."""
+    if pct <= 12:
+        return None          # SKC / sin capa
+    elif pct <= 25:
+        return "FEW"         # 1-2 octas
+    elif pct <= 50:
+        return "SCT"         # 3-4 octas
+    elif pct <= 87:
+        return "BKN"         # 5-7 octas
+    else:
+        return "OVC"         # 8 octas
+
+
+def get_cloud_groups(
+    cloud_cover_total: int,
+    temp_c: Optional[float] = None,
+    dewpoint_c: Optional[float] = None,
+    cloud_cover_low: Optional[int] = None,
+    cloud_cover_mid: Optional[int] = None,
+) -> str:
     """
-    Mapea porcentaje de cobertura nubosa a grupo METAR.
-    Estima altura de nubes basándose en elevación del aeródromo.
-    
+    Genera los grupos de nubes METAR.
+    Si se dispone de capas diferenciadas (low/mid), genera múltiples grupos.
+    La altura de nubes bajas se estima con la fórmula LCL: (T - Td) × 400 ft.
+
     Args:
-        cloud_cover_percent: Cobertura de nubes en porcentaje (0-100)
-        elevation_m: Elevación del aeródromo en metros (default: 180m LEMR)
-    
+        cloud_cover_total: Cobertura total (%) — usado si no hay capas
+        temp_c: Temperatura actual (°C) — para LCL
+        dewpoint_c: Punto de rocío (°C) — para LCL
+        cloud_cover_low: Cobertura nubosa baja (%) de Open-Meteo hourly
+        cloud_cover_mid: Cobertura nubosa media (%) de Open-Meteo hourly
+
     Returns:
-        Grupo de nubes en formato METAR (ej: "SCT025", "BKN040", "FEW015")
+        String con uno o varios grupos METAR (ej: "FEW023 BKN065")
     """
-    if cloud_cover_percent <= 12:
-        return "SKC"  # Sky clear / CAVOK
-    
-    # Estimar altura de base de nubes en función de elevación
-    # LEMR está a 180m (590ft), asumimos nubes bajas típicas de Asturias
-    base_height_ft = 2000 + (elevation_m * 2)  # Aproximación conservadora
-    height_code = f"{int(base_height_ft / 100):03d}"
-    
-    if 13 <= cloud_cover_percent <= 25:
-        return f"FEW{height_code}"  # Few (1-2 octas)
-    elif 26 <= cloud_cover_percent <= 50:
-        return f"SCT{height_code}"  # Scattered (3-4 octas)
-    elif 51 <= cloud_cover_percent <= 87:
-        return f"BKN{height_code}"  # Broken (5-7 octas)
-    else:  # 88-100%
-        return f"OVC{height_code}"  # Overcast (8 octas)
+    # --- Altura base nubes bajas: LCL = (T - Td) × 400 ft ---
+    if temp_c is not None and dewpoint_c is not None and temp_c >= dewpoint_c:
+        lcl_ft = max(500, int((temp_c - dewpoint_c) * 400))
+    else:
+        lcl_ft = 2500  # Fallback conservador típico de Asturias
+    low_code  = f"{round(lcl_ft / 100):03d}"   # redondeado a centenas
+    mid_code  = "065"  # FL065 nominal (6500 ft) para nubes medias
+
+    groups = []
+
+    if cloud_cover_low is not None and cloud_cover_mid is not None:
+        # --- Capas diferenciadas disponibles ---
+        low_oktas = _cover_to_oktas_code(cloud_cover_low)
+        mid_oktas = _cover_to_oktas_code(cloud_cover_mid)
+
+        if low_oktas:
+            groups.append(f"{low_oktas}{low_code}")
+        if mid_oktas:
+            groups.append(f"{mid_oktas}{mid_code}")
+
+        # Si no hay ninguna capa pero la cobertura total es significativa,
+        # reportar con cobertura total como capa baja (degradación segura)
+        if not groups:
+            total_oktas = _cover_to_oktas_code(cloud_cover_total)
+            if total_oktas:
+                groups.append(f"{total_oktas}{low_code}")
+            else:
+                return "SKC"
+    else:
+        # --- Solo cobertura total disponible (fallback) ---
+        total_oktas = _cover_to_oktas_code(cloud_cover_total)
+        if total_oktas is None:
+            return "SKC"
+        groups.append(f"{total_oktas}{low_code}")
+
+    return " ".join(groups)
+
+
+# Alias de compatibilidad para código existente que llame a get_cloud_group
+def get_cloud_group(cloud_cover_percent: int, elevation_m: int = 180) -> str:
+    """Compatibilidad: genera un único grupo de nubes con altura fija."""
+    return get_cloud_groups(cloud_cover_percent)
 
 
 def get_weather_phenomena(weather_code: int) -> str:
@@ -144,7 +194,29 @@ def get_visibility(weather_code: int, cloud_cover: int) -> str:
     return "9999"  # 10km o más (CAVOK)
 
 
-def generate_metar_lemr(current_weather: Dict, icao: str = "LEMR", elevation_m: int = 180) -> Optional[str]:
+def generate_metar_lemr(
+    current_weather: Dict,
+    icao: str = "LEMR",
+    elevation_m: int = 180,
+    cloud_layers: Optional[Dict] = None,
+    visibility_km: Optional[float] = None,
+    dewpoint_c: Optional[float] = None,
+) -> Optional[str]:
+    """
+    Genera un METAR sintético para LEMR basándose en datos de Open-Meteo.
+
+    Args:
+        current_weather: Diccionario con datos actuales de Open-Meteo (current)
+        icao: Código ICAO del aeródromo
+        elevation_m: Elevación del aeródromo en metros
+        cloud_layers: Dict opcional con claves 'low', 'mid', 'high' (%)
+                      procedente de hourly_forecast[0] para capas diferenciadas
+        visibility_km: Visibilidad real en km de Open-Meteo hourly (más precisa
+                       que inferirla solo del weather_code)
+        dewpoint_c: Punto de rocío directo del modelo (°C), procedente de
+                    hourly_forecast[0]['dewpoint']. Más preciso que la fórmula
+                    Magnus derivada de la humedad relativa de 'current'.
+    """
     """
     Genera un METAR sintético para LEMR basándose en datos de Open-Meteo.
     
@@ -169,7 +241,7 @@ def generate_metar_lemr(current_weather: Dict, icao: str = "LEMR", elevation_m: 
         time_str = current_weather.get("time", "")
         
         # Validar datos críticos
-        if None in [temp, humidity, wind_speed, wind_dir, pressure]:
+        if any(v is None for v in [temp, humidity, wind_speed, wind_dir, pressure]):
             return None
         
         # Fecha y hora en formato METAR (DDHHMM)
@@ -188,28 +260,51 @@ def generate_metar_lemr(current_weather: Dict, icao: str = "LEMR", elevation_m: 
         # Viento
         wind_kt = kmh_to_knots(wind_speed)
         wind_dir_rounded = round(wind_dir / 10) * 10  # Redondear a 10°
-        
-        if wind_kt < 1:
+        # Bug fix: norte magnético es 360 en METAR, no 000 (que significa calma)
+        if wind_dir_rounded == 0 and wind_kt > 0:
+            wind_dir_rounded = 360
+
+        if wind_kt == 0:
             wind_group = "00000KT"  # Viento en calma
-        elif wind_gusts and wind_gusts > wind_speed + 5:
+        elif wind_gusts and (wind_gusts - wind_speed) >= 18.5:  # ≥10 kt según ICAO Annex 3
             gusts_kt = kmh_to_knots(wind_gusts)
             wind_group = f"{wind_dir_rounded:03d}{wind_kt:02d}G{gusts_kt:02d}KT"
         else:
             wind_group = f"{wind_dir_rounded:03d}{wind_kt:02d}KT"
-        
-        # Visibilidad
-        visibility = get_visibility(weather_code, cloud_cover)
+
+        # Visibilidad: usar valor real de Open-Meteo si disponible, si no inferir del código
+        if visibility_km is not None:
+            vis_m = int(visibility_km * 1000)
+            if vis_m >= 9999:
+                visibility = "9999"
+            elif vis_m >= 5000:
+                visibility = f"{round(vis_m / 100) * 100:04d}"
+            elif vis_m >= 800:
+                visibility = f"{round(vis_m / 100) * 100:04d}"
+            else:
+                visibility = f"{max(100, round(vis_m / 100) * 100):04d}"
+        else:
+            visibility = get_visibility(weather_code, cloud_cover)
         
         # Fenómenos meteorológicos
         wx = get_weather_phenomena(weather_code)
         wx_str = f" {wx}" if wx else ""
         
-        # Nubes
-        clouds = get_cloud_group(cloud_cover, elevation_m)
+        # Nubes: usar capas diferenciadas si disponibles, con base LCL calculada
+        # Preferir dewpoint directo del modelo (hourly) sobre Magnus derivado de humedad
+        dewpoint_for_lcl = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
+        cl = cloud_layers or {}
+        clouds = get_cloud_groups(
+            cloud_cover_total=cloud_cover,
+            temp_c=temp,
+            dewpoint_c=dewpoint_for_lcl,
+            cloud_cover_low=cl.get('low'),
+            cloud_cover_mid=cl.get('mid'),
+        )
         
         # Temperatura y punto de rocío
         temp_int = round(temp)
-        dewpoint = calculate_dewpoint(temp, humidity)
+        dewpoint = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
         dewpoint_int = round(dewpoint)
         
         # Formato con signo para temperaturas negativas
@@ -222,7 +317,9 @@ def generate_metar_lemr(current_weather: Dict, icao: str = "LEMR", elevation_m: 
         qnh = f"Q{pressure_int:04d}"
         
         # Ensamblar METAR
-        metar = f"METAR {icao} {day_hour}Z AUTO {wind_group} {visibility}{wx_str} {clouds} {temp_group} {qnh} NOSIG"
+        # Sin tendencia (NOSIG/BECMG/TEMPO): este METAR es AUTO generado desde datos numéricos,
+        # no hay observador ni sistema certificado para emitir tendencia de pronóstico.
+        metar = f"METAR {icao} {day_hour}Z AUTO {wind_group} {visibility}{wx_str} {clouds} {temp_group} {qnh}"
         
         # Limpiar espacios dobles
         metar = " ".join(metar.split())
