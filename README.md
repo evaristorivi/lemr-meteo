@@ -296,7 +296,7 @@ sudo systemctl restart lemr-meteo
 
 ## ⚠️ Nota de seguridad operacional
 
-La salida es apoyo a la decisión, no sustituye briefing oficial ni manual de vuelo del ULM.
+de la IA es un apoyo a las decisiones, no sustituyen al briefing oficial ni al manual de vuelo del ULM.
 Ante duda, **NO VOLAR**.
 
 ---
