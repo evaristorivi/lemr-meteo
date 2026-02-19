@@ -494,7 +494,114 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     pred_asturias_manana_label = f"📅 {format_date_spanish(tomorrow_date)}\n{pred_asturias_manana}" if pred_asturias_manana else f"Sin datos para {tomorrow_date.strftime('%d/%m/%Y')}"
     pred_asturias_pasado_manana_label = f"📅 {format_date_spanish(day_after_tomorrow_date)}\n{pred_asturias_pasado_manana}" if pred_asturias_pasado_manana else f"Sin datos para {day_after_tomorrow_date.strftime('%d/%m/%Y')}"
 
-    # ── Predicción AEMET municipal Llanera (4 días separados) ──
+    # ── Helpers Open-Meteo ──
+    def _deg_to_compass(deg):
+        """Convierte grados de viento a dirección cardinal."""
+        if deg is None:
+            return "VRB"
+        dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"]
+        return dirs[round(deg / 22.5) % 16]
+
+    def _format_openmeteo_day(day: dict, date_label: str) -> str:
+        """Formatea un día de datos Open-Meteo en texto legible para las cajas de predicción."""
+        import re as _re
+        out = [f"📅 {date_label}"]
+
+        t_min = day.get("temp_min")
+        t_max = day.get("temp_max")
+        dp_min = day.get("dewpoint_min")
+        dp_max = day.get("dewpoint_max")
+        if t_min is not None and t_max is not None:
+            temp_str = f"🌡️ Temperatura: {round(t_min)}/{round(t_max)}°C"
+            if dp_min is not None and dp_max is not None:
+                temp_str += f"  ·  Rocío: {round(dp_min)}/{round(dp_max)}°C"
+            out.append(temp_str)
+
+        desc = weather_code_to_description(day.get("weather_code"))
+        sun_s = day.get("sunshine_duration")
+        sun_h = round(sun_s / 3600, 1) if sun_s is not None else None
+        cielo_line = f"⛅ {desc}" if desc else ""
+        if sun_h is not None:
+            cielo_line += ("  ·  " if cielo_line else "") + f"☀️ Sol: {sun_h} h"
+        if cielo_line:
+            out.append(cielo_line)
+
+        precip_prob = day.get("precipitation_prob_max")
+        precip_sum = day.get("precipitation")
+        precip_hours = day.get("precipitation_hours")
+        precip_parts = []
+        if precip_prob is not None:
+            precip_parts.append(f"{round(precip_prob)}%")
+        if precip_sum is not None:
+            precip_parts.append(f"{precip_sum:.1f} mm")
+        if precip_hours:
+            precip_parts.append(f"{round(precip_hours)} h lluvia")
+        if precip_parts:
+            out.append("💧 Precip: " + "  ·  ".join(precip_parts))
+
+        wind_max = day.get("wind_max")
+        wind_gusts = day.get("wind_gusts_max")
+        wind_dir = _deg_to_compass(day.get("wind_direction_dominant"))
+        if wind_max is not None:
+            w_str = f"💨 Viento máx: {round(wind_max)} km/h ({wind_dir})"
+            if wind_gusts is not None:
+                w_str += f"  ·  Racha: {round(wind_gusts)} km/h"
+            out.append(w_str)
+
+        turb = day.get("turb_diff_max_kt")
+        if turb is not None:
+            turb_label = "leve" if turb < 8 else ("moderada ⚠️" if turb < 12 else "severa ❌")
+            out.append(f"🌬️ Turbulencia mec.: {turb} kt ({turb_label})")
+
+        cl_lo = day.get("cloud_low_max")
+        cl_mi = day.get("cloud_mid_max")
+        cl_hi = day.get("cloud_high_max")
+        if any(v is not None for v in [cl_lo, cl_mi, cl_hi]):
+            nube_parts = []
+            if cl_lo is not None: nube_parts.append(f"baja {cl_lo}%")
+            if cl_mi is not None: nube_parts.append(f"media {cl_mi}%")
+            if cl_hi is not None: nube_parts.append(f"alta {cl_hi}%")
+            out.append("☁️ Nubes — " + "  ·  ".join(nube_parts))
+
+        wm = day.get("wind_man_max")
+        gm = day.get("gust_man_max")
+        wt = day.get("wind_tard_max")
+        gt = day.get("gust_tard_max")
+        if wm is not None or gm is not None:
+            parts = []
+            if wm is not None: parts.append(f"viento {round(wm)} km/h")
+            if gm is not None: parts.append(f"racha {round(gm)} km/h")
+            out.append("🕗 Mañana → " + "  ·  ".join(parts))
+        if wt is not None or gt is not None:
+            parts = []
+            if wt is not None: parts.append(f"viento {round(wt)} km/h")
+            if gt is not None: parts.append(f"racha {round(gt)} km/h")
+            out.append("🕑 Tarde → " + "  ·  ".join(parts))
+
+        fl_m = day.get("freezing_level_min_m")
+        fl_ft = day.get("freezing_level_min_ft")
+        fl_t = day.get("freezing_level_min_time")
+        if fl_m is not None:
+            fl_str = f"❄️ Congelación min: {fl_m} m / {fl_ft} ft"
+            if fl_t:
+                fl_str += f" (a las {fl_t})"
+            out.append(fl_str)
+
+        cape = day.get("cape_max")
+        if cape is not None and cape > 0:
+            out.append(f"⚡ CAPE máx: {round(cape)} J/kg")
+
+        sunrise = day.get("sunrise")
+        sunset = day.get("sunset")
+        if sunrise and sunset:
+            sr = _re.search(r'T(\d{2}:\d{2})', sunrise)
+            ss = _re.search(r'T(\d{2}:\d{2})', sunset)
+            if sr and ss:
+                out.append(f"🌅 Sale: {sr.group(1)}  ·  Se pone: {ss.group(1)}")
+
+        return "\n".join(out)
+
+    # ── Predicción AEMET municipal Llanera (4 días separados) — SOLO para ref. interna ──
     def _format_llanera_day(d):
         """Formatea un día de datos de Llanera."""
         lines = []
@@ -577,53 +684,19 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         
         return "\n".join(lines)
     
-    pred_llanera = get_prediccion_llanera()
-    if not pred_llanera:
-        print("⚠️ AEMET: predicción municipal Llanera no disponible")
-        _tg_alert(
-            "AEMET prediccion municipal Llanera (33035) no disponible. Sin datos diarios de Llanera.",
-            source="aemet",
-            level="WARNING",
-        )
-    pred_llanera_dia0 = ""
-    pred_llanera_dia1 = ""
-    pred_llanera_dia2 = ""
-    pred_llanera_dia3 = ""
-    icon_llanera_0 = "🏔️"
-    icon_llanera_1 = "🏔️"
-    icon_llanera_2 = "🏔️"
-    icon_llanera_3 = "🏔️"
-    
-    if pred_llanera:
-        try:
-            dias = pred_llanera.get("prediccion", {}).get("dia", [])
-            
-            # Día 0 (hoy)
-            if len(dias) > 0:
-                pred_llanera_dia0 = _format_llanera_day(dias[0])
-                icon_llanera_0 = get_weather_icon_from_text(pred_llanera_dia0)
-                pred_llanera_dia0 = f"📅 {format_date_spanish(today_date)}\n{pred_llanera_dia0}"
-            
-            # Día 1 (mañana)
-            if len(dias) > 1:
-                pred_llanera_dia1 = _format_llanera_day(dias[1])
-                icon_llanera_1 = get_weather_icon_from_text(pred_llanera_dia1)
-                pred_llanera_dia1 = f"📅 {format_date_spanish(tomorrow_date)}\n{pred_llanera_dia1}"
-            
-            # Día 2 (pasado mañana)
-            if len(dias) > 2:
-                pred_llanera_dia2 = _format_llanera_day(dias[2])
-                icon_llanera_2 = get_weather_icon_from_text(pred_llanera_dia2)
-                pred_llanera_dia2 = f"📅 {format_date_spanish(day_after_tomorrow_date)}\n{pred_llanera_dia2}"
-            
-            # Día 3 (tercer día)
-            if len(dias) > 3:
-                day3_date = today_date + timedelta(days=3)
-                pred_llanera_dia3 = _format_llanera_day(dias[3])
-                icon_llanera_3 = get_weather_icon_from_text(pred_llanera_dia3)
-                pred_llanera_dia3 = f"📅 {format_date_spanish(day3_date)}\n{pred_llanera_dia3}"
-        except Exception:
-            pred_llanera_dia0 = f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
+    # ── Predicción diaria Open-Meteo — La Morgal (reemplaza cajas AEMET Llanera) ──
+    _day_dates = [
+        today_date,
+        tomorrow_date,
+        today_date + timedelta(days=2),
+        today_date + timedelta(days=3),
+    ]
+    _om_days = [_format_openmeteo_day(daily[i], format_date_spanish(_day_dates[i])) if i < len(daily) else "" for i in range(4)]
+    pred_llanera_dia0, pred_llanera_dia1, pred_llanera_dia2, pred_llanera_dia3 = _om_days
+    icon_llanera_0 = get_weather_icon_from_text(weather_code_to_description((daily[0].get("weather_code")) if daily else None) or "") or "🌤️"
+    icon_llanera_1 = get_weather_icon_from_text(weather_code_to_description((daily[1].get("weather_code")) if len(daily) > 1 else None) or "") or "🌤️"
+    icon_llanera_2 = get_weather_icon_from_text(weather_code_to_description((daily[2].get("weather_code")) if len(daily) > 2 else None) or "") or "🌤️"
+    icon_llanera_3 = get_weather_icon_from_text(weather_code_to_description((daily[3].get("weather_code")) if len(daily) > 3 else None) or "") or "🌤️"
 
     # ── Avisos CAP y Llanera horaria (para la IA) ──
     avisos_cap = get_avisos_cap_asturias()

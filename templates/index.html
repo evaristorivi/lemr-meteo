@@ -711,8 +711,9 @@
       <nav class="nav-menu">
         <a href="#condiciones">🌤️ Actual</a>
         <a href="#windy">🌬️ Windy</a>
-        <a href="#pronostico">📅 3 días</a>
+        <a href="#pronostico">📍 Resumen</a>
         <a href="#aemet-asturias">🌦️ AEMET</a>
+        <a href="#aemet-llanera">🌤️ 4 días</a>
         <a href="#analisis-ia">👨‍✈️ IA</a>
         <a href="#mapa-analisis">🗺️ Mapa</a>
         <a href="#ogimet-semana">📆 7 días</a>
@@ -762,7 +763,7 @@
 
     <!-- TRES DÍAS CON MAPAS SIGNIFICATIVOS -->
     <section class="card" id="pronostico">
-      <h2>📅 Pronóstico 3 días con mapas significativos AEMET</h2>
+      <h2>📍 Resumen meteorológico con mapas significativos AEMET</h2>
       <div id="days" class="days"></div>
     </section>
 
@@ -784,19 +785,19 @@
 
     <section class="grid-llanera" id="aemet-llanera">
       <article class="card">
-        <h2 id="pred-llanera-0-title">🏔️ Predicción AEMET — Llanera (La Morgal) hoy</h2>
+        <h2 id="pred-llanera-0-title">�️ Open-Meteo — La Morgal hoy</h2>
         <p id="pred-llanera-0" class="pred-text"></p>
       </article>
       <article class="card">
-        <h2 id="pred-llanera-1-title">🏔️ Predicción AEMET — Llanera (La Morgal) mañana</h2>
+        <h2 id="pred-llanera-1-title">🌤️ Open-Meteo — La Morgal mañana</h2>
         <p id="pred-llanera-1" class="pred-text"></p>
       </article>
       <article class="card">
-        <h2 id="pred-llanera-2-title">🏔️ Predicción AEMET — Llanera (La Morgal) pasado mañana</h2>
+        <h2 id="pred-llanera-2-title">🌤️ Open-Meteo — La Morgal pasado mañana</h2>
         <p id="pred-llanera-2" class="pred-text"></p>
       </article>
       <article class="card">
-        <h2 id="pred-llanera-3-title">🏔️ Predicción AEMET — Llanera (La Morgal) 3º día</h2>
+        <h2 id="pred-llanera-3-title">🌤️ Open-Meteo — La Morgal 3º día</h2>
         <p id="pred-llanera-3" class="pred-text"></p>
       </article>
     </section>
@@ -1198,16 +1199,16 @@
         document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
       }
       if (pred.llanera_dia0_icon) {
-        document.getElementById("pred-llanera-0-title").textContent = `${pred.llanera_dia0_icon} Predicción AEMET — Llanera (La Morgal) hoy`;
+        document.getElementById("pred-llanera-0-title").textContent = `${pred.llanera_dia0_icon} Open-Meteo — La Morgal hoy`;
       }
       if (pred.llanera_dia1_icon) {
-        document.getElementById("pred-llanera-1-title").textContent = `${pred.llanera_dia1_icon} Predicción AEMET — Llanera (La Morgal) mañana`;
+        document.getElementById("pred-llanera-1-title").textContent = `${pred.llanera_dia1_icon} Open-Meteo — La Morgal mañana`;
       }
       if (pred.llanera_dia2_icon) {
-        document.getElementById("pred-llanera-2-title").textContent = `${pred.llanera_dia2_icon} Predicción AEMET — Llanera (La Morgal) pasado mañana`;
+        document.getElementById("pred-llanera-2-title").textContent = `${pred.llanera_dia2_icon} Open-Meteo — La Morgal pasado mañana`;
       }
       if (pred.llanera_dia3_icon) {
-        document.getElementById("pred-llanera-3-title").textContent = `${pred.llanera_dia3_icon} Predicción AEMET — Llanera (La Morgal) 3º día`;
+        document.getElementById("pred-llanera-3-title").textContent = `${pred.llanera_dia3_icon} Open-Meteo — La Morgal 3º día`;
       }
 
       // IA - Convertir markdown a HTML
