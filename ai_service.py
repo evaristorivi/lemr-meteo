@@ -178,7 +178,7 @@ Si Windy y Open-Meteo coinciden en que una franja horaria (ej. 10-14h) tiene vie
 2️⃣ TURBULENCIA MECÁNICA (gusts - wind_mean):
    - <8 kt: Ligera (tolerable).
    - 8-12 kt: Moderada → ⚠️ Precaución aumentada, vuelo difícil para ULM.
-   - >12 kt: Severa → ❌ NO VOLAR (riesgo estructural/control).
+   - >12 kt: Severa → ⚠️ Precaución máxima. ❌ NO VOLAR si se combina con otro factor límite (techo bajo, visibilidad reducida, viento medio alto).
 
 3️⃣ PRECIPITATION HOURS (duración lluvia en 24h):
    - 0-2h: Lluvia ligera/dispersa, viable.
@@ -955,7 +955,7 @@ Formato de cada sección:
    - ✅ **SÍ, ACEPTABLE**: rachas ≤15 kt Y viento medio ≤10 kt Y techo >2500 ft Y vis >8 km
    - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: rachas 15-22 kt O viento medio 10-15 kt O techo 1500-2500 ft O vis 5-8 km
    - 🏠 **NO MERECE LA PENA**: en el límite pero sin factor ❌ — no vale la pena el desplazamiento
-   - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km  En el bar hay caldo de gaviota 🍲
+   - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km. En el bar hay caldo de gaviota 🍲
 
    ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Calcula cuánto tiempo queda desde {hora_actual} hasta el cierre ({_close_hour:02d}:00). Si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. Si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
    🚫 ESTA REGLA SOLO APLICA A HOY. MAÑANA/PASADO/3D nunca pueden ser 🕐 ni ⚠️ TIEMPO LIMITADO por razón de hora.
@@ -977,7 +977,7 @@ Formato de cada sección:
    - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
 
 10) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
-   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
 11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
@@ -991,7 +991,7 @@ Reglas CRÍTICAS:
 - **CRITERIO DE RACHAS — COMPROBACIÓN OBLIGATORIA ANTES DE ESCRIBIR CADA DÍA**:
   * PASO 1: ¿Rachas > 22 kt EN LA MEJOR VENTANA HORARIA? → ❌ NO APTO. STOP. No puede ser ⚠️.
   * PASO 1b: ¿Rachas > 22 kt SOLO FUERA de la mejor ventana (ej. solo por la tarde)? → el veredicto sigue siendo el de la ventana buena (⚠️ o ✅), pero OBLIGATORIO advertir en el texto "volar ANTES de las Xh, rachas >22 kt a partir del mediodía".
-  * PASO 2: ¿Diff racha-viento > 10 kt EN la mejor ventana? → ⚠️ PRECAUCIÓN como mínimo.
+  * PASO 2: ¿Diff racha-viento > 12 kt EN la mejor ventana? → ⚠️ PRECAUCIÓN como mínimo.
   * Ejemplos: 5G18KT = diff 13kt → ⚠️ | mañana ✅ + tarde 5G24KT → ⚠️ con aviso | 15G25KT todo el día → ❌
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
 - **UNIDADES**: Open-Meteo/Windy en km/h → kt: divide entre 1.852. NUNCA etiquetes kt sin convertir. METAR ya viene en kt.
