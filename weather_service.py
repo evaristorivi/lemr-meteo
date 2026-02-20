@@ -3,8 +3,110 @@ Módulo para obtener datos meteorológicos de ubicaciones sin servicio METAR
 """
 import requests
 from typing import Optional, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 import config
+
+
+def _compute_fog_risk(date_str: str, hourly_forecast: list) -> dict:
+    """
+    Evalúa el riesgo de niebla matinal para una fecha dada.
+    Analiza desde las 22:00 de la noche previa hasta las 13:00 del día,
+    cubriendo tanto la formación nocturna como la persistencia en horario operativo.
+
+    Criterios (niebla de radiación / advectiva, típica en La Morgal):
+      - Spread T−Td ≤ 3°C  (condición necesaria; ≤2°C = riesgo alto)
+      - Viento ≤ 10 km/h      (>10 mezcla y disipa)
+      - Sin precipitación activa (pp < 30%)
+      - Visibilidad < 5 km     (refuerza, <1 km = confirmación)
+      - WX code 45/48          (niebla detectada directamente por el modelo)
+    """
+    target_dt = datetime.fromisoformat(date_str)
+    prev_date = (target_dt - timedelta(days=1)).strftime('%Y-%m-%d')
+
+    fog_hours = [
+        h for h in hourly_forecast
+        if len(h.get('time', '')) >= 13
+        and (
+            (h['time'][:10] == prev_date and int(h['time'][11:13]) >= 22)
+            or (h['time'][:10] == date_str and int(h['time'][11:13]) <= 13)
+        )
+    ]
+
+    if not fog_hours:
+        return {'level': None}
+
+    risky = []
+    for h in fog_hours:
+        temp = h.get('temperature')
+        dp   = h.get('dewpoint')
+        wind = h.get('wind_speed') or 0
+        pp   = h.get('precipitation_prob') or 0
+        wx   = h.get('weather_code') or 0
+        vis  = h.get('visibility')  # ya en km
+
+        if pp > 30:
+            continue  # lluvia activa inhibe niebla de radiación
+
+        # Niebla confirmada por el modelo WMO
+        if wx in (45, 48):
+            risky.append({'time': h['time'][11:16], 'spread': 0.0,
+                          'wind': round(wind, 1), 'score': 5, 'confirmed': True})
+            continue
+
+        if temp is None or dp is None:
+            continue
+
+        spread = temp - dp
+        score  = 0
+
+        if spread <= 2:
+            score += 2
+        elif spread <= 3:
+            score += 1
+        else:
+            continue  # spread > 3°C → sin riesgo
+
+        if wind <= 5:
+            score += 2
+        elif wind <= 10:
+            score += 1
+
+        if vis is not None:
+            if vis < 1:
+                score += 2
+            elif vis < 5:
+                score += 1
+
+        if score >= 2:
+            risky.append({'time': h['time'][11:16], 'spread': round(spread, 1),
+                          'wind': round(wind, 1), 'score': score, 'confirmed': False})
+
+    if not risky:
+        return {'level': 'BAJO'}
+
+    max_score = max(r['score'] for r in risky)
+    confirmed = any(r.get('confirmed') for r in risky)
+    best      = max(risky, key=lambda r: r['score'])
+    spreads   = [r['spread'] for r in risky if not r.get('confirmed')]
+
+    if confirmed or max_score >= 4:
+        level = 'ALTO'
+    elif max_score >= 3:
+        level = 'MODERADO'
+    else:
+        level = 'BAJO'
+
+    return {
+        'level': level,
+        'peak_hour': best['time'],
+        'min_spread': min(spreads) if spreads else None,
+        'n_hours': len(risky),
+        # Horas con riesgo dentro del horario operativo (09:00-13:00)
+        'operational_hours': sorted({
+            r['time'] for r in risky
+            if r['time'] >= '09:00' and r['time'] <= '13:00'
+        }),
+    }
 
 
 def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Optional[Dict]:
@@ -248,6 +350,7 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                 # Enriquecer con resúmenes Phase 4 calculados en Python
                 day_rows = hourly_day_by_date.get(date_str, [])
                 entry.update(_phase4_summary(day_rows))
+                entry['fog_risk'] = _compute_fog_risk(date_str, hourly_forecast)
                 daily_forecast.append(entry)
         
         return {

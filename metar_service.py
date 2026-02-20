@@ -3,7 +3,7 @@ Módulo para obtener datos METAR de aeropuertos
 """
 import requests
 import re
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict
 import config
 
 

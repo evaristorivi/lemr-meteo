@@ -147,20 +147,7 @@ CONSIDERACIONES GENERALES ULM:
 - Operaciones VFR exclusivamente
 - En días muy cálidos el avión rinde peor que en días fríos: trepa menos y en despegue conviene dejarlo volar más antes de rotar.
 
-INFORMACIÓN AERÓDROMO LA MORGAL (LEMR):
-- 🛫 Pista 10/28 (orientación 100°/280° magnético)
-- 🛫 Longitud: 890m | Elevación: 545 ft (180m)
-- 🛫 Coordenadas: 43°25.833'N 005°49.617'W
-
-CONTEXTO OPERATIVO OBLIGATORIO - AERÓDROMO DE LA MORGAL (LEMR):
-- Nombre: Aeródromo de La Morgal (Asturias)
-- Coordenadas: 43 25.833 N / 05 49.617 O
-- Frecuencia: 123.500
-- Elevación: 545 ft / 180 m
-- Pista: 10/28, 890 m, asfalto
-- Horario operativo:
-    - Invierno: Diario de 09:00 a 20:00
-    - Verano: Diario de 09:00 a 21:45
+AERÓDROMO LA MORGAL (LEMR): Pista 10/28 (100°/280°mag), 890m, asfalto, 545ft/180m. Coordenadas: 43°25.833'N 005°49.617'W. Horario: invierno 09:00-20:00 | verano 09:00-21:45.
 
 REGLA DE PLANIFICACIÓN DE HORARIOS (CRÍTICA):
 - Cuando propongas "mejor hora para volar", SIEMPRE debe cumplir simultáneamente:
@@ -170,9 +157,18 @@ REGLA DE PLANIFICACIÓN DE HORARIOS (CRÍTICA):
 
 USO DE LEAS: LEMR sin METAR continuo. Usa LEAS + pronóstico local para inferir condiciones LEMR. Nota: diferencias por distancia/orografía.
 
+🌫️ MICROCLIMA NIEBLA EN LA MORGAL:
+- La Morgal está en un valle interior de Asturias a 180m. Es ESPECIALMENTE PROPENSA a niebla matinal (oct-abril) por: enfriamiento nocturno en fondo de valle, alta humedad ambiental atlántica, y vientos débiles nocturnos. Puede estar presente a la apertura (09:00) y persistir hasta las 11h.
+- Cuando el dato "niebla_matinal" aparece en el pronóstico, EVALÚA si afectará al período de operación (el aeródromo abre a las 09:00):
+  - ALTO: muy probable niebla visible. Mención OBLIGATORIA en el veredicto.
+  - MODERADO: posible banco de niebla local, mencionar como precaución.
+  - BAJO o ausente: no mencionar.
+- Si el campo incluye "_op:HH:MM" significa que el riesgo coincide con horario operativo (desde las 09:00). Esto es especialmente relevante.
+- La niebla SUELE disiparse al salir el sol (09-11h), pero puede persistir con nubosidad baja o viento E (advección marina).
+
 ⚠️ PARÁMETROS CRÍTICOS PHASE 4:
 
-1️⃣ FREEZING LEVEL HEIGHT: Convierte m a ft (dividir entre 0.3048 o multiplicar por 3.28). 
+1️⃣ FREEZING LEVEL HEIGHT: Los datos incluyen valor en m y ft ya calculados.
    - <1500m (<4920 ft): ⚠️ RIESGO RIME ICE (hielo en motor/superficies). 
    - 1500-2500m: Cierta exposición si hay humedad visible.
    - >2500m: Riesgo bajo.
@@ -187,7 +183,7 @@ USO DE LEAS: LEMR sin METAR continuo. Usa LEAS + pronóstico local para inferir 
    - 2-6h: Lluvia moderada sostenida, precaución.
    - >10h: Lluvia persistente → NO VOLAR.
 
-4️⃣ SUNSHINE DURATION: Convierte seg a horas (divid entre 3600).
+4️⃣ SUNSHINE DURATION: Valor ya en horas en los datos.
    - <4h: Débil potencial térmico.
    - 4-6h: Moderado, térmicas pequeñas.
    - >8h: Excelente para termaling.
@@ -195,9 +191,11 @@ USO DE LEAS: LEMR sin METAR continuo. Usa LEAS + pronóstico local para inferir 
 5️⃣ SNOW DEPTH: Invierno solo (≥5cm afecta pista).
    - >20cm: Cierre probable de pista.
 
-6️⃣ CLOUD LAYERS DIFERENCIADOS (bajo: <3000 ft, medio: 3-6km, alto: >6km):
-   - Bajo BKN/OVC: Restricción severa de altitude ULM.
-   - Medio/Alto: Afecta visuales térmicas pero menos crítico.
+6️⃣ CLOUD LAYERS — los datos ya incluyen el tipo ICAO entre paréntesis p.ej. (St/Sc), (As), (Ci/Cs):
+   BAJA (<3000 ft): St/Sc/Ns → factor MÁS CRÍTICO para ULM (limita altitud de vuelo).
+   MEDIA (3000-20000 ft): As/Ac → limita techo visual, reduce térmicas.
+   ALTA (>20000 ft): Ci/Cs/Cc → solo impacto en visibilidad solar/térmicas, sin veto operativo.
+   NUNCA digas solo "nubosidad baja/media/alta" — usa siempre el tipo: "nubes bajas (St/Sc) X%", etc.
 """
 
 
@@ -309,6 +307,33 @@ def _is_context_length_error(exc: Exception) -> bool:
         or "input is too long" in text
         or "prompt is too long" in text
     )
+
+
+def _infer_cloud_type(layer: str, pct: Optional[int], wx_code: Optional[int]) -> str:
+    """
+    Infiere el tipo probable de nube (abreviatura ICAO) a partir de la capa,
+    cobertura y weather_code WMO. Devuelve p.ej. "(Sc)", "(As)", "(Ci/Cs)".
+    layer: 'low' | 'mid' | 'high'
+    """
+    if pct is None or pct == 0:
+        return ""
+    wx = wx_code or 0
+    if layer == "low":
+        if wx in (95, 96, 99):                   return "(Cb)"
+        if wx in (80, 81, 82, 85, 86):           return "(Cu/Cb)"
+        if wx in (61, 63, 65, 71, 73, 75, 77):  return "(Ns)"
+        if wx in (51, 53, 55):                   return "(St)"
+        if wx in (45, 48):                       return "(St)"
+        if pct >= 75:                            return "(St/Sc)"
+        if pct >= 25:                            return "(Sc)"
+        return "(Cu)"
+    if layer == "mid":
+        return "(As)" if pct >= 50 else "(Ac)"
+    if layer == "high":
+        if pct >= 70: return "(Cs)"
+        if pct >= 20: return "(Ci)"
+        return "(Cc)"
+    return ""
 
 
 def _map_weather_code(code: Optional[int]) -> str:
@@ -679,7 +704,15 @@ def interpret_fused_forecast_with_ai(
             cape_max = row.get('cape_max')
             cape_str = f", CAPE máx {cape_max:.0f} J/kg" if cape_max is not None else ""
             precip_h = row.get('precipitation_hours')
-            precip_h_str = f", precip {precip_h:.0f}h" if precip_h is not None else ""
+            precip_sum_mm = row.get('precipitation')
+            if precip_h is not None and precip_sum_mm is not None:
+                precip_h_str = f", precip {precip_h:.0f}h/{precip_sum_mm:.1f}mm"
+            elif precip_h is not None:
+                precip_h_str = f", precip {precip_h:.0f}h"
+            elif precip_sum_mm is not None:
+                precip_h_str = f", precip {precip_sum_mm:.1f}mm"
+            else:
+                precip_h_str = ""
             sun_sec = row.get('sunshine_duration')
             sun_h_str = f", sol {sun_sec / 3600:.1f}h" if sun_sec is not None else ""
 
@@ -704,10 +737,18 @@ def interpret_fused_forecast_with_ai(
             cl_low  = row.get('cloud_low_max')
             cl_mid  = row.get('cloud_mid_max')
             cl_high = row.get('cloud_high_max')
+            wx_code_row = row.get('weather_code')
             clouds_str = ""
             if cl_low is not None:
+                lo_type = _infer_cloud_type('low',  cl_low,  wx_code_row)
+                mi_type = _infer_cloud_type('mid',  cl_mid,  wx_code_row)
+                hi_type = _infer_cloud_type('high', cl_high, wx_code_row)
                 low_tag = " 🔴BKN/OVC" if cl_low > 50 else ""
-                clouds_str = f", nubes_capa_baja(<2000ft) {cl_low}%{low_tag} / capa_media {cl_mid}% / capa_alta {cl_high}%"
+                clouds_str = (
+                    f", nubes_bajas{lo_type}(<3000ft) {cl_low}%{low_tag}"
+                    f" / medias{mi_type} {cl_mid}%"
+                    f" / altas{hi_type} {cl_high}%"
+                )
 
             # --- hora amanecer/atardecer: solo la hora HH:MM ---
             sunrise_raw = row.get('sunrise', 'N/A')
@@ -733,7 +774,8 @@ def interpret_fused_forecast_with_ai(
                     trend_parts.append(f"rachas mañ {man_gust:.0f}→tard {tard_gust:.0f}km/h {arrow}")
             if man_cl is not None and tard_cl is not None and abs(tard_cl - man_cl) >= 20:
                 arrow = "📈" if tard_cl > man_cl else "📉"
-                trend_parts.append(f"nube_baja(<2000ft) mañ {man_cl:.0f}%→tard {tard_cl:.0f}% {arrow}")
+                lo_type_trend = _infer_cloud_type('low', max(man_cl, tard_cl), wx_code_row)
+                trend_parts.append(f"nube_baja{lo_type_trend}(<3000ft) mañ {man_cl:.0f}%→tard {tard_cl:.0f}% {arrow}")
             if man_pp is not None and tard_pp is not None and abs(tard_pp - man_pp) >= 20:
                 arrow = "📈" if tard_pp > man_pp else "📉"
                 trend_parts.append(f"precip_prob mañ {man_pp:.0f}%→tard {tard_pp:.0f}% {arrow}")
@@ -747,11 +789,28 @@ def interpret_fused_forecast_with_ai(
                 trend_parts.append(f"pico {peak_h}h")
             trend_str = ("\n  ↕️ tendencia: " + ", ".join(trend_parts)) if trend_parts else ""
 
+            fog = row.get('fog_risk') or {}
+            fog_level = fog.get('level')
+            fog_str = ""
+            if fog_level in ('ALTO', 'MODERADO'):
+                fog_h   = fog.get('peak_hour', '')
+                spr     = fog.get('min_spread')
+                op_hrs  = fog.get('operational_hours', [])
+                fog_str = f", 🌫️niebla_matinal:{fog_level}"
+                if op_hrs:
+                    fog_str += f"_op:{op_hrs[0]}"
+                    if len(op_hrs) > 1:
+                        fog_str += f"-{op_hrs[-1]}"
+                elif fog_h:
+                    fog_str += f"~{fog_h}"
+                if spr is not None:
+                    fog_str += f"(T-Td={spr}°C)"
+
             om_lines.append(
                 f"- {label}: {weather_emoji} temp {row.get('temp_min')}-{row.get('temp_max')}°C"
                 f", viento_max {row.get('wind_max')} km/h rachas_max {row.get('wind_gusts_max')} km/h"
                 f"{cape_str}{precip_h_str}{sun_h_str}"
-                f"{fl_str}{turb_str}{snow_str}{clouds_str}"
+                f"{fl_str}{turb_str}{snow_str}{clouds_str}{fog_str}"
                 f", ☀️ {sunrise_hm} 🌇 {sunset_hm}"
                 f"{trend_str}"
             )
@@ -862,17 +921,24 @@ def interpret_fused_forecast_with_ai(
                 continue
             _wind  = _h.get('wind_speed')
             _gusts = _h.get('wind_gusts')
+            _wdir  = _h.get('wind_direction')
             _cl_lo = _h.get('cloud_cover_low')
             _vis   = _h.get('visibility')
+            _pp    = _h.get('precipitation_prob')
             _wcode = _h.get('weather_code')
             _wx    = _map_weather_code(_wcode)
             _parts = [f"{_t[11:16]}:"]
             if _wind is not None and _gusts is not None:
-                _parts.append(f"{_wind:.0f}/{_gusts:.0f}km/h")
+                _dir_str = f"({_wdir:.0f}°)" if _wdir is not None else ""
+                _parts.append(f"{_wind:.0f}/{_gusts:.0f}km/h{_dir_str}")
             if _cl_lo is not None:
-                _parts.append(f"nube_baja {_cl_lo:.0f}%")
+                _lo_type = _infer_cloud_type('low', int(_cl_lo), _wcode)
+                _lo_tag  = "🔴" if _cl_lo > 50 else ""
+                _parts.append(f"nube_baja{_lo_type} {_cl_lo:.0f}%{_lo_tag}")
             if _vis is not None and _vis < 10:
                 _parts.append(f"vis {_vis:.1f}km")
+            if _pp is not None and _pp >= 20:
+                _parts.append(f"pp {_pp:.0f}%")
             _parts.append(_wx)
             om_hoy_hourly_lines.append("  " + " ".join(_parts))
 
@@ -940,22 +1006,12 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
 0.1) **METAR LEMR explicado** (versión corta para novatos - máximo 2 líneas, sin jerga, indicando que es estimado/local)
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
-   OBLIGATORIO: En UN SOLO BLOQUE compacto, compara el pronóstico de hoy vs la realidad actual.
-   Formato: una única sección con los parámetros clave todos juntos. NO repitas "Pronóstico HOY:" en cada línea.
-   Ejemplo correcto:
-   "Pronóstico HOY: viento máx 26 km/h · rachas máx 35 km/h · nubosidad variable · temp máx 15°C
-    Realidad a las 14:30: viento 24 km/h · rachas 42 km/h ⚠️ · cielo cubierto (peor) · temp 14.6°C ✅
-    → Rachas más fuertes de lo esperado. Resto dentro de lo previsto."
-   - Usa "✅ mejor / ⚠️ peor / 〰️ según lo esperado" para cada parámetro
-   - Si las condiciones actuales son MEJORES o PEORES que el pronóstico, menciónalo en la última línea resumen
+   Un bloque compacto: "Pronóstico HOY: [parámetros] | Realidad a las HH: [valores ✅/⚠️/〰️] → [conclusión]"
 
-1) **COINCIDENCIAS** clave entre fuentes para los 4 días (¿qué dicen TODAS las fuentes?).
-   - Ejemplo: "Todas las fuentes coinciden en vientos moderados HOY y MAÑANA, fuertes PASADO MAÑANA"
-   - Si solo coinciden en algunos días, indícalo.
+1) **COINCIDENCIAS** clave entre fuentes para los 4 días.
+   Si solo coinciden en algunos días, indícalo.
 
-2) **DISCREPANCIAS** clave entre fuentes y explicación meteorológica probable.
-   - Ejemplo: "Windy prevé rachas de 87 km/h DENTRO DE 3 DÍAS, Open-Meteo 45 km/h - diferencia en modelo de borrasca"
-   - Si hay discrepancias, explica la causa probable (frentes, borrascas, modelos diferentes).
+2) **DISCREPANCIAS** clave entre fuentes y explicación meteorológica probable (frentes, borrascas, diferencias de modelo).
 
 3) **📊 EVOLUCIÓN METEOROLÓGICA POR DÍA** — 1 línea por día: carácter (ESTABLE/CAMBIANTE/INESTABLE/DETERIORO/MEJORA), mañana vs tarde, tendencia viento. Pista solo para HOY.
    Ej: "HOY: ESTABLE, viento W constante, pista 28 | MAÑANA: DETERIORO tarde | PASADO MAÑANA: ... | DENTRO DE 3 DÍAS: ..."
@@ -983,11 +1039,13 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
    Factores a evaluar por día:
    - **Rachas**: diferencia con viento medio, valor absoluto (cita valores actuales para HOY)
    - **Precipitación**: tipo (lluvia/nieve/granizo), intensidad (-/mod/+)
-   - **Nubosidad**: techo bajo (ft AGL), cobertura extensa (BKN/OVC)
+   - **Nubosidad por capas** (citar las tres siempre que haya datos):
+     * Nubes bajas St/Sc/Ns (<3000 ft): techo ft AGL, cobertura BKN/OVC — factor operativo crítico
+     * Nubes medias Ac/As (3000-20000 ft): cobertura % — afecta techo visual y térmicas
+     * Nubes altas Ci/Cs (>20000 ft): cobertura % — impacto menor, solo solar/térmicas
    - **Visibilidad**: si < 8 km (precaución), si < 5 km (límite legal)
    - **Crosswind excesivo**: si > 12 kt para pista recomendada
    - **Turbulencia mecánica**: diferencia (gusts - wind_mean) ≥8 kt = moderada (precaución), >12 kt = severa (NO VOLAR). Rachas absolutas: >20 kt = precaución, >22 kt = límite estructural ULM.
-   - **Densidad del aire**: Temp >25°C + presión <1010 hPa = baja densidad → ⚠️ rendimiento reducido. Temp <10°C + presión >1020 hPa = alta densidad → ✅ mejor rendimiento
    - **Convección**: CRÍTICO/ALTO → ❌ NO APTO inmediato. Cita la conclusión del ANÁLISIS RIESGO CONVECTIVO recibido.
    Formato obligatorio (SIEMPRE incluir convección si aplica, CADA DÍA EN SU PROPIA LÍNEA con salto de línea entre cada **DÍA**):
    **HOY**: [lista de riesgos]
@@ -1003,14 +1061,7 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
    - NO omitas ningún día. Si no hay ventana segura para ese día, escribe "NO RECOMENDADA".
    - Mañana: primeras horas (09:00-14:00 típico) | Tarde: horas posteriores (17:00-20:00 típico)
    - Considera amanecer, atardecer, horario operativo (ver DATOS FIJOS) y condiciones meteorológicas.
-   Formato CORRECTO (CADA DÍA EN SU PROPIA LÍNEA con salto de línea entre cada **DÍA**, NO en la misma línea):
-   **HOY**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ✅
-
-   **MAÑANA**: Mañana 09:00-14:00 ✅ | Tarde 17:00-20:00 ⚠️
-
-   **PASADO MAÑANA**: Mañana 09:00-14:00 ⚠️ | Tarde 17:00-20:00 ❌
-
-   **DENTRO DE 3 DÍAS**: Mañana XXX ✅/⚠️/❌ | Tarde XXX ✅/⚠️/❌
+   Formato (un día por línea, línea en blanco entre días): "**HOY**: Mañana HH-HH ✅/⚠️/❌ | Tarde HH-HH ✅/⚠️/❌"
 
 8) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    - Indica claramente: "HOY", "MAÑANA", "PASADO MAÑANA" o "DENTRO DE 3 DÍAS"
@@ -1035,29 +1086,14 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
 
 Reglas CRÍTICAS:
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
-- **ANÁLISIS COMPLETO MULTIFACTOR (OBLIGATORIO para cada día)**:
-  1. Viento medio (convertido a kt)
-  2. Rachas y diferencia con viento medio
-  3. Nubosidad: techo, cobertura, altura base
-  4. Precipitación: intensidad, tipo
-  5. Visibilidad
-  6. Componentes headwind/crosswind para AMBAS pistas
 - **CRITERIO DE RACHAS (SIN EXCEPCIONES)**:
   * Diferencia rachas-viento medio > 10 kt = ⚠️ PRECAUCIÓN o ❌ NO APTO
   * Rachas absolutas > 22 kt = ❌ NO APTO (límite estructural)
   * Ejemplo: 15G25KT = diferencia 10 kt + rachas 25 kt = ❌ NO APTO
-- **CRITERIO DE NUBOSIDAD**:
-  * Techo < 1000 ft = IFR/LIFR → ❌ PROHIBIDO
-  * Techo 1000-3000 ft = MVFR → ❌ PROHIBIDO
-  * BKN/OVC < 2000 ft = ⚠️ PRECAUCIÓN
-  * Precipitación activa = ❌ NO APTO (salvo llovizna muy ligera)
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
 - ⚠️ UNIDADES CRUCE: Los datos de Open-Meteo y Windy llegan en **km/h**. Para citar en kt: divide entre 1.852 (ej: 33 km/h = 17.8 kt). NUNCA pongas la etiqueta 'kt' a un valor que está en km/h sin hacer la conversión. En METAR los valores ya están en kt.
 - No uses afirmaciones vagas: para cada día cita al menos 4 datos concretos (viento/racha/precip/nube/vis)
 - Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/gradiente de presión, flujo dominante) y su impacto en LEMR
-- Recuerda: PISTA 10 orientada 100° (despegue al ESTE), PISTA 28 orientada 280° (despegue al OESTE)
-- Viento del OESTE (250°-310°) → probable PISTA 28 en servicio | Viento del ESTE (070°-130°) → probable PISTA 10 en servicio
-- No propongas vuelos fuera de horario diurno ni fuera de horario operativo
 - **SIEMPRE indica cuál es el MEJOR DÍA para volar** (o NINGUNO si todos son malos)
 - Si hay incertidumbre, dilo explícitamente"""
 

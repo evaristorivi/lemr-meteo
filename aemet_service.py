@@ -6,10 +6,8 @@ Flujo AEMET en dos pasos:
   1) Llamada autenticada → JSON con campo "datos" (URL temporal)
   2) GET a esa URL temporal → contenido real (imagen PNG, JSON, etc.)
 """
-import io
 import base64
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Optional, Dict, List
 from zoneinfo import ZoneInfo
