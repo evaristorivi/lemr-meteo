@@ -887,7 +887,7 @@ Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100
 ⚠️ AVISOS AEMET ACTIVOS (CAP):
 {avisos_cap if avisos_cap else 'Sin avisos activos'}
 
-⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 7 y 8 cada día va en su propia línea con línea en blanco entre días.
+⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 5, 6, 7 y 8 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
 0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (referencia, ~30 km de La Morgal) (versión corta para novatos - máximo 2 líneas, sin jerga)
 
@@ -901,8 +901,12 @@ Formato de cada sección:
 
 2) **DISCREPANCIAS** clave entre fuentes y explicación meteorológica probable (frentes, borrascas, diferencias de modelo).
 
-3) **📊 EVOLUCIÓN METEOROLÓGICA POR DÍA** — 1 línea por día: carácter (ESTABLE/CAMBIANTE/INESTABLE/DETERIORO/MEJORA), mañana vs tarde, tendencia viento. Pista solo para HOY.
-   Ej: "HOY: ESTABLE, viento W constante, pista 28 | MAÑANA: DETERIORO tarde | PASADO MAÑANA: ... | DENTRO DE 3 DÍAS: ..."
+3) **📊 EVOLUCIÓN METEOROLÓGICA POR DÍA** — UN DÍA POR LÍNEA (no en una sola línea separada por |): carácter (ESTABLE/CAMBIANTE/INESTABLE/DETERIORO/MEJORA), mañana vs tarde, tendencia viento. Pista solo para HOY.
+   Formato obligatorio — cada día en su propia línea:
+   HOY: ESTABLE, viento W constante, pista 28
+   MAÑANA: DETERIORO tarde
+   PASADO MAÑANA: CAMBIANTE
+   DENTRO DE 3 DÍAS: MEJORA
 
 4) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
    Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL (no pronóstico).
@@ -925,7 +929,7 @@ Formato de cada sección:
    - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
    🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
-   ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00.
+   ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00. Si la mañana es aceptable pero la tarde se deteriora, el veredicto sigue siendo ✅ (o 🎉 si es ideal) con nota de volar antes de las Xh — NO degrades la etiqueta por lo que pasa en horas que no son la mejor ventana.
    Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad en la MEJOR franja horaria encontrada.
    Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <800 ft / convección ALTA/CRÍTICA)
    ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
@@ -954,6 +958,7 @@ Formato de cada sección:
    🚫 ESTA REGLA SOLO APLICA A HOY. MAÑANA/PASADO/3D nunca pueden ser 🕐 ni ⚠️ TIEMPO LIMITADO por razón de hora.
 
    ⚠️ METODOLOGÍA OBLIGATORIA: Para cada día, REVISA los datos Windy y Open-Meteo hora a hora. Localiza la mejor franja concreta del día. Escribe un párrafo descriptivo por día — NO uses bloques fijos como "09-14h" ni tabla de emojis. Explica en lenguaje natural la evolución del día, la mejor hora de salir y por qué. Sé específico: si la buena ventana es 11:00-13:30, di exactamente eso y por qué (viento en calma, despejando, rachas bajas).
+   🚫 REGLA CRÍTICA DE ETIQUETA: el emoji y la etiqueta reflejan la MEJOR VENTANA del día, NO las peores horas. Si la mañana es ✅ ACEPTABLE pero la tarde se deteriora a ⚠️, el veredicto del día es ✅ ACEPTABLE y en el texto explicas que hay que volar antes de las Xh. NUNCA degrades la etiqueta del día por condiciones que ocurren fuera de la mejor ventana.
 
    Formato — párrafo 3-5 frases por día:
    **HOY**: [emoji+etiqueta]. Tiempo restante, valores actuales, si vale la pena salir.
@@ -969,7 +974,7 @@ Formato de cada sección:
    - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
 
 10) **🌡️ SENSACIÓN TÉRMICA EN VUELO Y EQUIPO**:
-   Fórmula wind chill (WMO): WC = 13.12 + 0.6215×T − 11.37×V^0.16 + 0.3965×T×V^0.16 (T=°C, V=km/h). En ULM suma la velocidad de vuelo (~90-120 km/h) al viento real para calcular el viento efectivo sobre el piloto. Indica la WC resultante y recomienda equipo concreto. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda equipo concreto (capas, guantes si temp <10°C, ropa ligera si >20°C). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
 11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.

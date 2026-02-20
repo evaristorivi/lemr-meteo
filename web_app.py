@@ -663,6 +663,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "map_analysis": map_ai,
             "windy_analysis": windy_ai,
             "expert_final_verdict": fused_ai or "No disponible",
+            "model_used": primary_model,
+            "provider": ai_provider,
             "pending": not include_ai,
         },
         "refresh_policy": {

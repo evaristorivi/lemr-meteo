@@ -436,6 +436,86 @@
       margin: 0.4em 0;
     }
 
+    /* ── Veredictos coloreados ───────────────────────────── */
+    .ai-ideal { border-left: 3px solid #68d391; padding-left: 10px; background: rgba(104,211,145,0.07); border-radius: 0 6px 6px 0; margin: 0.5em 0; }
+    .ai-ok    { border-left: 3px solid #63b3ed; padding-left: 10px; background: rgba(99,179,237,0.07);  border-radius: 0 6px 6px 0; margin: 0.5em 0; }
+    .ai-warn  { border-left: 3px solid #f6ad55; padding-left: 10px; background: rgba(246,173,85,0.07);  border-radius: 0 6px 6px 0; margin: 0.5em 0; }
+    .ai-nope  { border-left: 3px solid #fc8181; padding-left: 10px; background: rgba(252,129,129,0.07); border-radius: 0 6px 6px 0; margin: 0.5em 0; }
+    .ai-close { border-left: 3px solid #a0aec0; padding-left: 10px; background: rgba(160,174,192,0.07); border-radius: 0 6px 6px 0; margin: 0.5em 0; }
+
+    /* ── Banner de fuentes del analisis ─────────────────── */
+    .ai-sources-banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 11px 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      font-size: 0.77rem;
+      color: var(--muted);
+    }
+    .asb-label { color: #90cdf4; font-weight: 600; margin-right: 2px; white-space: nowrap; }
+    .asb-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(99,179,237,0.1); border: 1px solid rgba(99,179,237,0.18);
+      border-radius: 20px; padding: 2px 9px; white-space: nowrap;
+    }
+    .asb-model { margin-left: auto; opacity: 0.55; font-size: 0.71rem; white-space: nowrap; }
+
+    /* ── Separador entre secciones numeradas ─────────────── */
+    .ai-section-head { border-top: 1px solid rgba(255,255,255,0.08) !important; margin-top: 1.6em !important; padding-top: 0.7em !important; }
+
+    /* ── Badge número de sección ─────────────────────────── */
+    .ai-num-badge {
+      display: inline-block;
+      background: rgba(99,179,237,0.18);
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 20px;
+      margin-right: 6px;
+      vertical-align: middle;
+      letter-spacing: 0.02em;
+    }
+    .ai-section-title { color: #dce7ff; font-weight: 600; }
+
+    /* ── Etiquetas de día (HOY —, MAÑANA —…) ─────────────── */
+    .ai-day-label {
+      display: inline-block;
+      background: rgba(255,255,255,0.08);
+      color: #90cdf4;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 1px 9px;
+      border-radius: 20px;
+      margin-right: 5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* ── VEREDICTO FINAL card destacada ──────────────────── */
+    .ai-veredicto-head {
+      border-top: 2px solid #f6ad55 !important;
+      margin-top: 2em !important;
+      padding-top: 0.8em !important;
+      color: #f6ad55 !important;
+    }
+    .ai-veredicto-body {
+      font-size: 1.05rem !important;
+      font-weight: 600;
+      color: #fefcbf !important;
+      background: rgba(246,173,85,0.1);
+      border-left: 4px solid #f6ad55;
+      border-radius: 0 10px 10px 0;
+      padding: 12px 16px !important;
+      margin: 0.4em 0 !important;
+      line-height: 1.5 !important;
+    }
+
     .analysis code {
       background: rgba(102, 227, 255, 0.1);
       padding: 0.15em 0.4em;
@@ -1188,6 +1268,94 @@
         document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
       }
 
+      // IA - Post-procesador visual: colorea líneas por veredicto y añade separadores
+      function buildSourcesBanner(aiData, forecastDays, windyData, metar) {
+        const chips = [];
+        // METAR: mostrar si contiene tiempo ZULU (e.g. 241230Z)
+        const metarMatch = metar ? metar.match(/\d{6}Z/) : null;
+        if (metarMatch) chips.push(`✈️ METAR LEAS ${metarMatch[0].slice(2,4)}:${metarMatch[0].slice(4,6)}Z`);
+        // Open-Meteo: si hay días de pronóstico
+        if (forecastDays && forecastDays.length > 0) {
+          chips.push(`🌡️ Open-Meteo (${forecastDays.length}d)`);
+        }
+        // Windy: si no hay error y hay modelo
+        if (windyData && !windyData.error && windyData.model) {
+          chips.push(`🌬️ Windy ${(windyData.model || 'GFS').toUpperCase()}`);
+        }
+        // Modelo IA
+        const model = (aiData.model_used || '')
+          .replace('gpt-4o', 'GPT-4o')
+          .replace('gpt-4', 'GPT-4')
+          .replace('o1-', 'O1-')
+          .replace('o3-', 'O3-');
+        const provider = aiData.provider || '';
+        const modelLabel = model || provider || 'IA';
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+        const banner = document.createElement('div');
+        banner.className = 'ai-sources-banner';
+        banner.innerHTML = `<span class="asb-label">Datos usados:</span>`
+          + chips.map(c => `<span class="asb-chip">${c}</span>`).join('')
+          + `<span class="asb-model">🤖 ${modelLabel} &middot; ${timeStr}</span>`;
+        return banner;
+      }
+
+      function enrichAIAnalysis(el) {
+        // 1. Colorea líneas por emoji de veredicto
+        el.querySelectorAll('p, li').forEach(node => {
+          const t = node.textContent;
+          if (/🎉/.test(t))       node.classList.add('ai-ideal');
+          else if (/✅/.test(t))  node.classList.add('ai-ok');
+          else if (/⚠️/.test(t)) node.classList.add('ai-warn');
+          else if (/❌/.test(t))  node.classList.add('ai-nope');
+          else if (/🕐/.test(t))  node.classList.add('ai-close');
+        });
+
+        // 2. Badge numérico en cabeceras de sección (N) TÍTULO)
+        el.querySelectorAll('p').forEach(node => {
+          const strong = node.querySelector('strong');
+          const firstStrong = node.querySelector('strong:first-child') || (node.firstChild && node.firstChild.tagName === 'STRONG' ? node.firstChild : null);
+          const target = firstStrong || strong;
+          if (target) {
+            const m = target.textContent.match(/^(\d[\d.]*\))\s*(.+)/);
+            if (m) {
+              node.classList.add('ai-section-head');
+              const badge = document.createElement('span');
+              badge.className = 'ai-num-badge';
+              badge.textContent = m[1];
+              const title = document.createElement('span');
+              title.className = 'ai-section-title';
+              title.textContent = ' ' + m[2];
+              target.replaceChildren(badge, title);
+            }
+          } else if (/^\s*\d[\d.]*\)/.test(node.textContent)) {
+            node.classList.add('ai-section-head');
+          }
+        });
+        el.querySelectorAll('h2, h3, h4').forEach(node => node.classList.add('ai-section-head'));
+
+        // 3. Chip en etiquetas de día (HOY —, MAÑANA —, PASADO MAÑANA —…)
+        const dayRe = /(HOY|MAÑANA|PASADO MAÑANA|DENTRO DE 3 DÍAS)(\s*—)/g;
+        el.querySelectorAll('p').forEach(node => {
+          if (!dayRe.test(node.innerHTML)) return;
+          dayRe.lastIndex = 0;
+          node.innerHTML = node.innerHTML.replace(dayRe,
+            '<span class="ai-day-label">$1</span>$2');
+        });
+
+        // 4. VEREDICTO FINAL GLOBAL — card dorada
+        let foundVeredicto = false;
+        el.querySelectorAll('p, h2, h3, h4, strong').forEach(node => {
+          if (!foundVeredicto && /VEREDICTO FINAL GLOBAL/.test(node.textContent)) {
+            const target = (node.tagName === 'STRONG') ? node.closest('p') || node : node;
+            target.classList.add('ai-veredicto-head');
+            const next = target.nextElementSibling;
+            if (next && next.tagName === 'P') next.classList.add('ai-veredicto-body');
+            foundVeredicto = true;
+          }
+        });
+      }
+
       // IA - Convertir markdown a HTML
       const aiAnalysis = data.ai.expert_final_verdict || "Sin veredicto final.";
       const aiElement = document.getElementById("expert-final");
@@ -1195,6 +1363,10 @@
       if (typeof marked !== 'undefined') {
         try {
           aiElement.innerHTML = marked.parse(aiAnalysis);
+          enrichAIAnalysis(aiElement);
+          const metarRaw = data.metar?.leas?.raw || data.metar?.raw || '';
+          const banner = buildSourcesBanner(data.ai, data.forecast_days || [], data.windy || {}, metarRaw);
+          aiElement.insertBefore(banner, aiElement.firstChild);
         } catch (e) {
           console.warn('Error al parsear markdown:', e);
           // Fallback: formatear manualmente si falla marked
