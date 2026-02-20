@@ -829,19 +829,7 @@ def interpret_fused_forecast_with_ai(
                 f"{w_trend}"
             )
 
-        hourly_lines = []
-        for row in windy_hourly[:24]:
-            t = row.get("time_local", "")
-            hh = t.split("T")[1][:5] if "T" in t else t
-            cloud = row.get('cloud_cover_pct')
-            precip = row.get('precip_3h_mm')
-            cloud_str  = f", nubes {cloud:.0f}%" if cloud is not None else ""
-            precip_str = f", precip {precip:.1f}mm" if precip and precip > 0.1 else ""
-            hourly_lines.append(
-                f"- {hh}: {row.get('wind_kmh')} km/h ({row.get('wind_dir_deg')}°), "
-                f"rachas {row.get('gust_kmh')} km/h"
-                f"{cloud_str}{precip_str}"
-            )
+        hourly_lines = []  # se construye más abajo, tras definir now_local y _close_hour
 
         aemet_hoy = (aemet_prediccion or {}).get("asturias_hoy", "")
         aemet_man = (aemet_prediccion or {}).get("asturias_manana", "")
@@ -942,6 +930,52 @@ def interpret_fused_forecast_with_ai(
             _parts.append(_wx)
             om_hoy_hourly_lines.append("  " + " ".join(_parts))
 
+        # Open-Meteo horario MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS — franjas operativas 09-close
+        # Reutiliza now_local y _close_hour ya definidos arriba
+        _future_labels = {
+            (now_local.date() + timedelta(days=1)).isoformat(): "MAÑ",
+            (now_local.date() + timedelta(days=2)).isoformat(): "PAS",
+            (now_local.date() + timedelta(days=3)).isoformat(): "+3D",
+        }
+        _prev_day = None
+        for _h in hourly_om:
+            _t = _h.get('time', '')
+            if not _t:
+                continue
+            _day = _t[:10]
+            if _day not in _future_labels:
+                continue
+            _hh = int(_t[11:13]) if len(_t) >= 13 else -1
+            if _hh < 9 or _hh > _close_hour:
+                continue
+            if _h.get('is_day') != 1:
+                continue
+            _wind  = _h.get('wind_speed')
+            _gusts = _h.get('wind_gusts')
+            _wdir  = _h.get('wind_direction')
+            _cl_lo = _h.get('cloud_cover_low')
+            _vis   = _h.get('visibility')
+            _pp    = _h.get('precipitation_prob')
+            _wcode = _h.get('weather_code')
+            _wx    = _map_weather_code(_wcode)
+            if _day != _prev_day:
+                hourly_lines.append(f"{_future_labels[_day]} ({_day}):")
+                _prev_day = _day
+            _parts = [f"  {_t[11:16]}:"]
+            if _wind is not None and _gusts is not None:
+                _dir_str = f"({_wdir:.0f}°)" if _wdir is not None else ""
+                _parts.append(f"{_wind:.0f}/{_gusts:.0f}km/h{_dir_str}")
+            if _cl_lo is not None:
+                _lo_type = _infer_cloud_type('low', int(_cl_lo), _wcode)
+                _lo_tag  = "🔴" if _cl_lo > 50 else ""
+                _parts.append(f"nube_baja{_lo_type} {_cl_lo:.0f}%{_lo_tag}")
+            if _vis is not None and _vis < 10:
+                _parts.append(f"vis {_vis:.1f}km")
+            if _pp is not None and _pp >= 20:
+                _parts.append(f"pp {_pp:.0f}%")
+            _parts.append(_wx)
+            hourly_lines.append(" ".join(_parts))
+
         user_message = f"""Actúa como experto en meteorología aeronáutica ULM para {location} y crea una síntesis OPERATIVA final de alta precisión.
 
 ⏰ HORA ACTUAL: {hora_actual} (Europe/Madrid) - Fecha: {fecha_actual}
@@ -951,11 +985,11 @@ DATOS FIJOS AERÓDROMO LEMR:
     - Horario operativo: Invierno (oct-mar) 09:00-20:00 / Verano (abr-sep) 09:00-21:45
     - Solo VFR diurno
 
-METAR LEAS (referencia):
+METAR LEAS — Aeropuerto de Asturias (referencia más cercana, a ~30 km de LEMR):
 {metar_leas or 'No disponible'}
 {f"{flight_category_leas.get('emoji')} Clasificación: {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
-METAR LEMR (estimado local):
+METAR LEMR — La Morgal (estimado local, NO es METAR oficial):
 {metar_lemr or 'No disponible'}
 {f"{flight_category_lemr.get('emoji')} Clasificación: {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
 
@@ -980,7 +1014,7 @@ Open-Meteo (resumen 4 días) — incl. Phase 4: freezing_level, turbulencia, sno
 Windy Point Forecast (resumen 4 días):
 {chr(10).join(windy_lines) if windy_lines else 'Sin datos'}
 
-Windy próximas 24 horas:
+Open-Meteo horario MAÑANA/PASADO/+3D (franjas operativas 09-{_close_hour:02d}h) — viento/rachas km/h, nube_baja, vis si <10km:
 {chr(10).join(hourly_lines) if hourly_lines else 'Sin datos'}
 
 ⚠️ AVISOS AEMET ACTIVOS (CAP):
@@ -1000,13 +1034,14 @@ AEMET Llanera horaria (hoy+mañana franjas operativas):
 
 ⚙️ **RENDIMIENTO**: Temp >25°C o presión <1010 hPa → menciona mayor carrera de despegue y peor ascenso. Temp <15°C + presión >1020 hPa → aire denso, rendimiento óptimo.
 
-Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por línea en blanco):
-0) **METAR LEAS explicado** (versión corta para novatos - máximo 2 líneas, sin jerga)
+⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 7 y 8 cada día va en su propia línea con línea en blanco entre días.
+Formato de cada sección:
+0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (referencia, ~30 km de La Morgal) (versión corta para novatos - máximo 2 líneas, sin jerga)
 
-0.1) **METAR LEMR explicado** (versión corta para novatos - máximo 2 líneas, sin jerga, indicando que es estimado/local)
+0.1) **METAR LEMR explicado** — LEMR = La Morgal (estimado/local, NO confundir con LEAS) (versión corta para novatos - máximo 2 líneas, sin jerga)
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
-   Un bloque compacto: "Pronóstico HOY: [parámetros] | Realidad a las HH: [valores ✅/⚠️/〰️] → [conclusión]"
+   Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas, si la visibilidad sorprende. Usa los emojis ✅/⚠️/〰️ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique si las condiciones son adecuadas para volar o no.
 
 1) **COINCIDENCIAS** clave entre fuentes para los 4 días.
    Si solo coinciden en algunos días, indícalo.
@@ -1025,77 +1060,77 @@ Formato obligatorio (CADA SECCIÓN numerada en su PROPIO PÁRRAFO, separada por 
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
    MAÑANA/PASADO/3 DÍAS: sin datos de dirección → omite cálculo de pista.
 
-5) **VEREDICTO POR DÍA** (los 4 días):
+5) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
+   Para cada día, redacta 2 frases narrativas cortas — una para la mañana (09-14h) y otra para la tarde (14-cierre) — describiendo en lenguaje natural cómo evolucionan el viento, nubosidad y condiciones. NO hagas listas de horas. Usa los datos horarios Open-Meteo disponibles.
+   Ejemplo: "HOY — Mañana: viento flojo del norte, cielos despejados, condiciones óptimas. Tarde: rachas aumentan ligeramente pero siguen dentro de límites."
+
+6) **VEREDICTO POR DÍA** (los 4 días):
    HOY: usa CONDICIONES ACTUALES (no pronóstico). Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS condiciones.
    - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico.
    Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad, headwind/crosswind.
    Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <800 ft / convección ALTA/CRÍTICA)
+   ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
 
-6) **RIESGOS CRÍTICOS** — OBLIGATORIO PARA LOS 4 DÍAS (HOY / MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS):
-   ⚠️ NO omitas ningún día. Aunque el riesgo sea bajo, indícalo explícitamente.
-   Para cada día cita: rachas, nubosidad, precipitación, visibilidad y turbulencia.
-   ⚠️ Para HOY: usa los valores de "CONDICIONES ACTUALES" (rachas, nubosidad, viento AHORA MISMO, CAPE ACTUAL)
-   Factores a evaluar por día:
-   - **Rachas**: diferencia con viento medio, valor absoluto (cita valores actuales para HOY)
-   - **Precipitación**: tipo (lluvia/nieve/granizo), intensidad (-/mod/+)
-   - **Nubosidad por capas** (citar las tres siempre que haya datos):
-     * Nubes bajas St/Sc/Ns (<3000 ft): techo ft AGL, cobertura BKN/OVC — factor operativo crítico
-     * Nubes medias Ac/As (3000-20000 ft): cobertura % — afecta techo visual y térmicas
-     * Nubes altas Ci/Cs (>20000 ft): cobertura % — impacto menor, solo solar/térmicas
-   - **Visibilidad**: si < 8 km (precaución), si < 5 km (límite legal)
-   - **Crosswind excesivo**: si > 12 kt para pista recomendada
-   - **Turbulencia mecánica**: diferencia (gusts - wind_mean) ≥8 kt = moderada (precaución), >12 kt = severa (NO VOLAR). Rachas absolutas: >20 kt = precaución, >22 kt = límite estructural ULM.
-   - **Convección**: CRÍTICO/ALTO → ❌ NO APTO inmediato. Cita la conclusión del ANÁLISIS RIESGO CONVECTIVO recibido.
-   Formato obligatorio (SIEMPRE incluir convección si aplica, CADA DÍA EN SU PROPIA LÍNEA con salto de línea entre cada **DÍA**):
-   **HOY**: [lista de riesgos]
+7) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
+   Para cada día escribe UNA sola frase narrativa que mencione SOLO los factores que realmente suponen un riesgo o llamada de atención. Si el día no tiene ningún riesgo relevante, escribe "Sin riesgos destacables."
+   NO hagas listas de parámetros. NO repitas lo que ya está en el veredicto. Solo lo que merece una advertencia concreta.
+   Umbrales que justifican mención: rachas >18 kt, diff racha-viento >8 kt, techo <3000 ft, vis <8 km, precip >0, CAPE >200 J/kg, crosswind >10 kt.
+   **HOY**: [frase narrativa o "Sin riesgos destacables."]
 
-   **MAÑANA**: [lista de riesgos]
+   **MAÑANA**: [frase narrativa o "Sin riesgos destacables."]
 
-   **PASADO MAÑANA**: [lista de riesgos]
+   **PASADO MAÑANA**: [frase narrativa o "Sin riesgos destacables."]
 
-   **DENTRO DE 3 DÍAS**: [lista de riesgos]
-   ⚠️ FORMATO CRÍTICO: Cada día DEBE empezar en una línea nueva. NO los pongas en la misma línea ni separados por punto y seguido.
+   **DENTRO DE 3 DÍAS**: [frase narrativa o "Sin riesgos destacables."]
 
-7) **FRANJAS HORARIAS RECOMENDADAS** — OBLIGATORIO PARA LOS 4 DÍAS (HOY / MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS):
-   - NO omitas ningún día. Si no hay ventana segura para ese día, escribe "NO RECOMENDADA".
-   - Mañana: primeras horas (09:00-14:00 típico) | Tarde: horas posteriores (17:00-20:00 típico)
-   - Considera amanecer, atardecer, horario operativo (ver DATOS FIJOS) y condiciones meteorológicas.
-   Formato (un día por línea, línea en blanco entre días): "**HOY**: Mañana HH-HH ✅/⚠️/❌ | Tarde HH-HH ✅/⚠️/❌"
-
-8) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
-   - Indica claramente: "HOY", "MAÑANA", "PASADO MAÑANA" o "DENTRO DE 3 DÍAS"
-   - Justifica por qué es el mejor (menor viento, mejor visibilidad, menos rachas, etc.)
-   - **CARÁCTER DEL MEJOR DÍA**: Especifica si será placentero/estable/agitado
-   - **TIPO DE VUELO POSIBLE**: Travesías/circuitos/solo tráficos escuela
-   - Si ningún día es bueno: "NINGUNO - condiciones adversas los 4 días"
-
-9) **¿MERECE LA PENA VOLAR?** — OBLIGATORIO LOS 4 DÍAS, en este orden exacto:
-   - 🎉 **SÍ, IDEAL**: Condiciones placenteras, excelente para disfrutar (solo si ✅ APTO pleno)
-   - ✅ **SÍ, ACEPTABLE**: Condiciones estables, buen día para volar (solo si ✅ APTO)
-   - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: Agitado pero técnicamente dentro de límites (⚠️ PRECAUCIÓN)
+8) **¿Cuándo merece la pena volar?** (los 4 días, en este orden exacto):
+   - 🎉 **SÍ, IDEAL**: Condiciones placenteras, excelente para disfrutar
+   - ✅ **SÍ, ACEPTABLE**: Condiciones estables, buen día para volar
+   - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: Agitado pero dentro de límites
    - 🏠 **NO MERECE LA PENA**: Límite o ❌ NO APTO con algo de esperanza
    - ☕ **QUEDARSE EN EL BAR**: ❌ NO APTO claro, MVFR/IFR/LIFR, lluvia, viento peligroso 🍲
-   Formato OBLIGATORIO (los 4 días, sin omitir ninguno):
-   HOY: [emoji + etiqueta] (motivo breve)
-   MAÑANA: [emoji + etiqueta] (motivo breve)
-   PASADO MAÑANA: [emoji + etiqueta] (motivo breve)
-   DENTRO DE 3 DÍAS: [emoji + etiqueta] (motivo breve)
+   Formato (los 4 días, sin omitir ninguno). Para cada día indica la etiqueta general Y a continuación las franjas horarias viables (09:00-14:00 mañana, 17:00-20:00 tarde, ajusta según horario operativo y condiciones):
+   HOY: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
 
-10) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
+   MAÑANA: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+
+   PASADO MAÑANA: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+
+   DENTRO DE 3 DÍAS: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+
+9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
+   ⚠️ OBLIGATORIO: antes de responder, repasa mentalmente el veredicto de cada día de la sección 6:
+   - Descarta inmediatamente cualquier día con ❌ NO APTO (rachas >22 kt, lluvia, techo <800 ft, convección ALTA/CRÍTICA)
+   - Entre los restantes, ordénalos por: 1º menor racha absoluta, 2º menor diff racha-viento, 3º techo más alto, 4º mejor visibilidad
+   - El mejor es el que queda primero tras ese ranking. Si empatan, desempata por "más horas de ventana operativa"
+   - Si TODOS tienen ❌: "NINGUNO - condiciones adversas los 4 días"
+   Indica el día elegido, el ranking resumido que llevó a esa elección, carácter (placentero/estable/agitado) y tipo de vuelo posible (travesías/circuitos/solo tráficos escuela).
+
+10) **🌡️ SENSACIÓN TÉRMICA EN VUELO Y EQUIPO**:
+   Calcula wind chill en cabina abierta ULM (temp actual + viento). Indica la sensación real y recomienda equipo concreto (capas, guantes, casco térmico). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+
+11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
+   Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
+   Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar. Para MAÑANA: tendencia convectiva.
+
+12) **�️ PATRÓN SINÓPTICO**:
+   2-3 frases: sistema dominante sobre NW Península (borrasca/anticiclón/frente/vaguada), flujo en capas bajas y su impacto en LEMR próximas 24-48h. Apoya en los mapas adjuntos si disponibles.
+
+13) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
 
 Reglas CRÍTICAS:
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
-- **CRITERIO DE RACHAS (SIN EXCEPCIONES)**:
-  * Diferencia rachas-viento medio > 10 kt = ⚠️ PRECAUCIÓN o ❌ NO APTO
-  * Rachas absolutas > 22 kt = ❌ NO APTO (límite estructural)
-  * Ejemplo: 15G25KT = diferencia 10 kt + rachas 25 kt = ❌ NO APTO
+- **CRITERIO DE RACHAS — COMPROBACIÓN OBLIGATORIA ANTES DE ESCRIBIR CADA DÍA**:
+  * PASO 1: ¿Rachas > 22 kt? → ❌ NO APTO. STOP. No puede ser ⚠️. No hay excepción. (25 kt > 22 kt → ❌)
+  * PASO 2: ¿Diff racha-viento > 10 kt? → ⚠️ PRECAUCIÓN como mínimo.
+  * Ejemplos: 5G18KT = diff 13kt → ⚠️ | 5G24KT → ❌ | 15G25KT → ❌ | 12G25KT → ❌
+  * RECORDATORIO: si en tus datos aparece un día con racha ≥23 kt, el veredicto ES ❌, jamás ⚠️.
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
-- ⚠️ UNIDADES CRUCE: Los datos de Open-Meteo y Windy llegan en **km/h**. Para citar en kt: divide entre 1.852 (ej: 33 km/h = 17.8 kt). NUNCA pongas la etiqueta 'kt' a un valor que está en km/h sin hacer la conversión. En METAR los valores ya están en kt.
-- No uses afirmaciones vagas: para cada día cita al menos 4 datos concretos (viento/racha/precip/nube/vis)
-- Si usas los mapas significativos, menciona qué patrón sinóptico observas (frentes/isobaras/gradiente de presión, flujo dominante) y su impacto en LEMR
-- **SIEMPRE indica cuál es el MEJOR DÍA para volar** (o NINGUNO si todos son malos)
-- Si hay incertidumbre, dilo explícitamente"""
+- **UNIDADES**: Open-Meteo/Windy en km/h → kt: divide entre 1.852. NUNCA etiquetes kt sin convertir. METAR ya viene en kt.
+- **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
+- **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.1, 0.5, 1…13). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
