@@ -930,6 +930,7 @@ Formato de cada sección:
 6) **VEREDICTO POR DÍA** (los 4 días):
    HOY: combina CONDICIONES ACTUALES (hora presente) + pronóstico horario para las horas que quedan hasta cierre. Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS la evolución hora a hora del resto del día.
    - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
+   🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado y el METAR actual es NOCTURNO — niebla, nubes bajas y humedad nocturna son normales antes del amanecer y NO REPRESENTAN las condiciones de vuelo del día. IGNORA el METAR actual como indicador del día. Basa el veredicto HOY EXCLUSIVAMENTE en el pronóstico horario 09:00–cierre. Las nubes bajas nocturnas suelen disiparse con la salida del sol (09–11h) en La Morgal.
    🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
    ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00. Si la mañana es aceptable pero la tarde se deteriora, el veredicto sigue siendo ✅ (o 🎉 si es ideal) con nota de volar antes de las Xh — NO degrades la etiqueta por lo que pasa en horas que no son la mejor ventana.
@@ -958,6 +959,7 @@ Formato de cada sección:
    - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km. En el bar hay caldo de gaviota 🍲
 
    ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Calcula cuánto tiempo queda desde {hora_actual} hasta el cierre ({_close_hour:02d}:00). Si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. Si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
+   🚨 REGLA PRE-APERTURA: Si hora_actual < 09:00, el aeródromo no ha abierto — quedan MUCHAS horas hasta el cierre, nunca uses 🕐 ni ⚠️ TIEMPO LIMITADO. Ignora el METAR nocturno; evalúa HOY con el pronóstico horario 09:00+.
    🚫 ESTA REGLA SOLO APLICA A HOY. MAÑANA/PASADO/3D nunca pueden ser 🕐 ni ⚠️ TIEMPO LIMITADO por razón de hora.
 
    ⚠️ METODOLOGÍA OBLIGATORIA: Para cada día, REVISA los datos Windy y Open-Meteo hora a hora. Localiza la mejor franja concreta del día. Escribe un párrafo descriptivo por día — NO uses bloques fijos como "09-14h" ni tabla de emojis. Explica en lenguaje natural la evolución del día, la mejor hora de salir y por qué. Sé específico: si la buena ventana es 11:00-13:30, di exactamente eso y por qué (viento en calma, despejando, rachas bajas).
