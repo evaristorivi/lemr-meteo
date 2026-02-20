@@ -78,7 +78,13 @@ def get_cloud_groups(
     else:
         lcl_ft = 2500  # Fallback conservador típico de Asturias
     low_code  = f"{round(lcl_ft / 100):03d}"   # redondeado a centenas
-    mid_code  = "065"  # FL065 nominal (6500 ft) para nubes medias
+
+    # Override mid_code cuando T-Td ≤ 3°C y LCL < 2000 ft:
+    # Open-Meteo clasifica a veces estratos bajos húmedos como capa "media" (As/Ac).
+    # En condiciones de casi-saturación la base real es la LCL, no los 6500 ft nominales.
+    spread = (temp_c - dewpoint_c) if (temp_c is not None and dewpoint_c is not None) else 999.0
+    _near_sat = spread <= 3.0 and lcl_ft < 2000
+    mid_code  = low_code if _near_sat else "065"  # FL065 nominal (6500 ft) para nubes medias
 
     groups = []
 
