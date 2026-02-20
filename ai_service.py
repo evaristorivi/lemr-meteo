@@ -126,14 +126,17 @@ LEGISLACIÓN ULM ACTUALIZADA 2024-2026 (OBLIGATORIO):
 LÍMITES OPERACIONALES TÍPICOS ULM (consultar manual específico de cada modelo):
 - ⚠️ Viento medio máximo: 15-18 kt (modelos robustos hasta 20-22 kt)
 - ⚠️ Rachas absolutas: NO SUPERAR 20-22 kt (peligro estructural)
-- ⚠️ Diferencia rachas-viento medio: ≥ 8 kt = Moderada (precaución), > 12 kt = Severa (NO VOLAR)
+- ⚠️ Diferencia rachas-viento medio: ≥ 8 kt = Moderada (precaución), > 12 kt = Severa (⚠️ precaución máxima; ❌ si se combina con otro factor límite)
 - ⚠️ Componente crosswind: Generalmente 10-12 kt máximo (consultar POH)
 - ⚠️ Turbulencia moderada o superior: NO VOLAR
 - ⚠️ Visibilidad < 5 km: MÍNIMO LEGAL (precaución extrema)
-- ⚠️ Techo de nubes < 1000 ft AGL: IFR/LIFR → ❌ PROHIBIDO
-- ⚠️ Techo de nubes 1000-3000 ft: MVFR → ❌ PROHIBIDO (condiciones marginales)
+- ⚠️ Techo de nubes < 500 ft AGL: LIFR → ❌ PROHIBIDO
+- ⚠️ Techo de nubes 500-1000 ft: IFR → ❌ PROHIBIDO
+- ⚠️ Techo de nubes 1000-1500 ft: IFR marginal → ❌ NO VOLAR (ULM sin certificación IFR)
+- ⚠️ Techo de nubes 1500-2500 ft: MVFR → ⚠️ condiciones marginales (☕ en sección 8)
+- ⚠️ Techo de nubes > 2500 ft: VFR → ✅ aceptable para operar
 - ⚠️ Precipitación activa (lluvia/nieve): NO VOLAR (pérdida sustentación, visibilidad)
-- ⚠️ Nubosidad BKN/OVC < 3000 ft: PRECAUCIÓN (restricción vertical)
+- ⚠️ Nubosidad BKN/OVC < 2500 ft: PRECAUCIÓN (restricción de altitud efectiva)
 
 ⚠️ CONVECCIÓN/TORMENTAS: Si CAPE > 500 J/kg + Precip > 0 + Racha diff > 12 kt + Nubes > 50% → ❌ NO VOLAR. Incluso con CAPE bajo, turbulencia ≥ 8 kt es precaución. CAPE: <250 débil, 250-500 moderada, 500-2000 fuerte, >2000 extrema.
 
@@ -973,8 +976,8 @@ Formato de cada sección:
    - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
    - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
 
-10) **🌡️ SENSACIÓN TÉRMICA EN VUELO Y EQUIPO**:
-   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda equipo concreto (capas, guantes si temp <10°C, ropa ligera si >20°C). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+10) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
+   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
 11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
@@ -986,10 +989,10 @@ Formato de cada sección:
 Reglas CRÍTICAS:
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
 - **CRITERIO DE RACHAS — COMPROBACIÓN OBLIGATORIA ANTES DE ESCRIBIR CADA DÍA**:
-  * PASO 1: ¿Rachas > 22 kt? → ❌ NO APTO. STOP. No puede ser ⚠️. No hay excepción. (25 kt > 22 kt → ❌)
-  * PASO 2: ¿Diff racha-viento > 10 kt? → ⚠️ PRECAUCIÓN como mínimo.
-  * Ejemplos: 5G18KT = diff 13kt → ⚠️ | 5G24KT → ❌ | 15G25KT → ❌ | 12G25KT → ❌
-  * RECORDATORIO: si en tus datos aparece un día con racha ≥23 kt, el veredicto ES ❌, jamás ⚠️.
+  * PASO 1: ¿Rachas > 22 kt EN LA MEJOR VENTANA HORARIA? → ❌ NO APTO. STOP. No puede ser ⚠️.
+  * PASO 1b: ¿Rachas > 22 kt SOLO FUERA de la mejor ventana (ej. solo por la tarde)? → el veredicto sigue siendo el de la ventana buena (⚠️ o ✅), pero OBLIGATORIO advertir en el texto "volar ANTES de las Xh, rachas >22 kt a partir del mediodía".
+  * PASO 2: ¿Diff racha-viento > 10 kt EN la mejor ventana? → ⚠️ PRECAUCIÓN como mínimo.
+  * Ejemplos: 5G18KT = diff 13kt → ⚠️ | mañana ✅ + tarde 5G24KT → ⚠️ con aviso | 15G25KT todo el día → ❌
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
 - **UNIDADES**: Open-Meteo/Windy en km/h → kt: divide entre 1.852. NUNCA etiquetes kt sin convertir. METAR ya viene en kt.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.

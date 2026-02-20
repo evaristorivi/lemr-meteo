@@ -210,15 +210,7 @@ def generate_metar_lemr(
         dewpoint_c: Punto de rocío directo del modelo (°C), procedente de
                     hourly_forecast[0]['dewpoint']. Más preciso que la fórmula
                     Magnus derivada de la humedad relativa de 'current'.
-    """
-    """
-    Genera un METAR sintético para LEMR basándose en datos de Open-Meteo.
-    
-    Args:
-        current_weather: Diccionario con datos actuales de Open-Meteo
-        icao: Código ICAO del aeródromo (default: LEMR)
-        elevation_m: Elevación del aeródromo en metros (default: 180)
-    
+
     Returns:
         String con METAR sintético en formato ICAO o None si faltan datos
     """
