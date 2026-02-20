@@ -1108,7 +1108,7 @@ Formato de cada sección:
    Indica el día elegido, el ranking resumido que llevó a esa elección, carácter (placentero/estable/agitado) y tipo de vuelo posible (travesías/circuitos/solo tráficos escuela).
 
 10) **🌡️ SENSACIÓN TÉRMICA EN VUELO Y EQUIPO**:
-   Calcula wind chill en cabina abierta ULM (temp actual + viento). Indica la sensación real y recomienda equipo concreto (capas, guantes, casco térmico). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+   Calcula wind chill en cabina abierta ULM (temp actual + viento). Indica la sensación real y recomienda equipo concreto (capas, abrigo o gorro). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
 11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
