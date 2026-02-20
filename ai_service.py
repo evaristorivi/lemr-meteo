@@ -145,9 +145,9 @@ CONSIDERACIONES GENERALES ULM:
 - Velocidades bajas: el análisis de viento es crítico
 - Mayor sensibilidad a condiciones meteorológicas que aviación general
 - Operaciones VFR exclusivamente
-- En días muy cálidos el avión rinde peor que en días fríos: trepa menos y en despegue conviene dejarlo volar más antes de rotar.
+- En días muy cálidos densidad de altitud reduce rendimiento del motor y sustentación.
 
-AERÓDROMO LA MORGAL (LEMR): Pista 10/28 (100°/280°mag), 890m, asfalto, 545ft/180m. Coordenadas: 43°25.833'N 005°49.617'W. Horario: invierno 09:00-20:00 | verano 09:00-21:45.
+AERÓDROMO LA MORGAL (LEMR): Pista 10/28 (100°/280°mag), 890m, asfalto, 545ft/180m. Horario: invierno 09:00-20:00 | verano 09:00-21:45.
 
 REGLA DE PLANIFICACIÓN DE HORARIOS (CRÍTICA):
 - Cuando propongas "mejor hora para volar", SIEMPRE debe cumplir simultáneamente:
@@ -156,6 +156,14 @@ REGLA DE PLANIFICACIÓN DE HORARIOS (CRÍTICA):
 - Si una buena ventana meteorológica cae fuera de horario operativo, debes descartarla.
 
 USO DE LEAS: LEMR sin METAR continuo. Usa LEAS + pronóstico local para inferir condiciones LEMR. Nota: diferencias por distancia/orografía.
+
+⚖️ PESO DE FUENTES METEOROLÓGICAS (orden de fiabilidad para LEMR):
+1. **Windy GFS hora a hora** — MAYOR PESO. Modelo GFS con punto exacto sobre La Morgal. Históricamente el más preciso para esta ubicación. En caso de discrepancia con otras fuentes, da preferencia a Windy.
+2. **Open-Meteo hora a hora** — ALTO PESO. Modelo de alta resolución local, muy fiable. Cuando coincide con Windy, la ventana es prácticamente segura.
+3. **AEMET Llanera horaria** — PESO MEDIO. Referencia oficial pero resolución espacial menor.
+4. **METAR LEAS** — PESO MEDIO para condiciones actuales, NO para pronóstico.
+5. **AEMET resúmenes diarios** — PESO BAJO. Muy genéricos, útiles solo para tendencia sinóptica.
+Si Windy y Open-Meteo coinciden en que una franja horaria (ej. 10-14h) tiene viento suave y poca nube: ESA es la ventana buena. No la invalides por los máximos del día.
 
 🌫️ MICROCLIMA NIEBLA EN LA MORGAL:
 - La Morgal está en un valle interior de Asturias a 180m. Es ESPECIALMENTE PROPENSA a niebla matinal (oct-abril) por: enfriamiento nocturno en fondo de valle, alta humedad ambiental atlántica, y vientos débiles nocturnos. Puede estar presente a la apertura (09:00) y persistir hasta las 11h.
@@ -676,7 +684,6 @@ def interpret_fused_forecast_with_ai(
     flight_category_leas: Optional[Dict] = None,
     flight_category_lemr: Optional[Dict] = None,
     avisos_cap: Optional[str] = None,
-    llanera_horaria_compact: Optional[str] = None,
 ) -> Optional[str]:
     """
     Genera un veredicto experto fusionando Windy + AEMET + METAR + Open-Meteo.
@@ -694,152 +701,53 @@ def interpret_fused_forecast_with_ai(
         windy_daily = windy_data.get("daily_summary", []) if windy_data else []
         windy_hourly = windy_data.get("hourly", []) if windy_data else []
 
-        om_lines = []
+        # ── Metadata diaria compacta (solo campos NO disponibles en el horario hora a hora) ──
+        # Incluye: amanecer/atardecer, horas de sol, horas/mm de lluvia, CAPE máx,
+        # freezing level mínimo, nieve y riesgo de niebla.
+        # Las nubes, viento y visibilidad van en el horario hora a hora (más fiable).
         labels = ["HOY", "MAÑANA", "PASADO MAÑANA", "DENTRO DE 3 DÍAS"]
+        om_meta_lines = []
         for idx, row in enumerate(daily[:4]):
             label = labels[idx] if idx < len(labels) else f"DÍA +{idx}"
-            weather_emoji = _map_weather_code(row.get('weather_code'))
-
-            # --- campos base ---
-            cape_max = row.get('cape_max')
-            cape_str = f", CAPE máx {cape_max:.0f} J/kg" if cape_max is not None else ""
-            precip_h = row.get('precipitation_hours')
-            precip_sum_mm = row.get('precipitation')
-            if precip_h is not None and precip_sum_mm is not None:
-                precip_h_str = f", precip {precip_h:.0f}h/{precip_sum_mm:.1f}mm"
-            elif precip_h is not None:
-                precip_h_str = f", precip {precip_h:.0f}h"
-            elif precip_sum_mm is not None:
-                precip_h_str = f", precip {precip_sum_mm:.1f}mm"
-            else:
-                precip_h_str = ""
-            sun_sec = row.get('sunshine_duration')
-            sun_h_str = f", sol {sun_sec / 3600:.1f}h" if sun_sec is not None else ""
-
-            # --- Phase 4 pre-calculados en Python (solo horas diurnas) ---
+            sunrise_raw = row.get('sunrise', '')
+            sunset_raw  = row.get('sunset', '')
+            sunrise_hm  = sunrise_raw.split('T')[1][:5] if sunrise_raw and 'T' in sunrise_raw else 'N/A'
+            sunset_hm   = sunset_raw.split('T')[1][:5]  if sunset_raw  and 'T' in sunset_raw  else 'N/A'
+            sun_sec  = row.get('sunshine_duration')
+            sun_str  = f" | ☀️{sun_sec/3600:.1f}h sol" if sun_sec is not None else ""
+            precip_h  = row.get('precipitation_hours')
+            precip_mm = row.get('precipitation')
+            precip_str = ""
+            if precip_h and precip_mm: precip_str = f" | 💧{precip_h:.0f}h/{precip_mm:.1f}mm"
+            elif precip_h:             precip_str = f" | 💧{precip_h:.0f}h lluvia"
+            elif precip_mm:            precip_str = f" | 💧{precip_mm:.1f}mm"
+            cape = row.get('cape_max')
+            cape_str = f" | CAPE {cape:.0f}J/kg" if cape else ""
             fl_m = row.get('freezing_level_min_m')
             fl_str = ""
             if fl_m is not None:
-                fl_ft = row.get('freezing_level_min_ft', round(fl_m * 3.28084))
-                fl_tag = ("⚠️ RIME" if fl_m < 1500
-                          else "🟡 exp" if fl_m < 2500
-                          else "🟢 ok")
-                fl_str = f", FL_min {fl_m}m/{fl_ft}ft {fl_tag}"
-            turb = row.get('turb_diff_max_kt')
-            turb_str = ""
-            if turb is not None:
-                turb_tag = ("🔴 SEVERA" if turb > 12
-                            else "🟡 MOD" if turb > 8
-                            else "🟢 lig")
-                turb_str = f", turb_diff_max {turb}kt {turb_tag}"
+                fl_ft  = row.get('freezing_level_min_ft', round(fl_m * 3.28084))
+                fl_tag = "⚠️RIME" if fl_m < 1500 else ("🟡exp" if fl_m < 2500 else "🟢")
+                fl_str = f" | FL_min {fl_m}m/{fl_ft}ft {fl_tag}"
             snow = row.get('snow_max_cm')
-            snow_str = f", nieve {snow}cm" if snow and snow > 0 else ""
-            cl_low  = row.get('cloud_low_max')
-            cl_mid  = row.get('cloud_mid_max')
-            cl_high = row.get('cloud_high_max')
-            wx_code_row = row.get('weather_code')
-            clouds_str = ""
-            if cl_low is not None:
-                lo_type = _infer_cloud_type('low',  cl_low,  wx_code_row)
-                mi_type = _infer_cloud_type('mid',  cl_mid,  wx_code_row)
-                hi_type = _infer_cloud_type('high', cl_high, wx_code_row)
-                low_tag = " 🔴BKN/OVC" if cl_low > 50 else ""
-                clouds_str = (
-                    f", nubes_bajas{lo_type}(<3000ft) {cl_low}%{low_tag}"
-                    f" / medias{mi_type} {cl_mid}%"
-                    f" / altas{hi_type} {cl_high}%"
-                )
-
-            # --- hora amanecer/atardecer: solo la hora HH:MM ---
-            sunrise_raw = row.get('sunrise', 'N/A')
-            sunset_raw  = row.get('sunset',  'N/A')
-            sunrise_hm  = sunrise_raw.split('T')[1][:5] if sunrise_raw and 'T' in sunrise_raw else sunrise_raw
-            sunset_hm   = sunset_raw.split('T')[1][:5]  if sunset_raw  and 'T' in sunset_raw  else sunset_raw
-
-            # --- patrón mañana→tarde (solo si hay variación significativa) ---
-            man_gust  = row.get('gust_man_max')
-            tard_gust = row.get('gust_tard_max')
-            man_cl    = row.get('cloud_low_man_max')
-            tard_cl   = row.get('cloud_low_tard_max')
-            man_pp    = row.get('precip_prob_man_max')
-            tard_pp   = row.get('precip_prob_tard_max')
-            man_turb  = row.get('turb_diff_man_max')
-            tard_turb = row.get('turb_diff_tard_max')
-            peak_h    = row.get('peak_gust_hour')
-            trend_parts = []
-            if man_gust is not None and tard_gust is not None:
-                diff = tard_gust - man_gust
-                if abs(diff) >= 10:  # solo si la diferencia es operacionalmente relevante
-                    arrow = "📈" if diff > 0 else "📉"
-                    trend_parts.append(f"rachas mañ {man_gust:.0f}→tard {tard_gust:.0f}km/h {arrow}")
-            if man_cl is not None and tard_cl is not None and abs(tard_cl - man_cl) >= 20:
-                arrow = "📈" if tard_cl > man_cl else "📉"
-                lo_type_trend = _infer_cloud_type('low', max(man_cl, tard_cl), wx_code_row)
-                trend_parts.append(f"nube_baja{lo_type_trend}(<3000ft) mañ {man_cl:.0f}%→tard {tard_cl:.0f}% {arrow}")
-            if man_pp is not None and tard_pp is not None and abs(tard_pp - man_pp) >= 20:
-                arrow = "📈" if tard_pp > man_pp else "📉"
-                trend_parts.append(f"precip_prob mañ {man_pp:.0f}%→tard {tard_pp:.0f}% {arrow}")
-            elif man_pp or tard_pp:
-                if man_pp and man_pp >= 20: trend_parts.append(f"precip mañ {man_pp:.0f}%")
-                if tard_pp and tard_pp >= 20: trend_parts.append(f"precip tard {tard_pp:.0f}%")
-            if man_turb is not None and tard_turb is not None and abs(tard_turb - man_turb) >= 3:
-                arrow = "📈" if tard_turb > man_turb else "📉"
-                trend_parts.append(f"turb mañ {man_turb}kt→tard {tard_turb}kt {arrow}")
-            if peak_h and (man_gust or tard_gust):
-                trend_parts.append(f"pico {peak_h}h")
-            trend_str = ("\n  ↕️ tendencia: " + ", ".join(trend_parts)) if trend_parts else ""
-
+            snow_str = f" | nieve {snow}cm" if snow and snow > 0 else ""
             fog = row.get('fog_risk') or {}
             fog_level = fog.get('level')
             fog_str = ""
             if fog_level in ('ALTO', 'MODERADO'):
-                fog_h   = fog.get('peak_hour', '')
-                spr     = fog.get('min_spread')
-                op_hrs  = fog.get('operational_hours', [])
-                fog_str = f", 🌫️niebla_matinal:{fog_level}"
+                op_hrs = fog.get('operational_hours', [])
+                fog_str = f" | 🌫️niebla:{fog_level}"
                 if op_hrs:
                     fog_str += f"_op:{op_hrs[0]}"
-                    if len(op_hrs) > 1:
-                        fog_str += f"-{op_hrs[-1]}"
-                elif fog_h:
-                    fog_str += f"~{fog_h}"
-                if spr is not None:
-                    fog_str += f"(T-Td={spr}°C)"
-
-            om_lines.append(
-                f"- {label}: {weather_emoji} temp {row.get('temp_min')}-{row.get('temp_max')}°C"
-                f", viento_max {row.get('wind_max')} km/h rachas_max {row.get('wind_gusts_max')} km/h"
-                f"{cape_str}{precip_h_str}{sun_h_str}"
-                f"{fl_str}{turb_str}{snow_str}{clouds_str}{fog_str}"
-                f", ☀️ {sunrise_hm} 🌇 {sunset_hm}"
-                f"{trend_str}"
+                    if len(op_hrs) > 1: fog_str += f"-{op_hrs[-1]}"
+                else:
+                    fog_h = fog.get('peak_hour', '')
+                    if fog_h: fog_str += f"~{fog_h}"
+                spr = fog.get('min_spread')
+                if spr is not None: fog_str += f"(T-Td={spr}°C)"
+            om_meta_lines.append(
+                f"- {label}: ☀️{sunrise_hm}→{sunset_hm}{sun_str}{precip_str}{cape_str}{fl_str}{snow_str}{fog_str}"
             )
-
-        windy_lines = []
-        for row in windy_daily[:4]:
-            w_man  = row.get('gust_man_max')
-            w_tard = row.get('gust_tard_max')
-            w_trend = ""
-            if w_man is not None and w_tard is not None and abs(w_tard - w_man) >= 10:
-                arrow = "📈" if w_tard > w_man else "📉"
-                w_trend = f", rachas mañ {w_man:.0f}→tard {w_tard:.0f}km/h {arrow}"
-            windy_lines.append(
-                f"- {row.get('date')}: viento máx {row.get('max_wind_kmh')} km/h, "
-                f"rachas máx {row.get('max_gust_kmh')} km/h, precip {row.get('precip_total_mm')} mm"
-                f"{w_trend}"
-            )
-
-        hourly_lines = []  # se construye más abajo, tras definir now_local y _close_hour
-
-        aemet_hoy = (aemet_prediccion or {}).get("asturias_hoy", "")
-        aemet_man = (aemet_prediccion or {}).get("asturias_manana", "")
-        aemet_pas = (aemet_prediccion or {}).get("asturias_pasado_manana", "")
-        # Nota: La predicción de La Morgal 4 días es Open-Meteo y ya está en om_lines (no duplicar)
-        
-        # Optimización: reducir AEMET para GitHub Models (límite por request)
-        is_github = provider.lower() == "github"
-        aemet_limit = 300 if is_github else 1200  # 300 chars por sección AEMET en GitHub
-        hor_limit = 400 if is_github else 700    # cap para Llanera horaria
 
         map_urls = [u for u in (significant_map_urls or []) if u][:4]
         
@@ -888,151 +796,105 @@ def interpret_fused_forecast_with_ai(
             current_lines.append(f"  - 👁️ Visibilidad: mín {visibility_summary['min_km']} km ({visibility_summary['hour_min']}) | media {visibility_summary['avg_km']} km | {visibility_summary['risk']}")
         current_lines.append(f"  - ☁️ Condición: {weathercode_emoji}")
 
-        # Phase 4 ya está pre-calculado en weather_service y viaja dentro de daily (om_lines)
-        # No se necesita procesamiento adicional aquí
-
-        # Open-Meteo horario HOY — solo franjas operativas relevantes desde ahora en adelante
-        # Invierno (oct-mar): 09:00-20:00 | Verano (abr-sep): 09:00-21:45
-        _is_summer = now_local.month in range(4, 10)
+        # ── Horario unificado 4 días (09:00–cierre) ─────────────────────────────────
+        # HOY: desde hora actual. Días futuros: 09:00-cierre completo.
+        # Cada fila: viento/rachas km/h, nube_baja (con tipo ICAO), nube_media si >30%,
+        # visibilidad si <10km, precip_prob si >=20%, freezing_level si <3000m, wx emoji.
+        _is_summer  = now_local.month in range(4, 10)
         _close_hour = 21 if _is_summer else 20
-        _cur_hour = now_local.hour
-        om_hoy_hourly_lines = []
-        for _h in hourly_om:
-            _t = _h.get('time', '')
-            if not _t or _t[:10] != fecha_actual:
-                continue
-            _hh = int(_t[11:13]) if len(_t) >= 13 else -1
-            # Solo horas desde la actual hasta el cierre del aeródromo
-            if _hh < max(9, _cur_hour) or _hh > _close_hour:
-                continue
-            if _h.get('is_day') != 1:
-                continue
-            _wind  = _h.get('wind_speed')
-            _gusts = _h.get('wind_gusts')
-            _wdir  = _h.get('wind_direction')
-            _cl_lo = _h.get('cloud_cover_low')
-            _vis   = _h.get('visibility')
-            _pp    = _h.get('precipitation_prob')
-            _wcode = _h.get('weather_code')
-            _wx    = _map_weather_code(_wcode)
-            _parts = [f"{_t[11:16]}:"]
-            if _wind is not None and _gusts is not None:
-                _dir_str = f"({_wdir:.0f}°)" if _wdir is not None else ""
-                _parts.append(f"{_wind:.0f}/{_gusts:.0f}km/h{_dir_str}")
-            if _cl_lo is not None:
-                _lo_type = _infer_cloud_type('low', int(_cl_lo), _wcode)
-                _lo_tag  = "🔴" if _cl_lo > 50 else ""
-                _parts.append(f"nube_baja{_lo_type} {_cl_lo:.0f}%{_lo_tag}")
-            if _vis is not None and _vis < 10:
-                _parts.append(f"vis {_vis:.1f}km")
-            if _pp is not None and _pp >= 20:
-                _parts.append(f"pp {_pp:.0f}%")
-            _parts.append(_wx)
-            om_hoy_hourly_lines.append("  " + " ".join(_parts))
-
-        # Open-Meteo horario MAÑANA / PASADO MAÑANA / DENTRO DE 3 DÍAS — franjas operativas 09-close
-        # Reutiliza now_local y _close_hour ya definidos arriba
-        _future_labels = {
-            (now_local.date() + timedelta(days=1)).isoformat(): "MAÑ",
-            (now_local.date() + timedelta(days=2)).isoformat(): "PAS",
-            (now_local.date() + timedelta(days=3)).isoformat(): "+3D",
+        _cur_hour   = now_local.hour
+        _all_day_labels = {
+            fecha_actual:                                                       f"HOY ({fecha_actual})",
+            (now_local.date() + timedelta(days=1)).isoformat(): f"MAÑ ({(now_local.date()+timedelta(days=1)).isoformat()})",
+            (now_local.date() + timedelta(days=2)).isoformat(): f"PAS ({(now_local.date()+timedelta(days=2)).isoformat()})",
+            (now_local.date() + timedelta(days=3)).isoformat(): f"+3D ({(now_local.date()+timedelta(days=3)).isoformat()})",
         }
+        # ── Open-Meteo: tabla de datos en bruto (sin pre-proceso) ────────────────
+        def _fmt(v, decimals=0):
+            return f"{v:.{decimals}f}" if v is not None else "-"
+        all_hourly_lines = ["hora  | temp°C | dew°C | viento_kmh | rachas_kmh | dir° | nube_baja% | nube_med% | vis_km | precip_prob% | FL_m"]
         _prev_day = None
         for _h in hourly_om:
             _t = _h.get('time', '')
             if not _t:
                 continue
             _day = _t[:10]
-            if _day not in _future_labels:
+            if _day not in _all_day_labels:
                 continue
             _hh = int(_t[11:13]) if len(_t) >= 13 else -1
-            if _hh < 9 or _hh > _close_hour:
+            _start = max(9, _cur_hour) if _day == fecha_actual else 9
+            if _hh < _start or _hh > _close_hour:
                 continue
             if _h.get('is_day') != 1:
                 continue
-            _wind  = _h.get('wind_speed')
-            _gusts = _h.get('wind_gusts')
-            _wdir  = _h.get('wind_direction')
-            _cl_lo = _h.get('cloud_cover_low')
-            _vis   = _h.get('visibility')
-            _pp    = _h.get('precipitation_prob')
-            _wcode = _h.get('weather_code')
-            _wx    = _map_weather_code(_wcode)
             if _day != _prev_day:
-                hourly_lines.append(f"{_future_labels[_day]} ({_day}):")
+                all_hourly_lines.append(f"# {_all_day_labels[_day]}")
                 _prev_day = _day
-            _parts = [f"  {_t[11:16]}:"]
-            if _wind is not None and _gusts is not None:
-                _dir_str = f"({_wdir:.0f}°)" if _wdir is not None else ""
-                _parts.append(f"{_wind:.0f}/{_gusts:.0f}km/h{_dir_str}")
-            if _cl_lo is not None:
-                _lo_type = _infer_cloud_type('low', int(_cl_lo), _wcode)
-                _lo_tag  = "🔴" if _cl_lo > 50 else ""
-                _parts.append(f"nube_baja{_lo_type} {_cl_lo:.0f}%{_lo_tag}")
-            if _vis is not None and _vis < 10:
-                _parts.append(f"vis {_vis:.1f}km")
-            if _pp is not None and _pp >= 20:
-                _parts.append(f"pp {_pp:.0f}%")
-            _parts.append(_wx)
-            hourly_lines.append(" ".join(_parts))
+            all_hourly_lines.append(
+                f"{_t[11:16]} | {_fmt(_h.get('temperature'),1)} | {_fmt(_h.get('dewpoint'),1)} | "
+                f"{_fmt(_h.get('wind_speed'))} | {_fmt(_h.get('wind_gusts'))} | {_fmt(_h.get('wind_direction'))} | "
+                f"{_fmt(_h.get('cloud_cover_low'))} | {_fmt(_h.get('cloud_cover_mid'))} | "
+                f"{_fmt(_h.get('visibility'),1)} | {_fmt(_h.get('precipitation_prob'))} | "
+                f"{_fmt(_h.get('freezing_level_height'))}"
+            )
 
-        user_message = f"""Actúa como experto en meteorología aeronáutica ULM para {location} y crea una síntesis OPERATIVA final de alta precisión.
+        # ── Windy GFS: tabla de datos en bruto ──────────────────────────────────
+        _windy_day_labels = {
+            fecha_actual:                                                        f"HOY",
+            (now_local.date() + timedelta(days=1)).isoformat(): "MAÑ",
+            (now_local.date() + timedelta(days=2)).isoformat(): "PAS",
+            (now_local.date() + timedelta(days=3)).isoformat(): "+3D",
+        }
+        def _wfmt(v, decimals=0):
+            return f"{v:.{decimals}f}" if v is not None else "-"
+        windy_hourly_lines = ["hora  | viento_kmh | rachas_kmh | dir° | temp°C | nube_total% | precip_3h_mm"]
+        _prev_wday = None
+        for _wh in windy_hourly:
+            _wt = _wh.get('time_local', '')
+            if not _wt:
+                continue
+            _wday = _wt[:10]
+            if _wday not in _windy_day_labels:
+                continue
+            _whh = int(_wt[11:13]) if len(_wt) >= 13 else -1
+            _wstart = max(9, _cur_hour) if _wday == fecha_actual else 9
+            if _whh < _wstart or _whh > _close_hour:
+                continue
+            if _wday != _prev_wday:
+                windy_hourly_lines.append(f"# {_windy_day_labels[_wday]} ({_wday})")
+                _prev_wday = _wday
+            windy_hourly_lines.append(
+                f"{_wt[11:16]} | {_wfmt(_wh.get('wind_kmh'))} | {_wfmt(_wh.get('gust_kmh'))} | "
+                f"{_wfmt(_wh.get('wind_dir_deg'))} | {_wfmt(_wh.get('temp_c'),1)} | "
+                f"{_wfmt(_wh.get('cloud_cover_pct'))} | {_wfmt(_wh.get('precip_3h_mm'),1)}"
+            )
 
-⏰ HORA ACTUAL: {hora_actual} (Europe/Madrid) - Fecha: {fecha_actual}
+        user_message = f"""Síntesis OPERATIVA ULM para {location}. ⏰ {hora_actual} (Europe/Madrid) — {fecha_actual}
 
-DATOS FIJOS AERÓDROMO LEMR:
-    - Pista: 10/28 (rumbos 100° y 280°)
-    - Horario operativo: Invierno (oct-mar) 09:00-20:00 / Verano (abr-sep) 09:00-21:45
-    - Solo VFR diurno
-
-METAR LEAS — Aeropuerto de Asturias (referencia más cercana, a ~30 km de LEMR):
+METAR LEAS (Aeropuerto Asturias, ~30km de LEMR):
 {metar_leas or 'No disponible'}
-{f"{flight_category_leas.get('emoji')} Clasificación: {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
+{f"{flight_category_leas.get('emoji')} {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
-METAR LEMR — La Morgal (estimado local, NO es METAR oficial):
+METAR LEMR (La Morgal, estimado local):
 {metar_lemr or 'No disponible'}
-{f"{flight_category_lemr.get('emoji')} Clasificación: {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
-
-⚠️ IMPORTANTE: Los METAR son OBSERVACIONES PUNTUALES del momento indicado en el timestamp del METAR, NO son pronósticos para todo el día. Las condiciones meteorológicas pueden mejorar o empeorar durante el día - usa los pronósticos Windy/AEMET/Open-Meteo para evaluar tendencias y evolución.
-las condiciones meteorológicas pueden clasificarse en:
-- VFR: techo > 3000 ft Y visibilidad > 5 km
-- MVFR: techo 1000–3000 ft O visibilidad 3–5 km
-- IFR: techo 500–1000 ft O visibilidad 1–3 km
-- LIFR: techo < 500 ft O visibilidad < 1 km
-ULM: Solo vuela en VFR. En IFR y LIFR está prohibido. En MVFR al ser condiciones marginales queda prohibido también. 
+{f"{flight_category_lemr.get('emoji')} {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
 
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 {convection_analysis}
 
-Open-Meteo HOY horas pendientes (hasta cierre {_close_hour:02d}:00) — viento/rachas km/h, nube_baja, vis si <10km:
-{chr(10).join(om_hoy_hourly_lines) if om_hoy_hourly_lines else 'Sin datos horarios o aeródromo ya cerrado'}
+Open-Meteo hora a hora, 4 días (HOY desde {hora_actual}, resto 09:00–{_close_hour:02d}:00):
+{chr(10).join(all_hourly_lines) if all_hourly_lines else 'Sin datos horarios'}
 
-Open-Meteo (resumen 4 días) — incl. Phase 4: freezing_level, turbulencia, snow, nubes por capa, sol, precip_hours:
-{chr(10).join(om_lines) if om_lines else 'Sin datos'}
+Open-Meteo metadata diaria (amanecer, sol, lluvia, CAPE, FL mín, nieve, niebla):
+{chr(10).join(om_meta_lines) if om_meta_lines else 'Sin datos'}
 
-Windy Point Forecast (resumen 4 días):
-{chr(10).join(windy_lines) if windy_lines else 'Sin datos'}
-
-Open-Meteo horario MAÑANA/PASADO/+3D (franjas operativas 09-{_close_hour:02d}h) — viento/rachas km/h, nube_baja, vis si <10km:
-{chr(10).join(hourly_lines) if hourly_lines else 'Sin datos'}
+Windy GFS — datos en bruto hora a hora, 4 días (MAYOR PESO, GFS punto exacto La Morgal):
+Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100°/280°
+{chr(10).join(windy_hourly_lines) if windy_hourly_lines else 'Sin datos Windy horario'}
 
 ⚠️ AVISOS AEMET ACTIVOS (CAP):
 {avisos_cap if avisos_cap else 'Sin avisos activos'}
-
-AEMET Asturias HOY:
-{aemet_hoy[:aemet_limit] if aemet_hoy else 'No disponible'}
-
-AEMET Asturias MAÑANA:
-{aemet_man[:aemet_limit] if aemet_man else 'No disponible'}
-
-AEMET Asturias PASADO MAÑANA:
-{aemet_pas[:aemet_limit] if aemet_pas else 'No disponible'}
-
-AEMET Llanera horaria (hoy+mañana franjas operativas):
-{llanera_horaria_compact[:hor_limit] if llanera_horaria_compact else 'No disponible'}
-
-⚙️ **RENDIMIENTO**: Temp >25°C o presión <1010 hPa → menciona mayor carrera de despegue y peor ascenso. Temp <15°C + presión >1020 hPa → aire denso, rendimiento óptimo.
 
 ⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 7 y 8 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
@@ -1061,14 +923,18 @@ Formato de cada sección:
    MAÑANA/PASADO/3 DÍAS: sin datos de dirección → omite cálculo de pista.
 
 5) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
-   Para cada día, redacta 2 frases narrativas cortas — una para la mañana (09-14h) y otra para la tarde (14-cierre) — describiendo en lenguaje natural cómo evolucionan el viento, nubosidad y condiciones. NO hagas listas de horas. Usa los datos horarios Open-Meteo disponibles.
-   Ejemplo: "HOY — Mañana: viento flojo del norte, cielos despejados, condiciones óptimas. Tarde: rachas aumentan ligeramente pero siguen dentro de límites."
+   Para CADA UNO de los 4 días, redacta 2 frases narrativas — una para la mañana (09-14h) y otra para la tarde (14-cierre) — describiendo en lenguaje natural cómo evolucionan el viento, nubosidad y condiciones. Usa los datos horarios Windy y Open-Meteo. NO hagas listas de horas ni columnas. Formato obligatorio:
+   **HOY** — Por la mañana: [frase]. Por la tarde: [frase].
+   **MAÑANA** — Por la mañana: [frase]. Por la tarde: [frase].
+   **PASADO MAÑANA** — Por la mañana: [frase]. Por la tarde: [frase].
+   **DENTRO DE 3 DÍAS** — Por la mañana: [frase]. Por la tarde: [frase].
 
 6) **VEREDICTO POR DÍA** (los 4 días):
-   HOY: usa CONDICIONES ACTUALES (no pronóstico). Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS condiciones.
+   HOY: combina CONDICIONES ACTUALES (hora presente) + pronóstico horario para las horas que quedan hasta cierre. Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS la evolución hora a hora del resto del día.
    - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
-   MAÑANA/PASADO/3 DÍAS: basado en pronóstico.
-   Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad, headwind/crosswind.
+   MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario.
+   ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00.
+   Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad en la MEJOR franja horaria encontrada.
    Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <800 ft / convección ALTA/CRÍTICA)
    ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
 
@@ -1085,39 +951,39 @@ Formato de cada sección:
    **DENTRO DE 3 DÍAS**: [frase narrativa o "Sin riesgos destacables."]
 
 8) **¿Cuándo merece la pena volar?** (los 4 días, en este orden exacto):
-   - 🎉 **SÍ, IDEAL**: Condiciones placenteras, excelente para disfrutar
-   - ✅ **SÍ, ACEPTABLE**: Condiciones estables, buen día para volar
-   - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: Agitado pero dentro de límites
-   - 🏠 **NO MERECE LA PENA**: Límite o ❌ NO APTO con algo de esperanza
-   - ☕ **QUEDARSE EN EL BAR**: ❌ NO APTO claro, MVFR/IFR/LIFR, lluvia, viento peligroso 🍲
-   Formato (los 4 días, sin omitir ninguno). Para cada día indica la etiqueta general Y a continuación las franjas horarias viables (09:00-14:00 mañana, 17:00-20:00 tarde, ajusta según horario operativo y condiciones):
-   HOY: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+   Etiquetas — criterios OBJETIVOS basados en rachas y viento medio calculados por ti en kt (÷1.852):
+   - 🎉 **SÍ, IDEAL**: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip
+   - ✅ **SÍ, ACEPTABLE**: rachas ≤15 kt Y viento medio ≤10 kt Y techo >2500 ft Y vis >8 km
+   - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: rachas 15-22 kt O viento medio 10-15 kt O techo 1500-2500 ft O vis 5-8 km
+   - 🏠 **NO MERECE LA PENA**: en el límite pero sin factor ❌ — no vale la pena el desplazamiento
+   - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km  En el bar hay caldo de gaviota 🍲
 
-   MAÑANA: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+   ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Calcula cuánto tiempo queda desde {hora_actual} hasta el cierre ({_close_hour:02d}:00). Si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. Si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
 
-   PASADO MAÑANA: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+   ⚠️ METODOLOGÍA OBLIGATORIA: Para cada día, REVISA los datos Windy y Open-Meteo hora a hora. Localiza la mejor franja concreta del día. Escribe un párrafo descriptivo por día — NO uses bloques fijos como "09-14h" ni tabla de emojis. Explica en lenguaje natural la evolución del día, la mejor hora de salir y por qué. Sé específico: si la buena ventana es 11:00-13:30, di exactamente eso y por qué (viento en calma, despejando, rachas bajas).
 
-   DENTRO DE 3 DÍAS: [emoji + etiqueta] → Mañana HH-HH [✅/⚠️/❌] | Tarde HH-HH [✅/⚠️/❌] (motivo breve)
+   Formato — párrafo 3-5 frases por día:
+   **HOY**: [emoji+etiqueta]. Tiempo restante, valores actuales, si vale la pena salir.
+   **MAÑANA**: [emoji+etiqueta]. Evolución hora a hora, mejor ventana exacta con valores y horas concretas.
+   **PASADO MAÑANA**: [emoji+etiqueta]. Mismo formato.
+   **DENTRO DE 3 DÍAS**: [emoji+etiqueta]. Mismo formato.
 
 9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
-   ⚠️ OBLIGATORIO: antes de responder, repasa mentalmente el veredicto de cada día de la sección 6:
-   - Descarta inmediatamente cualquier día con ❌ NO APTO (rachas >22 kt, lluvia, techo <800 ft, convección ALTA/CRÍTICA)
-   - Entre los restantes, ordénalos por: 1º menor racha absoluta, 2º menor diff racha-viento, 3º techo más alto, 4º mejor visibilidad
-   - El mejor es el que queda primero tras ese ranking. Si empatan, desempata por "más horas de ventana operativa"
-   - Si TODOS tienen ❌: "NINGUNO - condiciones adversas los 4 días"
-   Indica el día elegido, el ranking resumido que llevó a esa elección, carácter (placentero/estable/agitado) y tipo de vuelo posible (travesías/circuitos/solo tráficos escuela).
+   Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <800 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
+   Indica el día elegido, el ranking resumido, carácter (placentero/estable/agitado) y tipo de vuelo posible usando estos umbrales:
+   - **Travesías largas**: techo >3000 ft Y vis >10 km Y rachas ≤12 kt
+   - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
+   - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
 
 10) **🌡️ SENSACIÓN TÉRMICA EN VUELO Y EQUIPO**:
-   Calcula wind chill en cabina abierta ULM (temp actual + viento). Indica la sensación real y recomienda equipo concreto (capas, abrigo o gorro). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+   Calcula wind chill en cabina abierta ULM (temp actual + viento). Indica la sensación real y recomienda equipo concreto (capas, abrigo). Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
 11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
    Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar. Para MAÑANA: tendencia convectiva.
 
-12) **�️ PATRÓN SINÓPTICO**:
-   2-3 frases: sistema dominante sobre NW Península (borrasca/anticiclón/frente/vaguada), flujo en capas bajas y su impacto en LEMR próximas 24-48h. Apoya en los mapas adjuntos si disponibles.
-
-13) **VEREDICTO FINAL GLOBAL** (una línea contundente con carácter del vuelo y recomendación honesta)
+12) **VEREDICTO FINAL GLOBAL**:
+   UNA SOLA FRASE. Máximo 20 palabras. Directa, sin adornos, sin "aunque", sin "se debe tener precaución". Di exactamente qué día es el mejor y qué tipo de vuelo tiene sentido. Ejemplos del tono correcto: "Mañana sábado es el día: viento en calma 10-13h, ideal para travesías." | "Hoy agitado por la tarde, vuela antes de las 12." | "Fin de semana sin vuelo, lluvia y viento los 4 días." PROHIBIDO: frases genéricas tipo "buen día para volar con precaución" o listas de condiciones.
 
 Reglas CRÍTICAS:
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
@@ -1130,7 +996,7 @@ Reglas CRÍTICAS:
 - **UNIDADES**: Open-Meteo/Windy en km/h → kt: divide entre 1.852. NUNCA etiquetes kt sin convertir. METAR ya viene en kt.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
 - **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
-- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.1, 0.5, 1…13). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.1, 0.5, 1…12). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
@@ -1155,7 +1021,7 @@ Reglas CRÍTICAS:
             if is_mini_model:
                 reason = f"es modelo limitado ({primary_model})"
             if is_github_provider:
-                reason = f"es GitHub Models (60k tokens/min) - textos AEMET reducidos a {aemet_limit} chars"
+                reason = "es GitHub Models (60k tokens/min)"
             print(f"⚠️ NO incluyendo imágenes ({reason})")
 
         # Conteo EXACTO de tokens del payload completo (sistema + usuario)

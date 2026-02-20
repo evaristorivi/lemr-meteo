@@ -235,17 +235,8 @@
       margin-bottom: 16px;
     }
 
-    .grid-llanera {
-      display: grid;
-      gap: 16px;
-      grid-template-columns: repeat(4, 1fr);
-    }
-
     @media (max-width: 1024px) {
       .grid-asturias {
-        grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-      }
-      .grid-llanera {
         grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
       }
     }
@@ -396,6 +387,25 @@
       margin: 0;
       color: #dce7ff;
     }
+
+    .maps-cta {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-top: 20px;
+      padding: 14px 16px;
+      background: rgba(99, 179, 237, 0.07);
+      border: 1px solid rgba(99, 179, 237, 0.25);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .maps-cta-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; }
+    .maps-cta strong { display: block; color: #dce7ff; margin-bottom: 4px; font-size: 0.88rem; }
+    .maps-cta p { margin: 0; line-height: 1.55; }
+    .maps-cta a { color: var(--accent); text-decoration: none; }
+    .maps-cta a:hover { text-decoration: underline; }
 
     .analysis h2, .analysis h3, .analysis h4 {
       color: var(--accent);
@@ -708,8 +718,7 @@
         <a href="#windy">🌬️ Windy</a>
         <a href="#pronostico">📍 Resumen</a>
         <a href="#aemet-asturias">🌦️ AEMET</a>
-        <a href="#aemet-llanera">🌤️ 4 días</a>
-        <a href="#analisis-ia">👨‍✈️ IA</a>
+        <a href="#analisis-ia">👨‍✈️ IA LEMR</a>
         <a href="#mapa-analisis">🗺️ Mapa</a>
         <a href="#ogimet-semana">📆 7 días</a>
       </nav>
@@ -778,28 +787,17 @@
       </article>
     </section>
 
-    <section class="grid-llanera" id="aemet-llanera">
-      <article class="card">
-        <h2 id="pred-llanera-0-title">�️ Open-Meteo — La Morgal hoy</h2>
-        <p id="pred-llanera-0" class="pred-text"></p>
-      </article>
-      <article class="card">
-        <h2 id="pred-llanera-1-title">🌤️ Open-Meteo — La Morgal mañana</h2>
-        <p id="pred-llanera-1" class="pred-text"></p>
-      </article>
-      <article class="card">
-        <h2 id="pred-llanera-2-title">🌤️ Open-Meteo — La Morgal pasado mañana</h2>
-        <p id="pred-llanera-2" class="pred-text"></p>
-      </article>
-      <article class="card">
-        <h2 id="pred-llanera-3-title">🌤️ Open-Meteo — La Morgal 3º día</h2>
-        <p id="pred-llanera-3" class="pred-text"></p>
-      </article>
-    </section>
 
     <section class="card" id="analisis-ia">
-      <h2>👨‍✈️ Análisis IA</h2>
+      <h2>👨‍✈️ Análisis IA — LEMR La Morgal</h2>
       <div id="expert-final" class="analysis"></div>
+      <div class="maps-cta">
+        <span class="maps-cta-icon">🗺️</span>
+        <div>
+          <strong>Revisión manual recomendada</strong>
+          <p>Consulta los <a href="#pronostico">mapas significativos AEMET</a> para identificar fenómenos de mesoescala no capturados por los modelos numéricos: frentes activos, líneas de turbonada, convergencias de viento en superficie, cuñas de inversión térmica o áreas de cizalladura. El análisis IA trabaja exclusivamente con datos de punto — los mapas aportan contexto sinóptico e isóbaro indispensable para una decisión GO/NO-GO completa.</p>
+        </div>
+      </div>
     </section>
 
     <!-- MAPA ANÁLISIS EN SUPERFICIE -->
@@ -1178,10 +1176,6 @@
       document.getElementById("pred-ast-hoy").textContent = pred.asturias_hoy || "No disponible";
       document.getElementById("pred-ast-man").textContent = pred.asturias_manana || "No disponible";
       document.getElementById("pred-ast-pas").textContent = pred.asturias_pasado_manana || "No disponible";
-      document.getElementById("pred-llanera-0").textContent = pred.llanera_dia0 || "No disponible";
-      document.getElementById("pred-llanera-1").textContent = pred.llanera_dia1 || "No disponible";
-      document.getElementById("pred-llanera-2").textContent = pred.llanera_dia2 || "No disponible";
-      document.getElementById("pred-llanera-3").textContent = pred.llanera_dia3 || "No disponible";
       
       // Actualizar iconos dinámicos en los títulos
       if (pred.asturias_hoy_icon) {
@@ -1192,18 +1186,6 @@
       }
       if (pred.asturias_pasado_manana_icon) {
         document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
-      }
-      if (pred.llanera_dia0_icon) {
-        document.getElementById("pred-llanera-0-title").textContent = `${pred.llanera_dia0_icon} Open-Meteo — La Morgal hoy`;
-      }
-      if (pred.llanera_dia1_icon) {
-        document.getElementById("pred-llanera-1-title").textContent = `${pred.llanera_dia1_icon} Open-Meteo — La Morgal mañana`;
-      }
-      if (pred.llanera_dia2_icon) {
-        document.getElementById("pred-llanera-2-title").textContent = `${pred.llanera_dia2_icon} Open-Meteo — La Morgal pasado mañana`;
-      }
-      if (pred.llanera_dia3_icon) {
-        document.getElementById("pred-llanera-3-title").textContent = `${pred.llanera_dia3_icon} Open-Meteo — La Morgal 3º día`;
       }
 
       // IA - Convertir markdown a HTML
