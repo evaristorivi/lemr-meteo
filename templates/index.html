@@ -1190,6 +1190,12 @@
         ["Verano", data.location.hours_verano],
       ]);
 
+      const capeVal = data.current.cape;
+      const capeStr = capeVal != null
+        ? `${capeVal} J/kg (${capeVal < 250 ? 'nulo/débil' : capeVal < 500 ? 'moderado' : capeVal < 2000 ? '⚠️ fuerte' : '❌ extremo'})`
+        : null;
+      const precVal = data.current.precipitation;
+      const precStr = precVal != null ? `${precVal} mm` : null;
       renderKv("current-kv", [
         ["Hora dato", fmtDateTime(data.current.time)],
         ["Condición", data.current.condition],
@@ -1199,6 +1205,8 @@
         ["Rachas", `${data.current.wind_gusts_kmh} km/h`],
         ["Nubosidad", `${data.current.cloud_cover}%`],
         ["Presión", `${data.current.pressure} hPa`],
+        ...(precStr ? [["Precipitación", precStr]] : []),
+        ...(capeStr ? [["CAPE", capeStr]] : []),
       ]);
 
       // METAR LEAS (oficial)

@@ -631,6 +631,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "wind_gusts_kmh": current.get("wind_gusts"),
             "pressure": current.get("pressure"),
             "cloud_cover": current.get("cloud_cover"),
+            "precipitation": current.get("precipitation"),
+            "cape": current.get("cape"),
             "condition": weather_code_to_description(current.get("weather_code")),
         },
         "metar": {
