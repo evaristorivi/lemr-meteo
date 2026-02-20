@@ -149,13 +149,13 @@ AERÓDROMO LA MORGAL (LEMR): Pista 10/28 (100°/280°mag), 890m, asfalto, 545ft/
 
 REGLA HORARIOS: "mejor hora" debe cumplir: 1) entre amanecer y atardecer, 2) dentro de 09:00-20:00 (invierno) o 09:00-21:45 (verano). Ventanas fuera de ese rango: descartar.
 
-USO DE LEAS: LEMR sin METAR continuo. Usa LEAS + pronóstico local para inferir condiciones LEMR. Nota: diferencias por distancia/orografía.
+USO DE LEAS: El METAR LEAS indica las condiciones ACTUALES EN LEAS (Aeropuerto de Asturias), NO en LEMR. Sirve como referencia regional de lo que ocurre a 30km, pero NO debe usarse para inferir condiciones en La Morgal — para eso están los datos horarios de Open-Meteo y Windy GFS, que tienen punto exacto sobre LEMR.
 
 ⚖️ PESO DE FUENTES METEOROLÓGICAS (orden de fiabilidad para LEMR):
 1. **Windy GFS hora a hora** — MAYOR PESO. Modelo GFS con punto exacto sobre La Morgal. Históricamente el más preciso para esta ubicación. En caso de discrepancia con otras fuentes, da preferencia a Windy.
 2. **Open-Meteo hora a hora** — ALTO PESO. Modelo de alta resolución local, muy fiable. Cuando coincide con Windy, la ventana es prácticamente segura.
 3. **AEMET Llanera horaria** — PESO MEDIO. Referencia oficial pero resolución espacial menor.
-4. **METAR LEAS** — PESO MEDIO para condiciones actuales, NO para pronóstico.
+4. **METAR LEAS** — PESO BAJO. Solo indica condiciones actuales EN LEAS (30km, orografía distinta). NO extrapolar a LEMR. NO usar para pronóstico.
 5. **AEMET resúmenes diarios** — PESO BAJO. Muy genéricos, útiles solo para tendencia sinóptica.
 Si Windy y Open-Meteo coinciden en que una franja horaria (ej. 10-14h) tiene viento suave y poca nube: ESA es la ventana buena. No la invalides por los máximos del día.
 
@@ -869,10 +869,6 @@ METAR LEAS (Aeropuerto Asturias, ~30km de LEMR):
 {metar_leas or 'No disponible'}
 {f"{flight_category_leas.get('emoji')} {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
-METAR LEMR (La Morgal, estimado local):
-{metar_lemr or 'No disponible'}
-{f"{flight_category_lemr.get('emoji')} {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
-
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 {convection_analysis}
@@ -892,9 +888,7 @@ Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100
 
 ⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 5, 6, 7 y 8 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
-0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (referencia, ~30 km de La Morgal) (versión corta para novatos - máximo 2 líneas, sin jerga)
-
-0.1) **METAR LEMR explicado** — LEMR = La Morgal (estimado/local, NO confundir con LEAS) (versión corta para novatos - máximo 2 líneas, sin jerga)
+0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS. ⚠️ NO ES representativo de LEMR. (máximo 2 líneas, sin jerga)
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
    Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas, si la visibilidad sorprende. Usa los emojis ✅/⚠️/〰️ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique si las condiciones son adecuadas para volar o no.
