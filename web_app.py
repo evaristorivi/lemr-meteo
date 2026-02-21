@@ -459,13 +459,11 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         try:
             fused_ai = interpret_fused_forecast_with_ai(
                 metar_leas=metar_leas or "",
-                metar_lemr=metar_lemr or "",
                 weather_data=weather_data,
                 windy_data=windy_section or {},
                 significant_map_urls=map_urls_for_ai,
                 location=config.LA_MORGAL_COORDS["name"],
                 flight_category_leas=flight_cat_leas,
-                flight_category_lemr=flight_cat_lemr,
                 avisos_cap=avisos_cap,
             )
         except Exception as _ai_exc:

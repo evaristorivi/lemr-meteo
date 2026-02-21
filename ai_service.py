@@ -133,7 +133,7 @@ LÍMITES OPERACIONALES TÍPICOS ULM (consultar manual específico de cada modelo
 - ⚠️ Techo de nubes < 500 ft AGL: LIFR → ❌ PROHIBIDO
 - ⚠️ Techo de nubes 500-1000 ft: IFR → ❌ PROHIBIDO
 - ⚠️ Techo de nubes 1000-1500 ft: IFR marginal → ❌ NO VOLAR (ULM sin certificación IFR)
-- ⚠️ Techo de nubes 1500-2500 ft: MVFR → ⚠️ condiciones marginales (☕ en sección 8)
+- ⚠️ Techo de nubes 1500-2500 ft: MVFR → ⚠️ condiciones marginales (⚠️ PRECAUCIÓN en sección 8)
 - ⚠️ Techo de nubes > 2500 ft: VFR → ✅ aceptable para operar
 - ⚠️ Precipitación activa (lluvia/nieve): NO VOLAR (pérdida sustentación, visibilidad)
 - ⚠️ Nubosidad BKN/OVC < 2500 ft: PRECAUCIÓN (restricción de altitud efectiva)
@@ -649,11 +649,9 @@ def interpret_fused_forecast_with_ai(
     metar_leas: str,
     weather_data: Dict,
     windy_data: Dict,
-    metar_lemr: str = "",
     significant_map_urls: Optional[list[str]] = None,
     location: str = "La Morgal (LEMR)",
     flight_category_leas: Optional[Dict] = None,
-    flight_category_lemr: Optional[Dict] = None,
     avisos_cap: Optional[str] = None,
 ) -> Optional[str]:
     """
@@ -729,8 +727,7 @@ def interpret_fused_forecast_with_ai(
         fecha_actual = now_local.strftime("%Y-%m-%d")
 
         # Formatear condiciones actuales Open-Meteo
-        # Omitir campos ya presentes en el METAR sintético (temp/dewpoint, viento kt, QNH, nubosidad)
-        # para no duplicar tokens; conservar los que el METAR no expresa.
+        # Incluir campos relevantes para análisis ULM que no están en METAR LEAS: temp local, viento km/h, precip, CAPE.
         current_lines = []
         if current:
             current_lines.append(f"  - Hora: {current.get('time', 'N/A')}")
@@ -847,10 +844,6 @@ METAR LEAS (Aeropuerto Asturias, ~30km de LEMR):
 {metar_leas or 'No disponible'}
 {f"{flight_category_leas.get('emoji')} {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
-METAR LEMR sintético (La Morgal — punto exacto, generado de Open-Meteo):
-{metar_lemr or 'No disponible'}
-{f"{flight_category_lemr.get('emoji')} {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
-
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 {convection_analysis}
@@ -872,8 +865,6 @@ Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100
 Formato de cada sección:
 0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS. ⚠️ NO ES representativo de LEMR. (máximo 2 líneas, sin jerga)
 
-0.1) **METAR LEMR explicado** — LEMR = La Morgal (generado desde Open-Meteo, punto exacto sobre el aeródromo). Explica las condiciones actuales EN LA MORGAL. Úsalo como referencia directa para la sección 4 (análisis de pista). (máximo 2 líneas, sin jerga)
-
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
    Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas, si la visibilidad sorprende. Usa los emojis ✅/⚠️/〰️ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique si las condiciones son adecuadas para volar o no.
 
@@ -890,7 +881,7 @@ Formato de cada sección:
    DENTRO DE 3 DÍAS: MEJORA
 
 4) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
-   Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL (no pronóstico).
+   Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL de Open-Meteo (sección “CONDICIONES ACTUALES” arriba). NO uses el viento de METAR LEAS para este cálculo — LEAS está a 30 km con orografía distinta.
    - Antes apertura: "AÚN NO ABIERTO, evaluable desde apertura"
    - <1h hasta cierre: "🕐 CIERRE INMINENTE - no merece la pena"
    - 1-2h: "⚠️ TIEMPO LIMITADO - solo vuelo breve"
@@ -909,12 +900,12 @@ Formato de cada sección:
 6) **VEREDICTO POR DÍA** (los 4 días):
    HOY: combina CONDICIONES ACTUALES (hora presente) + pronóstico horario para las horas que quedan hasta cierre. Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS la evolución hora a hora del resto del día.
    - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
-   🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado y el METAR actual es NOCTURNO — niebla, nubes bajas y humedad nocturna son normales antes del amanecer y NO REPRESENTAN las condiciones de vuelo del día. IGNORA el METAR actual como indicador del día. Basa el veredicto HOY EXCLUSIVAMENTE en el pronóstico horario 09:00–cierre. Las nubes bajas nocturnas suelen disiparse con la salida del sol (09–11h) en La Morgal.
+   🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado y las condiciones actuales de Open-Meteo son nocturnas — niebla, nubes bajas y humedad nocturna son normales antes del amanecer y NO REPRESENTAN las condiciones de vuelo del día. IGNORA las condiciones actuales (Open-Meteo + METAR LEAS) como indicador del día. Basa el veredicto HOY EXCLUSIVAMENTE en el pronóstico horario 09:00–cierre. Las nubes bajas nocturnas suelen disiparse con la salida del sol (09–11h) en La Morgal.
    🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
    ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00. Si la mañana es aceptable pero la tarde se deteriora, el veredicto sigue siendo ✅ (o 🎉 si es ideal) con nota de volar antes de las Xh — NO degrades la etiqueta por lo que pasa en horas que no son la mejor ventana.
    Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad en la MEJOR franja horaria encontrada.
-   Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <800 ft / convección ALTA/CRÍTICA)
+   Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <1500 ft / convección ALTA/CRÍTICA)
    ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
 
 7) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
@@ -938,7 +929,7 @@ Formato de cada sección:
    - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km. En el bar hay caldo de gaviota 🍲
 
    ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Calcula cuánto tiempo queda desde {hora_actual} hasta el cierre ({_close_hour:02d}:00). Si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. Si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
-   🚨 REGLA PRE-APERTURA: Si hora_actual < 09:00, el aeródromo no ha abierto — quedan MUCHAS horas hasta el cierre, nunca uses 🕐 ni ⚠️ TIEMPO LIMITADO. Ignora el METAR nocturno; evalúa HOY con el pronóstico horario 09:00+.
+   🚨 REGLA PRE-APERTURA: Si hora_actual < 09:00, el aeródromo no ha abierto — quedan MUCHAS horas hasta el cierre, nunca uses 🕐 ni ⚠️ TIEMPO LIMITADO. Ignora las condiciones actuales nocturnas (Open-Meteo + METAR LEAS); evalúa HOY con el pronóstico horario 09:00+.
    🚫 ESTA REGLA SOLO APLICA A HOY. MAÑANA/PASADO/3D nunca pueden ser 🕐 ni ⚠️ TIEMPO LIMITADO por razón de hora.
 
    ⚠️ METODOLOGÍA OBLIGATORIA: Para cada día, REVISA los datos Windy y Open-Meteo hora a hora. Localiza la mejor franja concreta del día. Escribe un párrafo descriptivo por día — NO uses bloques fijos como "09-14h" ni tabla de emojis. Explica en lenguaje natural la evolución del día, la mejor hora de salir y por qué. Sé específico: si la buena ventana es 11:00-13:30, di exactamente eso y por qué (viento en calma, despejando, rachas bajas).
@@ -951,7 +942,7 @@ Formato de cada sección:
    **DENTRO DE 3 DÍAS**: [emoji+etiqueta]. Mismo formato.
 
 9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
-   Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <800 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
+   Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <1500 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
    Indica el día elegido, el ranking resumido, carácter (placentero/estable/agitado) y tipo de vuelo posible usando estos umbrales:
    - **Travesías largas**: techo >3000 ft Y vis >10 km Y rachas ≤12 kt
    - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
@@ -978,7 +969,7 @@ Reglas CRÍTICAS:
 - **UNIDADES**: Open-Meteo/Windy en km/h → kt: divide entre 1.852. NUNCA etiquetes kt sin convertir. METAR ya viene en kt.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
 - **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
-- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.1, 0.5, 1…12). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…12). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
