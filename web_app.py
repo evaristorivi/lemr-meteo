@@ -456,7 +456,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 metar_lemr=metar_lemr or "",
                 weather_data=weather_data,
                 windy_data=windy_section or {},
-                map_analysis_text="" if (is_mini or is_github) else (analysis_map_url or ""),
                 significant_map_urls=map_urls_for_ai,
                 location=config.LA_MORGAL_COORDS["name"],
                 flight_category_leas=flight_cat_leas,

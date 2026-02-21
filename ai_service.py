@@ -246,12 +246,24 @@ def get_ai_client():
                 api_key=config.GITHUB_TOKEN,
                 base_url="https://models.inference.ai.azure.com",
                 max_retries=0,
-                timeout=60,
+                timeout=120,
             )
             return ('github', client)
         except:
             pass
-    
+
+    if config.OPENAI_API_KEY:
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=config.OPENAI_API_KEY,
+                max_retries=0,
+                timeout=120,
+            )
+            return ('openai', client)
+        except:
+            pass
+
     return None
 
 
@@ -267,19 +279,15 @@ def _is_rate_limit_error(exc: Exception) -> bool:
 
 
 def _print_rate_limit_info(response, model_name: str):
-    """Imprime información de rate limits de la respuesta de la API"""
+    """Imprime uso de tokens de la respuesta (el SDK openai v1 no expone headers en el objeto ChatCompletion)."""
     try:
-        # Intentar obtener las cabeceras de rate limit
-        if hasattr(response, '_response') and hasattr(response._response, 'headers'):
-            headers = response._response.headers
-            limit = headers.get('x-ratelimit-limit-requests', 'N/A')
-            remaining = headers.get('x-ratelimit-remaining-requests', 'N/A')
-            reset = headers.get('x-ratelimit-reset-requests', 'N/A')
-            
-            if limit != 'N/A' or remaining != 'N/A':
-                print(f"📊 Rate Limit [{model_name}]: {remaining}/{limit} requests restantes (reset: {reset})")
-    except Exception as e:
-        # Si no podemos leer las cabeceras, no es crítico
+        used_model = getattr(response, 'model', model_name)
+        usage = getattr(response, 'usage', None)
+        if usage:
+            prompt_t = getattr(usage, 'prompt_tokens', '?')
+            completion_t = getattr(usage, 'completion_tokens', '?')
+            print(f"📊 [{used_model}]: {prompt_t} tokens entrada / {completion_t} tokens salida")
+    except Exception:
         pass
 
 
@@ -307,33 +315,6 @@ def _is_context_length_error(exc: Exception) -> bool:
         or "input is too long" in text
         or "prompt is too long" in text
     )
-
-
-def _infer_cloud_type(layer: str, pct: Optional[int], wx_code: Optional[int]) -> str:
-    """
-    Infiere el tipo probable de nube (abreviatura ICAO) a partir de la capa,
-    cobertura y weather_code WMO. Devuelve p.ej. "(Sc)", "(As)", "(Ci/Cs)".
-    layer: 'low' | 'mid' | 'high'
-    """
-    if pct is None or pct == 0:
-        return ""
-    wx = wx_code or 0
-    if layer == "low":
-        if wx in (95, 96, 99):                   return "(Cb)"
-        if wx in (80, 81, 82, 85, 86):           return "(Cu/Cb)"
-        if wx in (61, 63, 65, 71, 73, 75, 77):  return "(Ns)"
-        if wx in (51, 53, 55):                   return "(St)"
-        if wx in (45, 48):                       return "(St)"
-        if pct >= 75:                            return "(St/Sc)"
-        if pct >= 25:                            return "(Sc)"
-        return "(Cu)"
-    if layer == "mid":
-        return "(As)" if pct >= 50 else "(Ac)"
-    if layer == "high":
-        if pct >= 70: return "(Cs)"
-        if pct >= 20: return "(Ci)"
-        return "(Cc)"
-    return ""
 
 
 def _map_weather_code(code: Optional[int]) -> str:
@@ -668,7 +649,6 @@ def interpret_fused_forecast_with_ai(
     metar_leas: str,
     weather_data: Dict,
     windy_data: Dict,
-    map_analysis_text: str,
     metar_lemr: str = "",
     significant_map_urls: Optional[list[str]] = None,
     location: str = "La Morgal (LEMR)",
@@ -685,13 +665,14 @@ def interpret_fused_forecast_with_ai(
 
     provider, client = client_info
 
-    try:
-        current = weather_data.get("current", {}) if weather_data else {}
-        daily = weather_data.get("daily_forecast", []) if weather_data else []
-        hourly_om = weather_data.get("hourly_forecast", []) if weather_data else []
-        windy_daily = windy_data.get("daily_summary", []) if windy_data else []
-        windy_hourly = windy_data.get("hourly", []) if windy_data else []
+    # Extraer datos antes del try para que el except siempre tenga acceso a ellos
+    current = weather_data.get("current", {}) if weather_data else {}
+    daily = weather_data.get("daily_forecast", []) if weather_data else []
+    hourly_om = weather_data.get("hourly_forecast", []) if weather_data else []
+    windy_daily = windy_data.get("daily_summary", []) if windy_data else []
+    windy_hourly = windy_data.get("hourly", []) if windy_data else []
 
+    try:
         # ── Metadata diaria compacta (solo campos NO disponibles en el horario hora a hora) ──
         # Incluye: amanecer/atardecer, horas de sol, horas/mm de lluvia, CAPE máx,
         # freezing level mínimo, nieve y riesgo de niebla.
@@ -866,6 +847,10 @@ METAR LEAS (Aeropuerto Asturias, ~30km de LEMR):
 {metar_leas or 'No disponible'}
 {f"{flight_category_leas.get('emoji')} {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
+METAR LEMR sintético (La Morgal — punto exacto, generado de Open-Meteo):
+{metar_lemr or 'No disponible'}
+{f"{flight_category_lemr.get('emoji')} {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')}" if flight_category_lemr else ""}
+
 Open-Meteo CONDICIONES ACTUALES en {location}:
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 {convection_analysis}
@@ -886,6 +871,8 @@ Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100
 ⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 5, 6, 7 y 8 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
 0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS. ⚠️ NO ES representativo de LEMR. (máximo 2 líneas, sin jerga)
+
+0.1) **METAR LEMR explicado** — LEMR = La Morgal (generado desde Open-Meteo, punto exacto sobre el aeródromo). Explica las condiciones actuales EN LA MORGAL. Úsalo como referencia directa para la sección 4 (análisis de pista). (máximo 2 líneas, sin jerga)
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
    Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas, si la visibilidad sorprende. Usa los emojis ✅/⚠️/〰️ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique si las condiciones son adecuadas para volar o no.
@@ -910,7 +897,7 @@ Formato de cada sección:
    - >2h: PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
    - PREFERENCIA REAL DE OPERADORES: con viento ≤5 kt los pilotos usan PISTA 10 por comodidad (calle de rodadura queda cerca, evitan backtrack). Solo a partir de ~6 kt o más, el viento manda y se usa la pista que da headwind.
-   MAÑANA/PASADO/3 DÍAS: sin datos de dirección → omite cálculo de pista.
+   MAÑANA/PASADO/3 DÍAS: omite cálculo de pista (solo se calcula para HOY).
 
 5) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
    Para CADA UNO de los 4 días, redacta 2 frases narrativas — una para la mañana (09-14h) y otra para la tarde (14-cierre) — describiendo en lenguaje natural cómo evolucionan el viento, nubosidad y condiciones. Usa los datos horarios Windy y Open-Meteo. NO hagas listas de horas ni columnas. Formato obligatorio:
@@ -1056,9 +1043,6 @@ Reglas CRÍTICAS:
         print(f"Detalles: {error_detail}")
         
         # Proporcionar un resumen COMPLETO de todos los datos disponibles como fallback
-        daily = weather_data.get('daily_forecast', [])
-        windy_daily = windy_data.get('daily_summary', []) if windy_data else []
-        
         fallback_sections = []
         
         # Encabezado
