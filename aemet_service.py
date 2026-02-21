@@ -474,11 +474,7 @@ if __name__ == "__main__":
         except Exception:
             print(f"   {h} UTC: ❌ error")
 
-    print("\n3) Predicción Asturias hoy:")
-    pred = get_prediccion_asturias_hoy()
-    print(f"   {(pred or 'N/A')[:200]}")
-
-    print("\n4) Predicción Llanera:")
+    print("\n3) Predicción Llanera:")
     pred = get_prediccion_llanera()
     if pred:
         print(f"   Municipio: {pred.get('nombre', 'N/A')}")
