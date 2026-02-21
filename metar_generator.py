@@ -120,6 +120,7 @@ def generate_metar_lemr(
     elevation_m: int = 180,
     visibility_km: Optional[float] = None,
     dewpoint_c: Optional[float] = None,
+    cloud_cover_low: Optional[int] = None,
 ) -> Optional[str]:
     """
     Genera un METAR sintético para LEMR basándose en datos de Open-Meteo.
@@ -133,6 +134,9 @@ def generate_metar_lemr(
         dewpoint_c: Punto de rocío directo del modelo (°C), procedente de
                     hourly_forecast[0]['dewpoint']. Más preciso que la fórmula
                     Magnus derivada de la humedad relativa de 'current'.
+        cloud_cover_low: Cobertura de nubes bajas (<2000m) en % de hourly_forecast[0].
+                         Se usa para emitir FEW/SCT/BKN/OVC con altura estimada
+                         por la fórmula LCL (T-Td)×400ft.
 
     Returns:
         String con METAR sintético en formato ICAO o None si faltan datos
@@ -199,9 +203,22 @@ def generate_metar_lemr(
         wx = get_weather_phenomena(weather_code)
         wx_str = f" {wx}" if wx else ""
         
-        # Nubes: Open-Meteo no proporciona datos de nubes fiables para LEMR.
-        # En METARs AUTO sin ceilómetro, ICAO Annex 3 prescribe "NCD" (No Cloud Detected).
-        clouds = "NCD"
+        # Nubes: usar cloud_cover_low (capa <2000m) de hourly para emitir grupo real.
+        # Altura de techo estimada por LCL: (T - Td) × 400 ft.
+        # Si no hay nubes bajas, NCD (sin ceilómetro real, ICAO Annex 3).
+        dp_for_lcl = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
+        lcl_ft = max(100, round((temp - dp_for_lcl) * 400 / 100) * 100)  # redondeado a 100ft
+        lcl_hundreds = max(1, lcl_ft // 100)
+        if not cloud_cover_low:  # None o 0%
+            clouds = "NCD"
+        elif cloud_cover_low <= 25:
+            clouds = f"FEW{lcl_hundreds:03d}"
+        elif cloud_cover_low <= 50:
+            clouds = f"SCT{lcl_hundreds:03d}"
+        elif cloud_cover_low <= 87:
+            clouds = f"BKN{lcl_hundreds:03d}"
+        else:
+            clouds = f"OVC{lcl_hundreds:03d}"
         
         # Temperatura y punto de rocío
         temp_int = round(temp)
@@ -234,4 +251,4 @@ def generate_metar_lemr(
 
 def get_metar_disclaimer() -> str:
     """Devuelve el disclaimer para el METAR sintético."""
-    return "⚠️ METAR estimado generado automáticamente desde Open-Meteo · NO OFICIAL · Solo informativo"
+    return "⚠️ METAR estimado generado automáticamente desde Open-Meteo · NO OFICIAL · Solo informativo · Techo estimado por LCL (T−Td)×400ft usando solo nubes bajas (<2000m) · Nubes medias y altas no generan techo en este METAR"

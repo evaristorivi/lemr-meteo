@@ -342,16 +342,22 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     # Generar METAR sintético para LEMR desde datos Open-Meteo
     current = weather_data.get("current", {})
     hourly_om = weather_data.get("hourly_forecast", [])
-    # Pasar visibilidad y punto de rocío de la primera hora hourly (más preciso que inferir del código)
-    _h0 = hourly_om[0] if hourly_om else {}
-    _visibility_km = _h0.get('visibility')  # ya en km (convertido en weather_service)
-    _dewpoint_c = _h0.get('dewpoint')  # dewpoint directo del modelo (más preciso que Magnus)
+    # Usar la hora actual (no índice 0 = 00:00) para dewpoint, visibilidad y nubes bajas
+    _now_hour_str = current.get("time", "")[:13]  # "YYYY-MM-DDTHH"
+    _h_current = next(
+        (h for h in hourly_om if h.get("time", "")[:13] == _now_hour_str),
+        hourly_om[0] if hourly_om else {}
+    )
+    _visibility_km = _h_current.get('visibility')
+    _dewpoint_c = _h_current.get('dewpoint')
+    _cloud_cover_low = _h_current.get('cloud_cover_low')
     metar_lemr = generate_metar_lemr(
         current,
         icao="LEMR",
         elevation_m=config.LA_MORGAL_AERODROME["elevation_m"],
         visibility_km=_visibility_km,
         dewpoint_c=_dewpoint_c,
+        cloud_cover_low=_cloud_cover_low,
     )
     if metar_lemr:
         print(f"✅ METAR sintético LEMR generado: {metar_lemr}")
@@ -505,6 +511,9 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "wind_gusts_kmh": current.get("wind_gusts"),
             "pressure": current.get("pressure"),
             "cloud_cover": current.get("cloud_cover"),
+            "cloud_cover_low": _h_current.get("cloud_cover_low"),
+            "cloud_cover_mid": _h_current.get("cloud_cover_mid"),
+            "cloud_cover_high": _h_current.get("cloud_cover_high"),
             "precipitation": current.get("precipitation"),
             "cape": current.get("cape"),
             "condition": weather_code_to_description(current.get("weather_code")),
