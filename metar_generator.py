@@ -36,20 +36,6 @@ def kmh_to_knots(speed_kmh: float) -> int:
     return round(speed_kmh * 0.539957)
 
 
-def _cover_to_oktas_code(pct: int) -> Optional[str]:
-    """Devuelve el código de cobertura METAR para un porcentaje dado, o None si es SKC."""
-    if pct <= 12:
-        return None          # SKC / sin capa
-    elif pct <= 25:
-        return "FEW"         # 1-2 octas
-    elif pct <= 50:
-        return "SCT"         # 3-4 octas
-    elif pct <= 87:
-        return "BKN"         # 5-7 octas
-    else:
-        return "OVC"         # 8 octas
-
-
 def get_weather_phenomena(weather_code: int) -> str:
     """
     Mapea weather_code de Open-Meteo a fenómenos meteorológicos METAR.
