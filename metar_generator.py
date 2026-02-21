@@ -50,72 +50,6 @@ def _cover_to_oktas_code(pct: int) -> Optional[str]:
         return "OVC"         # 8 octas
 
 
-def get_cloud_groups(
-    cloud_cover_total: int,
-    temp_c: Optional[float] = None,
-    dewpoint_c: Optional[float] = None,
-    cloud_cover_low: Optional[int] = None,
-    cloud_cover_mid: Optional[int] = None,
-) -> str:
-    """
-    Genera los grupos de nubes METAR.
-    Si se dispone de capas diferenciadas (low/mid), genera múltiples grupos.
-    La altura de nubes bajas se estima con la fórmula LCL: (T - Td) × 400 ft.
-
-    Args:
-        cloud_cover_total: Cobertura total (%) — usado si no hay capas
-        temp_c: Temperatura actual (°C) — para LCL
-        dewpoint_c: Punto de rocío (°C) — para LCL
-        cloud_cover_low: Cobertura nubosa baja (%) de Open-Meteo hourly
-        cloud_cover_mid: Cobertura nubosa media (%) de Open-Meteo hourly
-
-    Returns:
-        String con uno o varios grupos METAR (ej: "FEW023 BKN065")
-    """
-    # --- Altura base nubes bajas: LCL = (T - Td) × 400 ft ---
-    if temp_c is not None and dewpoint_c is not None and temp_c >= dewpoint_c:
-        lcl_ft = max(500, int((temp_c - dewpoint_c) * 400))
-    else:
-        lcl_ft = 2500  # Fallback conservador típico de Asturias
-    low_code  = f"{round(lcl_ft / 100):03d}"   # redondeado a centenas
-
-    # Override mid_code cuando T-Td ≤ 3°C y LCL < 2000 ft:
-    # Open-Meteo clasifica a veces estratos bajos húmedos como capa "media" (As/Ac).
-    # En condiciones de casi-saturación la base real es la LCL, no los 6500 ft nominales.
-    spread = (temp_c - dewpoint_c) if (temp_c is not None and dewpoint_c is not None) else 999.0
-    _near_sat = spread <= 3.0 and lcl_ft < 2000
-    mid_code  = low_code if _near_sat else "065"  # FL065 nominal (6500 ft) para nubes medias
-
-    groups = []
-
-    if cloud_cover_low is not None and cloud_cover_mid is not None:
-        # --- Capas diferenciadas disponibles ---
-        low_oktas = _cover_to_oktas_code(cloud_cover_low)
-        mid_oktas = _cover_to_oktas_code(cloud_cover_mid)
-
-        if low_oktas:
-            groups.append(f"{low_oktas}{low_code}")
-        if mid_oktas:
-            groups.append(f"{mid_oktas}{mid_code}")
-
-        # Si no hay ninguna capa pero la cobertura total es significativa,
-        # reportar con cobertura total como capa baja (degradación segura)
-        if not groups:
-            total_oktas = _cover_to_oktas_code(cloud_cover_total)
-            if total_oktas:
-                groups.append(f"{total_oktas}{low_code}")
-            else:
-                return "SKC"
-    else:
-        # --- Solo cobertura total disponible (fallback) ---
-        total_oktas = _cover_to_oktas_code(cloud_cover_total)
-        if total_oktas is None:
-            return "SKC"
-        groups.append(f"{total_oktas}{low_code}")
-
-    return " ".join(groups)
-
-
 def get_weather_phenomena(weather_code: int) -> str:
     """
     Mapea weather_code de Open-Meteo a fenómenos meteorológicos METAR.
@@ -198,7 +132,6 @@ def generate_metar_lemr(
     current_weather: Dict,
     icao: str = "LEMR",
     elevation_m: int = 180,
-    cloud_layers: Optional[Dict] = None,
     visibility_km: Optional[float] = None,
     dewpoint_c: Optional[float] = None,
 ) -> Optional[str]:
@@ -209,8 +142,6 @@ def generate_metar_lemr(
         current_weather: Diccionario con datos actuales de Open-Meteo (current)
         icao: Código ICAO del aeródromo
         elevation_m: Elevación del aeródromo en metros
-        cloud_layers: Dict opcional con claves 'low', 'mid', 'high' (%)
-                      procedente de hourly_forecast[0] para capas diferenciadas
         visibility_km: Visibilidad real en km de Open-Meteo hourly (más precisa
                        que inferirla solo del weather_code)
         dewpoint_c: Punto de rocío directo del modelo (°C), procedente de
@@ -282,17 +213,9 @@ def generate_metar_lemr(
         wx = get_weather_phenomena(weather_code)
         wx_str = f" {wx}" if wx else ""
         
-        # Nubes: usar capas diferenciadas si disponibles, con base LCL calculada
-        # Preferir dewpoint directo del modelo (hourly) sobre Magnus derivado de humedad
-        dewpoint_for_lcl = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
-        cl = cloud_layers or {}
-        clouds = get_cloud_groups(
-            cloud_cover_total=cloud_cover,
-            temp_c=temp,
-            dewpoint_c=dewpoint_for_lcl,
-            cloud_cover_low=cl.get('low'),
-            cloud_cover_mid=cl.get('mid'),
-        )
+        # Nubes: Open-Meteo no proporciona datos de nubes fiables para LEMR.
+        # En METARs AUTO sin ceilómetro, ICAO Annex 3 prescribe "NCD" (No Cloud Detected).
+        clouds = "NCD"
         
         # Temperatura y punto de rocío
         temp_int = round(temp)

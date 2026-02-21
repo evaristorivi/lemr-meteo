@@ -19,9 +19,6 @@ from aemet_service import (
     get_significant_maps_for_three_days,
     get_analysis_map_url,
     get_analysis_map_b64,
-    get_prediccion_asturias_hoy,
-    get_prediccion_asturias_manana,
-    get_prediccion_asturias_pasado_manana,
     get_avisos_cap_asturias,
 )
 from metar_service import get_metar, classify_flight_category
@@ -345,20 +342,14 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     # Generar METAR sintético para LEMR desde datos Open-Meteo
     current = weather_data.get("current", {})
     hourly_om = weather_data.get("hourly_forecast", [])
-    # Pasar capas de nubes y visibilidad de la primera hora hourly (más preciso que inferir del código)
+    # Pasar visibilidad y punto de rocío de la primera hora hourly (más preciso que inferir del código)
     _h0 = hourly_om[0] if hourly_om else {}
-    _cloud_layers = {
-        'low':  _h0.get('cloud_cover_low'),
-        'mid':  _h0.get('cloud_cover_mid'),
-        'high': _h0.get('cloud_cover_high'),
-    } if _h0 else None
     _visibility_km = _h0.get('visibility')  # ya en km (convertido en weather_service)
     _dewpoint_c = _h0.get('dewpoint')  # dewpoint directo del modelo (más preciso que Magnus)
     metar_lemr = generate_metar_lemr(
         current,
         icao="LEMR",
         elevation_m=config.LA_MORGAL_AERODROME["elevation_m"],
-        cloud_layers=_cloud_layers,
         visibility_km=_visibility_km,
         dewpoint_c=_dewpoint_c,
     )
@@ -398,36 +389,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             level="WARNING",
         )
 
-    # ── Predicción AEMET textual Asturias ──
-    # Obtener fechas esperadas para cada sección
-    today_date = now_local.date()
-    tomorrow_date = today_date + timedelta(days=1)
-    day_after_tomorrow_date = today_date + timedelta(days=2)
-    
-    # Obtener predicciones
-    pred_asturias_hoy = get_prediccion_asturias_hoy() or ""
-    pred_asturias_manana = get_prediccion_asturias_manana() or ""
-    pred_asturias_pasado_manana = get_prediccion_asturias_pasado_manana() or ""
-
-    if not pred_asturias_hoy and not pred_asturias_manana and not pred_asturias_pasado_manana:
-        print("⚠️ AEMET: predicciones textuales Asturias todas vacías — posible API key caducada o servicio caído")
-        _tg_alert(
-            "AEMET predicciones textuales Asturias todas vacias (hoy + manana + pasado). Posible API key caducada o servicio AEMET caido.",
-            source="aemet",
-            level="WARNING",
-        )
-
-    # Determinar iconos dinámicos basados en el contenido de las predicciones
-    icon_hoy = get_weather_icon_from_text(pred_asturias_hoy)
-    icon_manana = get_weather_icon_from_text(pred_asturias_manana)
-    icon_pasado = get_weather_icon_from_text(pred_asturias_pasado_manana)
-    
-    # Enriquecer con información de fecha esperada en español
-    pred_asturias_hoy_label = f"📅 {format_date_spanish(today_date)}\n{pred_asturias_hoy}" if pred_asturias_hoy else f"Sin datos para {today_date.strftime('%d/%m/%Y')}"
-    pred_asturias_manana_label = f"📅 {format_date_spanish(tomorrow_date)}\n{pred_asturias_manana}" if pred_asturias_manana else f"Sin datos para {tomorrow_date.strftime('%d/%m/%Y')}"
-    pred_asturias_pasado_manana_label = f"📅 {format_date_spanish(day_after_tomorrow_date)}\n{pred_asturias_pasado_manana}" if pred_asturias_pasado_manana else f"Sin datos para {day_after_tomorrow_date.strftime('%d/%m/%Y')}"
-
-    # ── Avisos CAP y Llanera horaria (para la IA) ──
+    # ── Avisos CAP (para la IA) ──
     avisos_cap = get_avisos_cap_asturias()
     if avisos_cap:
         print(f"⚠️ AEMET AVISOS CAP activos: {avisos_cap[:80]}")
@@ -484,21 +446,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 if u and u not in map_urls_for_ai:
                     map_urls_for_ai.append(u)
 
-        # Para mini O GitHub: truncar agresivamente. Para OpenAI: texto completo
-        if is_mini or is_github:
-            aemet_pred_short = {
-                "asturias_hoy": (pred_asturias_hoy[:180] if pred_asturias_hoy else ""),
-                "asturias_manana": (pred_asturias_manana[:180] if pred_asturias_manana else ""),
-                "asturias_pasado_manana": (pred_asturias_pasado_manana[:180] if pred_asturias_pasado_manana else ""),
-            }
-        else:
-            # OpenAI: recibe texto AEMET completo
-            aemet_pred_short = {
-                "asturias_hoy": pred_asturias_hoy or "",
-                "asturias_manana": pred_asturias_manana or "",
-                "asturias_pasado_manana": pred_asturias_pasado_manana or "",
-            }
-
         # Calcular clasificaciones de condiciones de vuelo antes de pasarlas a la IA
         flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
         flight_cat_lemr = classify_flight_category(metar_lemr) if metar_lemr else None
@@ -509,7 +456,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 metar_lemr=metar_lemr or "",
                 weather_data=weather_data,
                 windy_data=windy_section or {},
-                aemet_prediccion=aemet_pred_short,
                 map_analysis_text="" if (is_mini or is_github) else (analysis_map_url or ""),
                 significant_map_urls=map_urls_for_ai,
                 location=config.LA_MORGAL_COORDS["name"],
@@ -580,14 +526,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         },
         "forecast_days": days,
         "analysis_map_url": analysis_map_b64,  # Base64 para navegador (evita CORS)
-        "aemet_prediccion": {
-            "asturias_hoy": pred_asturias_hoy_label,
-            "asturias_hoy_icon": icon_hoy,
-            "asturias_manana": pred_asturias_manana_label,
-            "asturias_manana_icon": icon_manana,
-            "asturias_pasado_manana": pred_asturias_pasado_manana_label,
-            "asturias_pasado_manana_icon": icon_pasado,
-        },
+
         "windy": windy_section,
         "ai": {
             "weather_analysis": weather_ai,

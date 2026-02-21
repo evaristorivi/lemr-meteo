@@ -670,7 +670,6 @@ def interpret_fused_forecast_with_ai(
     metar_leas: str,
     weather_data: Dict,
     windy_data: Dict,
-    aemet_prediccion: Dict,
     map_analysis_text: str,
     metar_lemr: str = "",
     significant_map_urls: Optional[list[str]] = None,
@@ -912,6 +911,7 @@ Formato de cada sección:
    - 1-2h: "⚠️ TIEMPO LIMITADO - solo vuelo breve"
    - >2h: PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
+   - PREFERENCIA REAL DE OPERADORES: con viento ≤5 kt los pilotos usan PISTA 10 por comodidad (calle de rodadura queda cerca, evitan backtrack). Solo a partir de ~6 kt o más, el viento manda y se usa la pista que da headwind.
    MAÑANA/PASADO/3 DÍAS: sin datos de dirección → omite cálculo de pista.
 
 5) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
@@ -948,7 +948,7 @@ Formato de cada sección:
    Etiquetas — criterios OBJETIVOS basados en rachas y viento medio calculados por ti en kt (÷1.852):
    - 🎉 **SÍ, IDEAL**: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip
    - ✅ **SÍ, ACEPTABLE**: rachas ≤15 kt Y viento medio ≤10 kt Y techo >2500 ft Y vis >8 km
-   - ⚠️ **SOLO SI NECESITAS PRÁCTICA**: rachas 15-22 kt O viento medio 10-15 kt O techo 1500-2500 ft O vis 5-8 km
+   - ⚠️ **PRECAUCIÓN**: rachas 15-22 kt O viento medio 10-15 kt O techo 1500-2500 ft O vis 5-8 km. Si los parámetros límite ocurren SOLO en una parte del día (ej. tarde), añade "MAÑANA BIEN, PRECAUCIÓN POR LA TARDE" y especifica la hora de corte.
    - 🏠 **NO MERECE LA PENA**: en el límite pero sin factor ❌ — no vale la pena el desplazamiento
    - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km. En el bar hay caldo de gaviota 🍲
 
@@ -1102,20 +1102,6 @@ Reglas CRÍTICAS:
                 fallback_sections.append(f"  🌬️ Rachas máx: {day.get('max_gust_kmh', 'N/A')} km/h")
                 fallback_sections.append(f"  🌡️ Temp media: {day.get('avg_temp_c', 'N/A')}°C")
                 fallback_sections.append(f"  🌧️ Precip: {day.get('precip_total_mm', 'N/A')} mm")
-        
-        # AEMET predicciones
-        aemet_hoy = aemet_prediccion.get('asturias_hoy', '') if aemet_prediccion else ''
-        aemet_man = aemet_prediccion.get('asturias_manana', '') if aemet_prediccion else ''
-        aemet_pas = aemet_prediccion.get('asturias_pasado_manana', '') if aemet_prediccion else ''
-        
-        if aemet_hoy or aemet_man or aemet_pas:
-            fallback_sections.append("\n**PREDICCIONES AEMET ASTURIAS:**")
-            if aemet_hoy:
-                fallback_sections.append(f"\nHOY:\n{aemet_hoy[:300]}{'...' if len(aemet_hoy) > 300 else ''}")
-            if aemet_man:
-                fallback_sections.append(f"\nMAÑANA:\n{aemet_man[:300]}{'...' if len(aemet_man) > 300 else ''}")
-            if aemet_pas:
-                fallback_sections.append(f"\nPASADO MAÑANA:\n{aemet_pas[:300]}{'...' if len(aemet_pas) > 300 else ''}")
         
         # Notas finales
         fallback_sections.append("\n⚠️ **IMPORTANTE:**")

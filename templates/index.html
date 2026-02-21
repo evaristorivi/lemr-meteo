@@ -313,6 +313,10 @@
       gap: 8px;
     }
 
+    .map-pair--4 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
     .map-slot {
       text-align: center;
     }
@@ -734,7 +738,7 @@
     }
 
     @media (max-width: 600px) {
-      .map-pair { grid-template-columns: 1fr; }
+      .map-pair, .map-pair--4 { grid-template-columns: 1fr; }
       .days { grid-template-columns: 1fr; }
       .ogimet-week-grid { grid-template-columns: 1fr; }
     }
@@ -760,10 +764,9 @@
       <nav class="nav-menu">
         <a href="#condiciones">🌤️ Actual</a>
         <a href="#windy">🌬️ Windy</a>
-        <a href="#pronostico">📍 Mapas AEMET</a>
-        <a href="#aemet-asturias">🌦️ AEMET</a>
+        <a href="#pronostico">📍 Mapas significativos</a>
         <a href="#analisis-ia">👨‍✈️ IA LEMR</a>
-        <a href="#mapa-analisis">🗺️ Mapa</a>
+        <a href="#mapa-analisis">🗺️ Análisis en superficie</a>
         <a href="#ogimet-semana">📆 7 días</a>
       </nav>
     </section>
@@ -811,25 +814,10 @@
 
     <!-- MAPAS SIGNIFICATIVOS AEMET -->
     <section class="card" id="pronostico">
-      <h2>📍 Mapas significativos AEMET</h2>
+      <h2>📍 Mapas significativos</h2>
       <div id="days" class="days"></div>
     </section>
 
-    <!-- PREDICCIÓN AEMET TEXTUAL -->
-    <section class="grid-asturias" id="aemet-asturias">
-      <article class="card">
-        <h2 id="pred-ast-hoy-title">🌦️ Predicción AEMET — Asturias hoy</h2>
-        <p id="pred-ast-hoy" class="pred-text"></p>
-      </article>
-      <article class="card">
-        <h2 id="pred-ast-man-title">🌦️ Predicción AEMET — Asturias mañana</h2>
-        <p id="pred-ast-man" class="pred-text"></p>
-      </article>
-      <article class="card">
-        <h2 id="pred-ast-pas-title">🌦️ Predicción AEMET — Asturias pasado mañana</h2>
-        <p id="pred-ast-pas" class="pred-text"></p>
-      </article>
-    </section>
 
 
     <section class="card" id="analisis-ia">
@@ -846,7 +834,7 @@
 
     <!-- MAPA ANÁLISIS EN SUPERFICIE -->
     <section class="card" id="mapa-analisis">
-      <h2>🗺️ Mapa de análisis en superficie (isobaras + frentes)</h2>
+      <h2>🗺️ Análisis en superficie (isobaras + frentes)</h2>
       <img id="analysis-map-img" class="map analysis-map" alt="Mapa de análisis AEMET" style="display:none" />
       <p id="analysis-map-unavailable" class="muted" style="text-align:center">🗺️ Mapa no disponible en este momento</p>
     </section>
@@ -1001,7 +989,12 @@
       const result = [];
 
       for (const d of days) {
-        if (!d.show_aemet_maps) continue; // Solo Hoy y Mañana (con mapas)
+        if (!d.show_aemet_maps) continue;
+        const slots = d.map_slots || [];
+        // Ocultar Mañana (y siguientes) si no tiene mapas publicados
+        if (slots.length === 0 && d.label !== "Hoy") continue;
+
+        const gridClass = slots.length >= 4 ? "map-pair map-pair--4" : "map-pair";
 
         result.push(`
           <article class="day">
@@ -1010,9 +1003,9 @@
               <div>
                 <span class="chip">UTC disponibles: ${(d.available_utc_hours || []).join(" · ") || "sin publicación"}</span>
               </div>
-              <div class="map-pair">
-                ${(d.map_slots || []).length
-                  ? d.map_slots.map(slot => `
+              <div class="${gridClass}">
+                ${slots.length
+                  ? slots.map(slot => `
                       <div class="map-slot">
                         <div class="label">${slot.slot_label || (slot.utc_hour + " UTC")}</div>
                         ${mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`)}
@@ -1140,24 +1133,6 @@
         analysisUnavailable.style.display = "";
       }
 
-      // Predicciones AEMET textuales
-      const pred = data.aemet_prediccion || {};
-      
-      // Actualizar contenido de predicciones
-      document.getElementById("pred-ast-hoy").textContent = pred.asturias_hoy || "No disponible";
-      document.getElementById("pred-ast-man").textContent = pred.asturias_manana || "No disponible";
-      document.getElementById("pred-ast-pas").textContent = pred.asturias_pasado_manana || "No disponible";
-      
-      // Actualizar iconos dinámicos en los títulos
-      if (pred.asturias_hoy_icon) {
-        document.getElementById("pred-ast-hoy-title").textContent = `${pred.asturias_hoy_icon} Predicción AEMET — Asturias hoy`;
-      }
-      if (pred.asturias_manana_icon) {
-        document.getElementById("pred-ast-man-title").textContent = `${pred.asturias_manana_icon} Predicción AEMET — Asturias mañana`;
-      }
-      if (pred.asturias_pasado_manana_icon) {
-        document.getElementById("pred-ast-pas-title").textContent = `${pred.asturias_pasado_manana_icon} Predicción AEMET — Asturias pasado mañana`;
-      }
 
       // IA - Post-procesador visual: colorea líneas por veredicto y añade separadores
       function buildSourcesBanner(aiData, forecastDays, windyData, metar) {
