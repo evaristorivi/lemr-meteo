@@ -1,0 +1,35 @@
+/* humanstxt.org */
+
+/* TEAM */
+Author: Evaristo Romano Rivieccio
+Contact: evaristo@evaristorivieccio.com
+Website: https://www.evaristorivieccio.com
+Twitter: @evaristorivieccio
+Location: Asturias, España
+
+/* THANKS */
+Thanks to AEMET for providing meteorological data
+Thanks to Open-Meteo for high-precision weather forecasting
+Thanks to Windy for wind and model data
+Thanks to GitHub Models for AI capabilities
+Thanks to Ogimet for surface analysis charts
+
+/* SITE */
+Standards: HTML5, CSS3, JavaScript ES6
+Components: Flask, Bootstrap, Marked.js
+Last Update: 2026-02-21
+Language: Spanish (es-ES)
+Charset: UTF-8
+CMS: Flask (Python)
+Accelerators: Gunicorn, Apache
+
+/* KEYWORDS */
+LEMR, La Morgal, Asturias, aeródromo, meteorología, METAR, AEMET, aviación, ULM, pronóstico, viento, análisis
+
+/* LOCATION */
+Llanera, Asturias, España
+Latitude: 43.4305
+Longitude: -5.8270
+
+/* PURPOSE */
+Web application for real-time meteorological information specifically designed for ultralight pilots operating from La Morgal aerodrome (LEMR) in Asturias, Spain. Combines official AEMET forecasts, real-time METAR data, wind maps, and AI-powered analysis for better flight decisions.

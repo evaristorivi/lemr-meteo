@@ -719,13 +719,40 @@ def sitemap_xml():
     return send_from_directory('static', 'sitemap.xml', mimetype='application/xml')
 
 
+@app.get("/opensearch.xml")
+def opensearch_xml():
+    """Sirve el archivo opensearch.xml para búsqueda personalizada en navegadores."""
+    from flask import send_from_directory
+    return send_from_directory('static', 'opensearch.xml', mimetype='application/opensearchdescription+xml')
+
+
+@app.get("/humans.txt")
+def humans_txt():
+    """Sirve el archivo humans.txt con créditos y información del sitio."""
+    from flask import send_from_directory
+    return send_from_directory('static', 'humans.txt', mimetype='text/plain')
+
+
+@app.get("/manifest.json")
+def manifest_json():
+    """Sirve el archivo manifest.json para PWA."""
+    from flask import send_from_directory
+    return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
+
+
 @app.after_request
 def set_security_headers(response):
-    """Añade cabeceras de seguridad a todas las respuestas."""
+    """Añade cabeceras de seguridad y SEO a todas las respuestas."""
+    # Seguridad
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # SEO & Performance
+    response.headers['Cache-Control'] = 'public, max-age=3600'
+    response.headers['Pragma'] = 'cache'
+    
     # HSTS solo en producción (cuando uses HTTPS)
     # response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response

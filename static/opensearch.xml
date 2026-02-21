@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>LEMR Meteo</ShortName>
+  <Description>Búsqueda en LEMR Meteo - Información meteorológica del Aeródromo de La Morgal</Description>
+  <Url type="text/html" template="https://lemr-meteo.evaristorivieccio.com/?q={searchTerms}"/>
+  <Url type="application/x-suggestions+json" template="https://lemr-meteo.evaristorivieccio.com/api/suggestions?q={searchTerms}"/>
+  <Contact>Evaristo Romano Rivieccio</Contact>
+  <Tags>meteo lemr aviación meteorología asturias</Tags>
+  <Image height="16" width="16" type="image/x-icon">https://lemr-meteo.evaristorivieccio.com/favicon.ico</Image>
+  <LongName>LEMR Meteo - Información Meteorológica La Morgal</LongName>
+  <Query role="example" searchTerms="METAR LEMR"/>
+  <Query role="example" searchTerms="pronóstico ascenso"/>
+  <Query role="example" searchTerms="análisis viento"/>
+  <Developer>Evaristo Romano Rivieccio</Developer>
+  <InputEncoding>UTF-8</InputEncoding>
+  <OutputEncoding>UTF-8</OutputEncoding>
+  <Language>es-ES</Language>
+  <SyndicationRight>open</SyndicationRight>
+  <Adult>false</Adult>
+</OpenSearchDescription>

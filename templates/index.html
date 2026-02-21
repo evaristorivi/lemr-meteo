@@ -7,7 +7,7 @@
   <!-- SEO Meta Tags -->
   <title>LEMR Meteo | La Morgal - Meteorología Aeródromo de La Morgal</title>
   <meta name="description" content="Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET, mapas de viento y condiciones para vuelo." />
-  <meta name="keywords" content="LEMR, meteo, meteorología, aeródromo de la morgal, la morgal, METAR, AEMET, tiempo asturias, aviación, pronóstico vuelo" />
+  <meta name="keywords" content="LEMR, meteo, meteorología, aeródromo de la morgal, la morgal, METAR, AEMET, tiempo asturias, aviación, pronóstico vuelo, el tiempo lemr, el tiempo la morgal, meteo lemr, pronóstico lemr, condiciones vuelo lemr" />
   <meta name="author" content="LEMR Meteo" />
   <meta name="robots" content="index, follow" />
   <meta name="language" content="Spanish" />
@@ -17,27 +17,60 @@
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌤️</text></svg>" />
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌤️</text></svg>" />
+  <link rel="manifest" href="/static/manifest.json" />
   
   <!-- Open Graph / Facebook / WhatsApp -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://lemr-meteo.evaristorivieccio.com/" />
   <meta property="og:title" content="LEMR Meteo | La Morgal - Meteorología Aeródromo de La Morgal" />
-  <meta property="og:description" content="Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET y condiciones para vuelo." />
+  <meta property="og:description" content="Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET y condiciones para vuelo. Análisis IA para mejores decisiones." />
   <meta property="og:image" content="https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:locale" content="es_ES" />
   <meta property="og:site_name" content="LEMR Meteo" />
+  <meta property="og:see_also" content="https://lemr-meteo.evaristorivieccio.com/" />
   
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:creator" content="@EvaristoRivi" />
   <meta name="twitter:url" content="https://lemr-meteo.evaristorivieccio.com/" />
   <meta name="twitter:title" content="LEMR Meteo | La Morgal - Meteorología Aeródromo de La Morgal" />
-  <meta name="twitter:description" content="Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET y condiciones para vuelo." />
+  <meta name="twitter:description" content="Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET y condiciones para vuelo. Análisis IA para mejores decisiones." />
   <meta name="twitter:image" content="https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg" />
+  <meta name="twitter:image:alt" content="LEMR Meteo - Meteorología La Morgal Asturias" />
   
   <!-- Canonical URL -->
   <link rel="canonical" href="https://lemr-meteo.evaristorivieccio.com/" />
+
+  <!-- Additional SEO Meta Tags -->
+  <meta name="copyright" content="Copyright © 2026 Evaristo Romano Rivieccio. Todos los derechos reservados." />
+  <meta name="author" content="Evaristo Romano Rivieccio" />
+  <meta name="distribution" content="global" />
+  <meta name="rating" content="general" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="url" content="https://lemr-meteo.evaristorivieccio.com/" />
+  
+  <!-- PWA & Mobile -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LEMR Meteo" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  
+  <!-- Performance & Resource Hints -->
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+  <link rel="dns-prefetch" href="https://opendata.aemet.es" />
+  <link rel="dns-prefetch" href="https://api.open-meteo.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://www.ogimet.com" />
+  
+  <!-- Open Search (para búsqueda personalizada en navegadores) -->
+  <link rel="search" type="application/opensearchdescription+xml" title="LEMR Meteo Search" href="https://lemr-meteo.evaristorivieccio.com/opensearch.xml" />
+
+  <!-- Credits & Human-Friendly Info -->
+  <link rel="author" href="https://lemr-meteo.evaristorivieccio.com/static/humans.txt" />
 
   <!-- JSON-LD Structured Data (Schema.org) -->
   <script type="application/ld+json">
@@ -100,6 +133,44 @@
             "item": "https://lemr-meteo.evaristorivieccio.com/"
           }
         ]
+      },
+      {
+        "@type": "LocalBusiness",
+        "@id": "https://lemr-meteo.evaristorivieccio.com/#lemr",
+        "name": "Aeródromo de La Morgal (LEMR)",
+        "alternateName": ["La Morgal", "LEMR"],
+        "description": "Aeródromo ultraligero en Asturias, España",
+        "url": "https://lemr-meteo.evaristorivieccio.com/",
+        "image": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "La Morgal",
+          "addressLocality": "Llanera",
+          "addressRegion": "Asturias",
+          "postalCode": "",
+          "addressCountry": "ES"
+        },
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": "43.4305",
+          "longitude": "-5.8270"
+        },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "General Contact",
+          "telephone": "+34-123-456789"
+        },
+        "areaServed": {
+          "@type": "AdministrativeArea",
+          "name": "Asturias",
+          "addressCountry": "ES"
+        }
+      },
+      {
+        "@type": "Thing",
+        "name": "Categorización de Vuelo VFR/MVFR/IFR/LIFR",
+        "description": "Sistema de clasificación de condiciones meteorológicas para aviación basado en METAR",
+        "keywords": "VFR, MVFR, IFR, LIFR, categorías de vuelo, aviación"
       }
     ]
   }
