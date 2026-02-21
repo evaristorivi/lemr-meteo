@@ -154,9 +154,7 @@ USO DE LEAS: El METAR LEAS indica las condiciones ACTUALES EN LEAS (Aeropuerto d
 ⚖️ PESO DE FUENTES METEOROLÓGICAS (orden de fiabilidad para LEMR):
 1. **Windy GFS hora a hora** — MAYOR PESO. Modelo GFS con punto exacto sobre La Morgal. Históricamente el más preciso para esta ubicación. En caso de discrepancia con otras fuentes, da preferencia a Windy.
 2. **Open-Meteo hora a hora** — ALTO PESO. Modelo de alta resolución local, muy fiable. Cuando coincide con Windy, la ventana es prácticamente segura.
-3. **AEMET Llanera horaria** — PESO MEDIO. Referencia oficial pero resolución espacial menor.
-4. **METAR LEAS** — PESO BAJO. Solo indica condiciones actuales EN LEAS (30km, orografía distinta). NO extrapolar a LEMR. NO usar para pronóstico.
-5. **AEMET resúmenes diarios** — PESO BAJO. Muy genéricos, útiles solo para tendencia sinóptica.
+3. **METAR LEAS** — PESO BAJO. Solo indica condiciones actuales EN LEAS (30km, orografía distinta). NO extrapolar a LEMR. NO usar para pronóstico.
 Si Windy y Open-Meteo coinciden en que una franja horaria (ej. 10-14h) tiene viento suave y poca nube: ESA es la ventana buena. No la invalides por los máximos del día.
 
 🌫️ MICROCLIMA NIEBLA EN LA MORGAL:
