@@ -618,6 +618,18 @@ def _start_cycle_warmer_once():
         _WARMER_STARTED = True
 
 
+@app.get("/favicon.ico")
+def favicon():
+    """Evita 404 en favicon.ico (referenciado por opensearch.xml y navegadores)."""
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<text y='0.9em' font-size='90'>🌤️</text></svg>"
+    )
+    from flask import Response
+    return Response(svg, mimetype="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/")
 @limiter.limit("100 per minute")
 def index():

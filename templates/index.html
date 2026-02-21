@@ -8,7 +8,7 @@
   <title>LEMR Meteo | La Morgal - Meteorología Aeródromo de La Morgal</title>
   <meta name="description" content="Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET, mapas de viento y condiciones para vuelo." />
   <meta name="keywords" content="LEMR, meteo, meteorología, aeródromo de la morgal, la morgal, METAR, AEMET, tiempo asturias, aviación, pronóstico vuelo, el tiempo lemr, el tiempo la morgal, meteo lemr, pronóstico lemr, condiciones vuelo lemr" />
-  <meta name="author" content="LEMR Meteo" />
+  <meta name="author" content="Evaristo Romano Rivieccio" />
   <meta name="robots" content="index, follow" />
   <meta name="language" content="Spanish" />
   <meta name="revisit-after" content="1 days" />
@@ -46,7 +46,6 @@
 
   <!-- Additional SEO Meta Tags -->
   <meta name="copyright" content="Copyright © 2026 Evaristo Romano Rivieccio. Todos los derechos reservados." />
-  <meta name="author" content="Evaristo Romano Rivieccio" />
   <meta name="distribution" content="global" />
   <meta name="rating" content="general" />
   <meta name="format-detection" content="telephone=no" />
@@ -104,6 +103,7 @@
         "browserRequirements": "Requires JavaScript",
         "inLanguage": "es-ES",
         "isAccessibleForFree": true,
+        "dateModified": "{{ data.generated_at[:10] if data and data.generated_at else '2026-01-01' }}",
         "image": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
         "screenshot": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
         "author": {
@@ -147,18 +147,12 @@
           "streetAddress": "La Morgal",
           "addressLocality": "Llanera",
           "addressRegion": "Asturias",
-          "postalCode": "",
           "addressCountry": "ES"
         },
         "geo": {
           "@type": "GeoCoordinates",
           "latitude": "43.4305",
           "longitude": "-5.8270"
-        },
-        "contactPoint": {
-          "@type": "ContactPoint",
-          "contactType": "General Contact",
-          "telephone": "+34-123-456789"
         },
         "areaServed": {
           "@type": "AdministrativeArea",

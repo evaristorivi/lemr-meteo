@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /admin/
-Disallow: *.json$
+Disallow: /api/
 
 # Sitemap
 Sitemap: https://lemr-meteo.evaristorivieccio.com/sitemap.xml
