@@ -78,10 +78,5 @@
       ]
     }
   ],
-  "share_target": {
-    "action": "/share",
-    "method": "POST",
-    "enctype": "multipart/form-data"
-  },
   "prefer_related_applications": false
 }
