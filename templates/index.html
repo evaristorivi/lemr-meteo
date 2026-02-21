@@ -285,42 +285,6 @@
       background: rgba(9, 17, 32, 0.74);
     }
 
-    .day-dual {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0;
-    }
-
-    .day-half {
-      position: relative;
-    }
-
-    .day-half:first-child {
-      border-right: 1px solid var(--border);
-    }
-
-    .day-half .day-head {
-      padding: 12px 14px;
-      background: linear-gradient(90deg, rgba(102, 227, 255, 0.15), rgba(141, 124, 255, 0.14));
-      font-weight: 700;
-    }
-
-    .day-half .day-body {
-      padding: 12px 14px;
-      display: grid;
-      gap: 10px;
-    }
-
-    @media (max-width: 768px) {
-      .day-dual {
-        grid-template-columns: 1fr;
-      }
-      .day-half:first-child {
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-      }
-    }
-
     .day-head {
       padding: 12px 14px;
       background: linear-gradient(90deg, rgba(102, 227, 255, 0.15), rgba(141, 124, 255, 0.14));
@@ -796,7 +760,7 @@
       <nav class="nav-menu">
         <a href="#condiciones">🌤️ Actual</a>
         <a href="#windy">🌬️ Windy</a>
-        <a href="#pronostico">📍 Resumen</a>
+        <a href="#pronostico">📍 Mapas AEMET</a>
         <a href="#aemet-asturias">🌦️ AEMET</a>
         <a href="#analisis-ia">👨‍✈️ IA LEMR</a>
         <a href="#mapa-analisis">🗺️ Mapa</a>
@@ -845,9 +809,9 @@
       </p>
     </section>
 
-    <!-- TRES DÍAS CON MAPAS SIGNIFICATIVOS -->
+    <!-- MAPAS SIGNIFICATIVOS AEMET -->
     <section class="card" id="pronostico">
-      <h2>📍 Resumen meteorológico con mapas significativos AEMET</h2>
+      <h2>📍 Mapas significativos AEMET</h2>
       <div id="days" class="days"></div>
     </section>
 
@@ -1018,12 +982,6 @@
       try { return new Date(v).toLocaleString("es-ES", { hour12: false }); } catch { return v; }
     };
 
-    const hhmm = (v) => {
-      if (!v) return "N/A";
-      const i = v.indexOf("T");
-      return i === -1 ? v : v.slice(i + 1, i + 6);
-    };
-
     const renderKv = (id, entries) => {
       document.getElementById(id).innerHTML = entries.map(([k,v]) => `<dt>${k}</dt><dd>${v ?? "N/A"}</dd>`).join("");
     };
@@ -1041,107 +999,32 @@
 
     const renderDays = (days) => {
       const result = [];
-      let i = 0;
-      
-      while (i < days.length) {
-        const d = days[i];
-        const next = i + 1 < days.length ? days[i + 1] : null;
-        
-        // Si este día y el siguiente no tienen mapas, combinarlos
-        if (!d.show_aemet_maps && next && !next.show_aemet_maps) {
-          result.push(`
-            <article class="day day-combined">
-              <div class="day-dual">
-                <div class="day-half">
-                  <div class="day-head">${d.label} · ${d.date}</div>
-                  <div class="day-body">
-                    <div>
-                      <span class="chip">${d.description}</span>
-                      <span class="chip">🌡️ ${d.temp_min}°C / ${d.temp_max}°C</span>
-                    </div>
-                    <div>
-                      <span class="chip">💨 Viento máx ${d.wind_max_kmh} km/h</span>
-                      <span class="chip">🌬️ Rachas ${d.wind_gusts_max_kmh} km/h</span>
-                    </div>
-                    <div>
-                      <span class="chip">🌅 ${hhmm(d.sunrise)}</span>
-                      <span class="chip">🌇 ${hhmm(d.sunset)}</span>
-                      <span class="chip">🏢 ${d.operating_hours}</span>
-                    </div>
-                    <div>
-                      <span class="chip" style="border-color:var(--ok)">🕐 Ventana sugerida: ${d.suggested_window}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="day-half">
-                  <div class="day-head">${next.label} · ${next.date}</div>
-                  <div class="day-body">
-                    <div>
-                      <span class="chip">${next.description}</span>
-                      <span class="chip">🌡️ ${next.temp_min}°C / ${next.temp_max}°C</span>
-                    </div>
-                    <div>
-                      <span class="chip">💨 Viento máx ${next.wind_max_kmh} km/h</span>
-                      <span class="chip">🌬️ Rachas ${next.wind_gusts_max_kmh} km/h</span>
-                    </div>
-                    <div>
-                      <span class="chip">🌅 ${hhmm(next.sunrise)}</span>
-                      <span class="chip">🌇 ${hhmm(next.sunset)}</span>
-                      <span class="chip">🏢 ${next.operating_hours}</span>
-                    </div>
-                    <div>
-                      <span class="chip" style="border-color:var(--ok)">🕐 Ventana sugerida: ${next.suggested_window}</span>
-                    </div>
-                  </div>
-                </div>
+
+      for (const d of days) {
+        if (!d.show_aemet_maps) continue; // Solo Hoy y Mañana (con mapas)
+
+        result.push(`
+          <article class="day">
+            <div class="day-head">${d.label} · ${d.date}</div>
+            <div class="day-body">
+              <div>
+                <span class="chip">UTC disponibles: ${(d.available_utc_hours || []).join(" · ") || "sin publicación"}</span>
               </div>
-            </article>
-          `);
-          i += 2; // Saltar ambos días
-        } else {
-          // Renderizado normal para días con mapas o días individuales
-          result.push(`
-            <article class="day">
-              <div class="day-head">${d.label} · ${d.date}</div>
-              <div class="day-body">
-                <div>
-                  <span class="chip">${d.description}</span>
-                  <span class="chip">🌡️ ${d.temp_min}°C / ${d.temp_max}°C</span>
-                </div>
-                <div>
-                  <span class="chip">💨 Viento máx ${d.wind_max_kmh} km/h</span>
-                  <span class="chip">🌬️ Rachas ${d.wind_gusts_max_kmh} km/h</span>
-                </div>
-                <div>
-                  <span class="chip">🌅 ${hhmm(d.sunrise)}</span>
-                  <span class="chip">🌇 ${hhmm(d.sunset)}</span>
-                  <span class="chip">🏢 ${d.operating_hours}</span>
-                </div>
-                <div>
-                  <span class="chip" style="border-color:var(--ok)">🕐 Ventana sugerida: ${d.suggested_window}</span>
-                </div>
-                ${d.show_aemet_maps ? `
-                  <div>
-                    <span class="chip">UTC disponibles: ${(d.available_utc_hours || []).join(" · ") || "sin publicación"}</span>
-                  </div>
-                  <div class="map-pair">
-                    ${(d.map_slots || []).length
-                      ? d.map_slots.map(slot => `
-                          <div class="map-slot">
-                            <div class="label">${slot.slot_label || (slot.utc_hour + " UTC")}</div>
-                            ${mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`)}
-                          </div>
-                        `).join("")
-                      : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`}
-                  </div>
-                ` : ""}
+              <div class="map-pair">
+                ${(d.map_slots || []).length
+                  ? d.map_slots.map(slot => `
+                      <div class="map-slot">
+                        <div class="label">${slot.slot_label || (slot.utc_hour + " UTC")}</div>
+                        ${mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`)}
+                      </div>
+                    `).join("")
+                  : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`}
               </div>
-            </article>
-          `);
-          i++;
-        }
+            </div>
+          </article>
+        `);
       }
-      
+
       document.getElementById("days").innerHTML = result.join("");
     };
 

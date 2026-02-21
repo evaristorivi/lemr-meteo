@@ -3,7 +3,7 @@ Aplicación web meteorológica para pilotos ULM de La Morgal (LEMR).
 Interfaz web moderna con actualización automática cada hora de 06:00 a 23:00.
 Integra mapas AEMET, METAR LEAS, Open-Meteo, Windy y análisis IA.
 """
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from threading import Lock, Thread
 import time as _time
 from zoneinfo import ZoneInfo
@@ -257,67 +257,6 @@ _WARMER_STARTED = False
 SUPPORTED_WINDY_MODELS = ["gfs", "iconEu", "arome"]
 
 
-def _parse_iso_time(value: str) -> time | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value).time()
-    except ValueError:
-        return None
-
-
-def _is_summer_schedule(target_date: date) -> bool:
-    return 4 <= target_date.month <= 9
-
-
-def _operating_hours(target_date: date) -> dict:
-    if _is_summer_schedule(target_date):
-        return {
-            "season": "verano",
-            "open": "09:00",
-            "close": "21:45",
-        }
-
-    return {
-        "season": "invierno",
-        "open": "09:00",
-        "close": "20:00",
-    }
-
-
-def _best_operational_window_for_day(day_data: dict) -> str:
-    target_date = datetime.fromisoformat(day_data["date"]).date()
-    operating = _operating_hours(target_date)
-
-    sunrise_t = _parse_iso_time(day_data.get("sunrise"))
-    sunset_t = _parse_iso_time(day_data.get("sunset"))
-
-    open_h = datetime.strptime(operating["open"], "%H:%M").time()
-    close_h = datetime.strptime(operating["close"], "%H:%M").time()
-
-    start = open_h
-    end = close_h
-
-    if sunrise_t:
-        sunrise_plus = (datetime.combine(target_date, sunrise_t) + timedelta(hours=2)).time()
-        start = max(start, sunrise_plus)
-
-    if sunset_t:
-        sunset_minus = (datetime.combine(target_date, sunset_t) - timedelta(hours=2)).time()
-        end = min(end, sunset_minus)
-
-    if end <= start:
-        if sunrise_t:
-            start = max(open_h, sunrise_t)
-        if sunset_t:
-            end = min(close_h, sunset_t)
-
-    if end <= start:
-        return f"Sin ventana clara (revisar condiciones y horario {operating['open']}-{operating['close']})"
-
-    return f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')} ({operating['season']})"
-
-
 def _build_cycle_id(now_local: datetime) -> str:
     current_hour = now_local.hour
 
@@ -501,7 +440,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     labels = ["Hoy", "Mañana", "Pasado mañana", "Dentro de 3 días"]
     for index, day in enumerate(daily):
         target_date = datetime.fromisoformat(day["date"]).date()
-        operating = _operating_hours(target_date)
         day_iso = target_date.isoformat()
         show_aemet_maps = index < 2
 
@@ -512,15 +450,6 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             {
                 "label": labels[index] if index < len(labels) else day["date"],
                 "date": day["date"],
-                "description": weather_code_to_description(day.get("weather_code")),
-                "temp_min": day.get("temp_min"),
-                "temp_max": day.get("temp_max"),
-                "wind_max_kmh": day.get("wind_max"),
-                "wind_gusts_max_kmh": day.get("wind_gusts_max"),
-                "sunrise": day.get("sunrise"),
-                "sunset": day.get("sunset"),
-                "operating_hours": f"{operating['open']} - {operating['close']} ({operating['season']})",
-                "suggested_window": _best_operational_window_for_day(day),
                 "show_aemet_maps": show_aemet_maps,
                 "available_utc_hours": available_hours,
                 "map_slots": map_slots,
