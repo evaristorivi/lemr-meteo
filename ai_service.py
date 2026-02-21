@@ -677,7 +677,7 @@ def interpret_fused_forecast_with_ai(
     avisos_cap: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Genera un veredicto experto fusionando Windy + AEMET + METAR + Open-Meteo.
+    Genera un veredicto experto fusionando Windy + METAR + Open-Meteo.
     """
     client_info = get_ai_client()
     if not client_info:
