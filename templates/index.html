@@ -1227,13 +1227,11 @@
           .replace('o3-', 'O3-');
         const provider = aiData.provider || '';
         const modelLabel = model || provider || 'IA';
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
         const banner = document.createElement('div');
         banner.className = 'ai-sources-banner';
         banner.innerHTML = `<span class="asb-label">Datos usados:</span>`
           + chips.map(c => `<span class="asb-chip">${c}</span>`).join('')
-          + `<span class="asb-model">🤖 ${modelLabel} &middot; ${timeStr}</span>`;
+          + `<span class="asb-model">🤖 ${modelLabel}</span>`;
         return banner;
       }
 
