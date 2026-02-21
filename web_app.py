@@ -754,11 +754,19 @@ def set_security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    
-    # SEO & Performance
-    response.headers['Cache-Control'] = 'public, max-age=3600'
-    response.headers['Pragma'] = 'cache'
-    
+
+    # Caché diferenciada:
+    # - /static/: recursos inmutables, se pueden cachear agresivamente (24h)
+    # - Todo lo demás (HTML, /api/*): contenido dinámico meteorológico.
+    #   "no-store" evita que Cloudflare (y el navegador) sirva datos viejos
+    #   cuando el origen tarda o falla. Sin esto, Cloudflare puede estar
+    #   3 horas sirviendo la versión de las 20:00 aunque sean las 23:00.
+    if request.path.startswith('/static/'):
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+    else:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+
     # HSTS solo en producción (cuando uses HTTPS)
     # response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
