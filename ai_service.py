@@ -3,6 +3,7 @@ Módulo para interpretación meteorológica usando IA
 Soporta GitHub Copilot (gratuito) y OpenAI (opcional)
 """
 import config
+import math
 from typing import Optional, Dict
 from threading import Lock, local
 from datetime import datetime, timedelta
@@ -784,6 +785,30 @@ def interpret_fused_forecast_with_ai(
             current_lines.append(f"  - 👁️ Visibilidad: mín {visibility_summary['min_km']} km ({visibility_summary['hour_min']}) | media {visibility_summary['avg_km']} km | {visibility_summary['risk']}")
         current_lines.append(f"  - ☁️ Condición: {weathercode_emoji}")
 
+        # Pista HOY: calcular siempre por componentes de viento reales (hw/xw).
+        # La regla de preferencia local (≤5 kt → pista 10 por comodidad) va solo en
+        # las instrucciones del prompt, no en el hint de datos, para no confundir al modelo.
+        runway_hint = "PISTA_HOY_RECOMENDADA: sin datos suficientes (viento/dirección actuales no disponibles)."
+        wind_now_kmh = current.get('wind_speed') if current else None
+        wind_now_dir = current.get('wind_direction') if current else None
+        if wind_now_kmh is not None and wind_now_dir is not None:
+            wind_now_kt = wind_now_kmh / 1.852
+            def _runway_components(runway_heading: float) -> tuple[float, float]:
+                angle = ((wind_now_dir - runway_heading + 180) % 360) - 180
+                rad = math.radians(angle)
+                headwind = wind_now_kt * math.cos(rad)
+                crosswind = abs(wind_now_kt * math.sin(rad))
+                return headwind, crosswind
+
+            hw10, xw10 = _runway_components(100.0)
+            hw28, xw28 = _runway_components(280.0)
+            runway_by_wind = "PISTA 10" if hw10 >= hw28 else "PISTA 28"
+            runway_hint = (
+                f"PISTA_HOY_RECOMENDADA: {runway_by_wind} "
+                f"(viento {wind_now_kt:.1f} kt desde {wind_now_dir:.0f}°, "
+                f"hw10={hw10:.1f} kt xw10={xw10:.1f} kt; hw28={hw28:.1f} kt xw28={xw28:.1f} kt)."
+            )
+
         # ── Horario unificado 4 días (09:00–cierre) ─────────────────────────────────
         # HOY: desde hora actual. Días futuros: 09:00-cierre completo.
         # Cada fila: viento/rachas km/h, nube_baja (con tipo ICAO), nube_media si >30%,
@@ -877,6 +902,9 @@ Windy GFS — datos en bruto hora a hora, 4 días (MAYOR PESO, GFS punto exacto 
 Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100°/280°
 {chr(10).join(windy_hourly_lines) if windy_hourly_lines else 'Sin datos Windy horario'}
 
+GUÍA PISTA HOY (OBLIGATORIA EN SECCIÓN 4):
+{runway_hint}
+
 ⚠️ AVISOS AEMET ACTIVOS (CAP):
 {avisos_cap if avisos_cap else 'Sin avisos activos'}
 
@@ -906,7 +934,9 @@ Formato de cada sección:
    - 1-2h: "⚠️ TIEMPO LIMITADO - solo vuelo breve"
    - >2h: PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
-   - PREFERENCIA REAL DE OPERADORES: con viento ≤5 kt los pilotos usan PISTA 10 por comodidad (calle de rodadura queda cerca, evitan backtrack). Solo a partir de ~6 kt o más, el viento manda y se usa la pista que da headwind.
+   - El veredicto principal es la pista calculada por headwind/crosswind. Usa PISTA_HOY_RECOMENDADA y NO la contradigas.
+   - Si el viento actual es ≤5 kt: tras la pista principal, añade UNA sola frase breve: "Con viento tan flojo, en LEMR suelen preferir PISTA 10 por comodidad operativa."
+   - No escribas dos veredictos de pista completos, solo la pista principal + opcionalmente esa frase.
    MAÑANA/PASADO/3 DÍAS: omite cálculo de pista (solo se calcula para HOY).
 
 5) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
