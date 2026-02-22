@@ -83,35 +83,51 @@ def get_weather_phenomena(weather_code: int) -> str:
     return weather_map.get(weather_code, "")
 
 
+# Visibilidad máxima (km) por weather_code WMO cuando hay precipitación/fenómeno.
+# Se usa para limitar el valor de Open-Meteo cuando el modelo es demasiado optimista.
+_VIS_CAP_KM: dict = {
+    # Niebla
+    45: 0.8,  48: 0.8,
+    # Llovizna
+    51: 8.0,  53: 6.0,  55: 3.0,
+    # Llovizna engelante
+    56: 2.0,  57: 1.5,
+    # Lluvia
+    61: 8.0,  63: 6.0,  65: 3.0,
+    # Lluvia engelante
+    66: 2.0,  67: 1.5,
+    # Nieve
+    71: 8.0,  73: 5.0,  75: 2.0,
+    # Granos de nieve
+    77: 5.0,
+    # Chubascos de lluvia
+    80: 8.0,  81: 6.0,  82: 2.0,
+    # Chubascos de nieve
+    85: 6.0,  86: 2.0,
+    # Tormenta
+    95: 3.0,  96: 1.5,  99: 1.5,
+}
+
+
 def get_visibility(weather_code: int, cloud_cover: int) -> str:
     """
-    Estima visibilidad basándose en condiciones meteorológicas.
-    
+    Estima visibilidad basándose en weather_code WMO (fallback cuando Open-Meteo
+    no proporciona visibility_km directo).
+
     Args:
-        weather_code: Código WMO de condiciones meteorológicas
-        cloud_cover: Porcentaje de cobertura nubosa
-    
+        weather_code: Código WMO de Open-Meteo
+        cloud_cover: Porcentaje de cobertura nubosa (no usado actualmente, reservado)
+
     Returns:
         Visibilidad en formato METAR (ej: "9999", "5000", "0800")
     """
-    # Niebla o condiciones reducidas
-    if weather_code in [45, 48]:
-        return "0800"  # < 1km en niebla
-    
-    # Precipitación intensa
-    if weather_code in [55, 65, 67, 75, 82, 86, 99]:
-        return "3000"  # 3km en precipitación fuerte
-    
-    # Precipitación moderada
-    if weather_code in [53, 63, 73, 81]:
-        return "6000"  # 6km en precipitación moderada
-    
-    # Precipitación ligera
-    if weather_code in [51, 61, 71, 80, 85]:
-        return "8000"  # 8km en precipitación ligera
-    
-    # Condiciones buenas
-    return "9999"  # 10km o más (CAVOK)
+    cap = _VIS_CAP_KM.get(weather_code)
+    if cap is None:
+        return "9999"  # Cielo despejado / nuboso sin precipitación
+    vis_m = int(cap * 1000)
+    if vis_m >= 9999:
+        return "9999"
+    return f"{round(vis_m / 100) * 100:04d}"
 
 
 def generate_metar_lemr(
@@ -179,21 +195,30 @@ def generate_metar_lemr(
 
         if wind_kt == 0:
             wind_group = "00000KT"  # Viento en calma
+        elif wind_kt < 3:
+            # ICAO Annex 3: VRB cuando velocidad < 3 kt (dirección inestable/no representativa)
+            wind_group = f"VRB{wind_kt:02d}KT"
         elif wind_gusts and (wind_gusts - wind_speed) >= 18.5:  # ≥10 kt según ICAO Annex 3
             gusts_kt = kmh_to_knots(wind_gusts)
             wind_group = f"{wind_dir_rounded:03d}{wind_kt:02d}G{gusts_kt:02d}KT"
         else:
             wind_group = f"{wind_dir_rounded:03d}{wind_kt:02d}KT"
 
-        # Visibilidad: usar valor real de Open-Meteo si disponible, si no inferir del código
-        if visibility_km is not None:
-            vis_m = int(visibility_km * 1000)
+        # Visibilidad:
+        # 1) Si hay weather_code con cap conocido, se aplica como techo máximo.
+        #    Esto evita que Open-Meteo dé 10km con +RA o TS (modelos NWP son optimistas).
+        # 2) Si Open-Meteo proporciona visibility_km, se usa min(valor_real, cap_código).
+        # 3) Si no hay visibility_km, se usa el cap del código directamente.
+        # ESPECIAL: niebla (45/48) siempre fuerza 0800 independientemente del modelo.
+        vis_cap_km = _VIS_CAP_KM.get(weather_code)  # None = sin restricción por código
+        if weather_code in [45, 48]:
+            visibility = "0800"  # Niebla: forzado, el modelo no resuelve niebla de valle
+        elif visibility_km is not None:
+            # Limitar el valor real al máximo plausible para este weather_code
+            effective_km = min(visibility_km, vis_cap_km) if vis_cap_km is not None else visibility_km
+            vis_m = int(effective_km * 1000)
             if vis_m >= 9999:
                 visibility = "9999"
-            elif vis_m >= 5000:
-                visibility = f"{round(vis_m / 100) * 100:04d}"
-            elif vis_m >= 800:
-                visibility = f"{round(vis_m / 100) * 100:04d}"
             else:
                 visibility = f"{max(100, round(vis_m / 100) * 100):04d}"
         else:
@@ -209,7 +234,13 @@ def generate_metar_lemr(
         dp_for_lcl = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
         lcl_ft = max(100, round((temp - dp_for_lcl) * 400 / 100) * 100)  # redondeado a 100ft
         lcl_hundreds = max(1, lcl_ft // 100)
-        if not cloud_cover_low:  # None o 0%
+        if weather_code in [45, 48]:
+            # Niebla: forzar techo bajo independientemente de cloud_cover_low.
+            # Los modelos NWP no resuelven niebla de radiación/valle como nube baja.
+            # LCL muy bajo → OVC001-004 típico. Mínimo OVC001 para no salir de LIFR/IFR.
+            fog_ceiling = min(lcl_hundreds, 4)  # máx 400 ft (OVC004), mínimo 100 ft
+            clouds = f"OVC{max(1, fog_ceiling):03d}"
+        elif not cloud_cover_low:  # None o 0%
             clouds = "NCD"
         elif cloud_cover_low <= 25:
             clouds = f"FEW{lcl_hundreds:03d}"
@@ -224,20 +255,31 @@ def generate_metar_lemr(
         temp_int = round(temp)
         dewpoint = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
         dewpoint_int = round(dewpoint)
-        
+
         # Formato con signo para temperaturas negativas
         temp_sign = "M" if temp_int < 0 else ""
         dp_sign = "M" if dewpoint_int < 0 else ""
         temp_group = f"{temp_sign}{abs(temp_int):02d}/{dp_sign}{abs(dewpoint_int):02d}"
-        
+
         # Presión (QNH)
         pressure_int = round(pressure)
         qnh = f"Q{pressure_int:04d}"
-        
+
+        # CAVOK: visibilidad ≥ 10km + sin fenómeno + sin nubes por debajo de 5000ft
+        # Reemplaza los tres grupos (visibility + wx + clouds) según ICAO Annex 3.
+        # Condición simplificada: 9999 + sin wx + NCD  (o nubes solo altas/medias)
+        use_cavok = (
+            visibility == "9999"
+            and wx == ""
+            and clouds == "NCD"
+        )
+
         # Ensamblar METAR
-        # Sin tendencia (NOSIG/BECMG/TEMPO): este METAR es AUTO generado desde datos numéricos,
-        # no hay observador ni sistema certificado para emitir tendencia de pronóstico.
-        metar = f"METAR {icao} {day_hour}Z AUTO {wind_group} {visibility}{wx_str} {clouds} {temp_group} {qnh}"
+        # Sin tendencia: este METAR es AUTO generado desde datos numéricos, sin observador.
+        if use_cavok:
+            metar = f"METAR {icao} {day_hour}Z AUTO {wind_group} CAVOK {temp_group} {qnh}"
+        else:
+            metar = f"METAR {icao} {day_hour}Z AUTO {wind_group} {visibility}{wx_str} {clouds} {temp_group} {qnh}"
         
         # Limpiar espacios dobles
         metar = " ".join(metar.split())

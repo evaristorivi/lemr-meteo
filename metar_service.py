@@ -9,35 +9,48 @@ import config
 
 def get_metar(icao_code: str) -> Optional[str]:
     """
-    Obtiene el METAR actual de un aeropuerto dado su código ICAO
-    
+    Obtiene el METAR actual de un aeropuerto dado su código ICAO.
+    Intenta primero aviationweather.gov y usa NOAA TXT como fuente de respaldo.
+
     Args:
         icao_code: Código ICAO del aeropuerto (ej: LEAS)
-    
+
     Returns:
         String con el METAR o None si hay error
     """
+    # --- Fuente primaria: aviationweather.gov ---
     try:
-        # Usar la API de aviationweather.gov (gratuita y oficial)
         params = {
             'ids': icao_code,
             'format': 'raw',
-            'taf': 'false'
+            'taf': 'false',
         }
-        
         response = requests.get(config.METAR_API_URL, params=params, timeout=10)
         response.raise_for_status()
-        
         metar = response.text.strip()
-        
         if metar and not metar.startswith('No'):
             return metar
-        else:
-            return None
-            
+        print(f"⚠️ aviationweather.gov sin datos para {icao_code}: {repr(metar[:80])}")
     except requests.exceptions.RequestException as e:
-        print(f"Error obteniendo METAR para {icao_code}: {e}")
-        return None
+        print(f"⚠️ aviationweather.gov error para {icao_code}: {e}")
+
+    # --- Fuente de respaldo: NOAA TXT (tgftp.nws.noaa.gov) ---
+    try:
+        backup_url = f"https://tgftp.nws.noaa.gov/data/observations/metar/stations/{icao_code}.TXT"
+        response = requests.get(backup_url, timeout=10)
+        response.raise_for_status()
+        lines = response.text.strip().splitlines()
+        # Formato: línea 0 = timestamp "YYYY/MM/DD HH:MM", línea 1 = METAR
+        for line in lines:
+            line = line.strip()
+            if line.startswith(icao_code):
+                print(f"ℹ️ METAR {icao_code} obtenido desde NOAA TXT (respaldo)")
+                return line
+        print(f"⚠️ NOAA TXT sin datos para {icao_code}: {repr(response.text[:120])}")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ NOAA TXT error para {icao_code}: {e}")
+
+    return None
 
 
 def parse_metar_components(metar: str) -> Dict[str, str]:
