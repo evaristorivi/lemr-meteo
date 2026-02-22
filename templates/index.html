@@ -1221,10 +1221,15 @@
         if (windyData && !windyData.error && windyData.model) {
           chips.push(`🌬️ Windy ${(windyData.model || 'GFS').toUpperCase()}`);
         }
-        // Modelo IA
-        const model = (aiData.model_used || '')
-          .replace('gpt-4o', 'GPT-4o')
-          .replace('gpt-4', 'GPT-4')
+        // Modelo IA (normalizado sin sufijos de versión/fecha)
+        const rawModel = (aiData.model_used || '').toLowerCase();
+        let model = '';
+        if (rawModel.includes('gpt-4o-mini')) model = 'GPT-4o-mini';
+        else if (rawModel.includes('gpt-4o')) model = 'GPT-4o';
+        else if (rawModel.includes('gpt-4')) model = 'GPT-4';
+        else if (rawModel.includes('o3')) model = 'O3';
+        else if (rawModel.includes('o1')) model = 'O1';
+        else model = (aiData.model_used || '')
           .replace('o1-', 'O1-')
           .replace('o3-', 'O3-');
         const provider = aiData.provider || '';

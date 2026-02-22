@@ -14,6 +14,7 @@ from flask_limiter.util import get_remote_address
 import config
 from ai_service import (
     interpret_fused_forecast_with_ai,
+    get_last_ai_execution,
 )
 from aemet_service import (
     get_significant_maps_for_three_days,
@@ -432,6 +433,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     map_ai = "Análisis integrado en el veredicto final IA."
 
     fused_ai = "⏳ Análisis IA en curso..."
+    model_used_for_ui = None
     if include_ai:
         # Determinar si se va a usar gpt-4o o mini, y qué proveedor
         model_cascade = getattr(config, "AI_MODEL_CASCADE", [])
@@ -466,6 +468,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 flight_category_leas=flight_cat_leas,
                 avisos_cap=avisos_cap,
             )
+            ai_exec = get_last_ai_execution()
+            model_used_for_ui = ai_exec.get("used_model") or primary_model
         except Exception as _ai_exc:
             print(f"\u274c Error en an\u00e1lisis IA: {_ai_exc}")
             _tg_alert(
@@ -475,6 +479,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 exc=_ai_exc,
             )
             fused_ai = "\u26a0\ufe0f An\u00e1lisis IA no disponible temporalmente (error en todos los modelos)."
+            model_used_for_ui = None
     else:
         # Si no se incluye IA, igualmente calcular las clasificaciones
         flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
@@ -539,7 +544,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             "map_analysis": map_ai,
             "windy_analysis": windy_ai,
             "expert_final_verdict": fused_ai or "No disponible",
-            "model_used": primary_model,
+            "model_used": model_used_for_ui or primary_model,
             "provider": ai_provider,
             "pending": not include_ai,
         },

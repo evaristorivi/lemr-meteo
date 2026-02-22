@@ -4,7 +4,7 @@ Soporta GitHub Copilot (gratuito) y OpenAI (opcional)
 """
 import config
 from typing import Optional, Dict
-from threading import Lock
+from threading import Lock, local
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from telegram_monitor import send_alert as _tg_alert
@@ -12,9 +12,27 @@ from telegram_monitor import send_alert as _tg_alert
 
 _RATE_LIMIT_LOCK = Lock()
 _FORCED_FALLBACK_CYCLE: Dict[tuple, str] = {}
+_AI_EXECUTION_CONTEXT = local()
 _MADRID_TZ = ZoneInfo("Europe/Madrid")
 _UPDATE_SLOTS = list(range(6, 24))  # Ciclos de 06:00 a 23:00
 _FINAL_DISCLAIMER = "⚠️ Este análisis es orientativo; sigue siempre las indicaciones de tus instructores y, en caso de duda, mejor no volar."
+
+
+def _set_last_ai_execution(provider: str, requested_model: Optional[str], used_model: Optional[str]):
+    _AI_EXECUTION_CONTEXT.last = {
+        "provider": provider,
+        "requested_model": requested_model,
+        "used_model": used_model,
+    }
+
+
+def get_last_ai_execution() -> Dict[str, Optional[str]]:
+    """Devuelve metadatos de la última ejecución IA en el hilo actual."""
+    return getattr(_AI_EXECUTION_CONTEXT, "last", {
+        "provider": None,
+        "requested_model": None,
+        "used_model": None,
+    })
 
 
 def _count_tokens(messages: list, model: str = "gpt-4o") -> int:
@@ -158,13 +176,13 @@ USO DE LEAS: El METAR LEAS indica las condiciones ACTUALES EN LEAS (Aeropuerto d
 Si Windy y Open-Meteo coinciden en que una franja horaria (ej. 10-14h) tiene viento suave y poca nube: ESA es la ventana buena. No la invalides por los máximos del día.
 
 🌫️ MICROCLIMA NIEBLA EN LA MORGAL:
-- La Morgal está en un valle interior de Asturias a 180m. Es ESPECIALMENTE PROPENSA a niebla matinal (oct-abril) por: enfriamiento nocturno en fondo de valle, alta humedad ambiental atlántica, y vientos débiles nocturnos. Puede estar presente a la apertura (09:00); lo HABITUAL es que se disipe hacia las 10:00 con la insolación. Solo persiste más allá de las 10h en casos de nubosidad baja persistente, viento E/NE (advección marina) o humedad muy elevada.
+- La Morgal está en un valle interior de Asturias a 180m. Es ESPECIALMENTE PROPENSA a niebla matinal (oct-abril) por: enfriamiento nocturno en fondo de valle, alta humedad ambiental atlántica, y vientos débiles nocturnos. Puede estar presente a la apertura (09:00); lo HABITUAL es que se disipe hacia las 9 o 10 con la insolación. Solo persiste más allá de las 10h en casos de nubosidad baja persistente, viento E/NE (advección marina) o humedad muy elevada.
 - Cuando el dato "niebla_matinal" aparece en el pronóstico, EVALÚA si afectará al período de operación (el aeródromo abre a las 09:00):
   - ALTO: muy probable niebla visible. Mención OBLIGATORIA en el veredicto.
   - MODERADO: posible banco de niebla local, mencionar como precaución.
   - BAJO o ausente: no mencionar.
 - Si el campo incluye "_op:HH:MM" significa que el riesgo coincide con horario operativo (desde las 09:00). Esto es especialmente relevante.
-- La niebla SUELE disiparse hacia las 10:00 con la insolación (caso más frecuente en La Morgal). Solo persiste hasta las 10:30-11h si hay nubosidad baja que bloquea el sol, viento E/NE (advección marina) o humedad > 95%. NO penalices el día entero si la niebla solo afecta a la apertura (09-10h) y el resto del día es despejado.
+- La niebla SUELE disiparse hacia las 9 o 10 con la insolación (caso más frecuente en La Morgal). Solo persiste hasta las 10:30-11h si hay nubosidad baja que bloquea el sol, viento E/NE (advección marina) o humedad > 95%. NO penalices el día entero si la niebla solo afecta a la apertura (09-10h) y el resto del día es despejado.
 
 ⚠️ PARÁMETROS CRÍTICOS PHASE 4:
 
@@ -600,9 +618,10 @@ def _create_chat_completion_with_fallback(
             )
             
             # ¡Éxito!
+            used_model = getattr(response, 'model', model_name) or model_name
             _print_rate_limit_info(response, model_name)
-            print(f"✅ Análisis completado con {model_name}")
-            return response
+            print(f"✅ Análisis completado con {used_model}")
+            return response, used_model
             
         except Exception as exc:
             error_msg = str(exc)
@@ -1012,7 +1031,7 @@ Reglas CRÍTICAS:
             print(f"✅ Payload OK: {exact_tokens} tokens")
 
 
-        response = _create_chat_completion_with_fallback(
+        response, used_model = _create_chat_completion_with_fallback(
             client=client,
             provider=provider,
             messages=[
@@ -1023,6 +1042,7 @@ Reglas CRÍTICAS:
             max_tokens=4000,
         )
 
+        _set_last_ai_execution(provider=provider, requested_model=primary_model, used_model=used_model)
         result = response.choices[0].message.content
         print(f"✅ Síntesis experta generada exitosamente con {provider}")
         return _append_final_disclaimer(result)
@@ -1030,6 +1050,7 @@ Reglas CRÍTICAS:
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
+        _set_last_ai_execution(provider=provider, requested_model=None, used_model=None)
         print(f"❌ Error generando síntesis experta con {provider}: {e}")
         print(f"Detalles: {error_detail}")
         
