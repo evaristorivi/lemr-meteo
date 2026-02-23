@@ -285,8 +285,11 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     )
 
 
+_TOKEN_INPUT_WARN = 8000  # Umbral de aviso para tokens de entrada
+
 def _print_rate_limit_info(response, model_name: str):
-    """Imprime uso de tokens de la respuesta (el SDK openai v1 no expone headers en el objeto ChatCompletion)."""
+    """Imprime uso de tokens de la respuesta (el SDK openai v1 no expone headers en el objeto ChatCompletion).
+    Si los tokens de entrada superan _TOKEN_INPUT_WARN envía un aviso por Telegram."""
     try:
         used_model = getattr(response, 'model', model_name)
         usage = getattr(response, 'usage', None)
@@ -294,6 +297,14 @@ def _print_rate_limit_info(response, model_name: str):
             prompt_t = getattr(usage, 'prompt_tokens', '?')
             completion_t = getattr(usage, 'completion_tokens', '?')
             print(f"📊 [{used_model}]: {prompt_t} tokens entrada / {completion_t} tokens salida")
+            # Alerta Telegram si se supera el umbral de tokens de entrada
+            if isinstance(prompt_t, int) and prompt_t > _TOKEN_INPUT_WARN:
+                _tg_alert(
+                    f"Consumo alto de tokens de entrada: {prompt_t} tokens de input "
+                    f"(umbral: {_TOKEN_INPUT_WARN}) con modelo {used_model}.",
+                    source="ia_tokens_input",
+                    level="WARNING",
+                )
     except Exception:
         pass
 
