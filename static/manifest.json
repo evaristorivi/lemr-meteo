@@ -2,7 +2,7 @@
   "name": "LEMR Meteo - Meteorología Aeródromo de La Morgal",
   "short_name": "LEMR Meteo",
   "description": "Información meteorológica en tiempo real del Aeródromo de La Morgal (LEMR). Consulta METAR, pronósticos AEMET, mapas de viento y condiciones para vuelo. Análisis IA para mejores decisiones.",
-  "start_url": "https://lemr-meteo.evaristorivieccio.com/",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -11,13 +11,13 @@
   "categories": ["weather", "aviation", "utilities"],
   "screenshots": [
     {
-      "src": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
+      "src": "/static/og-image.jpg",
       "sizes": "1200x630",
       "type": "image/jpeg",
       "form_factor": "wide"
     },
     {
-      "src": "https://lemr-meteo.evaristorivieccio.com/static/og-image.jpg",
+      "src": "/static/og-image.jpg",
       "sizes": "540x720",
       "type": "image/jpeg",
       "form_factor": "narrow"
@@ -42,7 +42,7 @@
       "name": "METAR LEMR",
       "short_name": "METAR",
       "description": "Ver METAR actual del Aeródromo de La Morgal",
-      "url": "https://lemr-meteo.evaristorivieccio.com/#condiciones",
+      "url": "/#condiciones",
       "icons": [
         {
           "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='0.9em' font-size='96'>📍</text></svg>",
@@ -55,7 +55,7 @@
       "name": "Análisis IA",
       "short_name": "IA",
       "description": "Ver análisis meteorológico con IA",
-      "url": "https://lemr-meteo.evaristorivieccio.com/#analisis-ia",
+      "url": "/#analisis-ia",
       "icons": [
         {
           "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='0.9em' font-size='96'>👨‍✈️</text></svg>",
@@ -68,7 +68,7 @@
       "name": "Mapas",
       "short_name": "Mapas",
       "description": "Ver mapas significativos AEMET",
-      "url": "https://lemr-meteo.evaristorivieccio.com/#pronostico",
+      "url": "/#pronostico",
       "icons": [
         {
           "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='0.9em' font-size='96'>🗺️</text></svg>",

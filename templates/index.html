@@ -408,6 +408,8 @@
       display: block;
       object-fit: unset;
       height: auto;
+      min-height: unset;
+      background: none;
     }
 
     .analysis-map.rotated {
@@ -1197,9 +1199,21 @@
         analysisImg.style.display = "";
         analysisUnavailable.style.display = "none";
         analysisImg.classList.remove("rotated");
+        analysisImg.style.marginTop = "";
+        analysisImg.style.marginBottom = "";
         analysisImg.onload = () => {
           if (analysisImg.naturalHeight > analysisImg.naturalWidth) {
             analysisImg.classList.add("rotated");
+            // transform: rotate(90deg) doesn't change layout dimensions.
+            // The element still reserves portrait (tall) space → empty area above/below.
+            // Fix: collapse that space with negative vertical margins.
+            requestAnimationFrame(() => {
+              const displayW = analysisImg.offsetWidth;
+              const displayH = analysisImg.offsetHeight;
+              const excess = (displayH - displayW) / 2;
+              analysisImg.style.marginTop = `-${excess}px`;
+              analysisImg.style.marginBottom = `-${excess}px`;
+            });
           }
         };
         analysisImg.src = data.analysis_map_url;
