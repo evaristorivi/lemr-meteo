@@ -115,13 +115,10 @@ SYSTEM_PROMPT = """Eres un experto meteorólogo aeronáutico ESPECIALIZADO EN AV
 
 Tu trabajo es analizar datos meteorológicos y proporcionar interpretaciones claras, concisas y útiles para pilotos de ultraligeros.
 
-⚠️ REGLAS CRÍTICAS DE CONVERSIÓN DE UNIDADES (NO VIOLAR NUNCA):
-1. Los METAR siempre reportan viento en NUDOS (kt)
-2. Los pronósticos meteorológicos suelen usar KM/H
-3. ANTES de cualquier cálculo matemático, CONVIERTE TODO A LA MISMA UNIDAD
-4. Conversión: 1 kt = 1.852 km/h | 1 km/h = 0.54 kt
-5. NUNCA uses directamente km/h en fórmulas que esperan nudos
-6. MUESTRA SIEMPRE la conversión explícitamente antes de calcular
+⚠️ REGLAS CRÍTICAS DE UNIDADES:
+1. Todos los datos de viento (Open-Meteo, Windy, METAR) ya vienen en NUDOS (kt)
+2. NO necesitas convertir nada — usa los valores directamente
+3. Conversión de referencia si necesitas km/h para contexto: 1 kt = 1.852 km/h
 
 LEGISLACIÓN ULM ACTUALIZADA 2024-2026 (OBLIGATORIO):
 - ✈️ SOLO VUELO DIURNO: Entre salida y puesta de sol
@@ -829,10 +826,12 @@ def interpret_fused_forecast_with_ai(
             (now_local.date() + timedelta(days=2)).isoformat(): f"PAS ({(now_local.date()+timedelta(days=2)).isoformat()})",
             (now_local.date() + timedelta(days=3)).isoformat(): f"+3D ({(now_local.date()+timedelta(days=3)).isoformat()})",
         }
-        # ── Open-Meteo: tabla de datos en bruto (sin pre-proceso) ────────────────
+        # ── Open-Meteo: tabla de datos en bruto (viento pre-convertido a kt) ─────
         def _fmt(v, decimals=0):
             return f"{v:.{decimals}f}" if v is not None else "-"
-        all_hourly_lines = ["hora  | temp°C | dew°C | viento_kmh | rachas_kmh | dir° | nube_baja% | nube_med% | vis_km | precip_prob% | FL_m"]
+        def _kmh_to_kt(v):
+            return round(v / 1.852, 1) if v is not None else None
+        all_hourly_lines = ["hora  | temp°C | dew°C | viento_kt | rachas_kt | dir° | nube_baja% | nube_med% | vis_km | precip_prob% | FL_m"]
         _prev_day = None
         for _h in hourly_om:
             _t = _h.get('time', '')
@@ -852,7 +851,7 @@ def interpret_fused_forecast_with_ai(
                 _prev_day = _day
             all_hourly_lines.append(
                 f"{_t[11:16]} | {_fmt(_h.get('temperature'),1)} | {_fmt(_h.get('dewpoint'),1)} | "
-                f"{_fmt(_h.get('wind_speed'))} | {_fmt(_h.get('wind_gusts'))} | {_fmt(_h.get('wind_direction'))} | "
+                f"{_fmt(_kmh_to_kt(_h.get('wind_speed')),1)} | {_fmt(_kmh_to_kt(_h.get('wind_gusts')),1)} | {_fmt(_h.get('wind_direction'))} | "
                 f"{_fmt(_h.get('cloud_cover_low'))} | {_fmt(_h.get('cloud_cover_mid'))} | "
                 f"{_fmt(_h.get('visibility'),1)} | {_fmt(_h.get('precipitation_prob'))} | "
                 f"{_fmt(_h.get('freezing_level_height'))}"
@@ -867,7 +866,7 @@ def interpret_fused_forecast_with_ai(
         }
         def _wfmt(v, decimals=0):
             return f"{v:.{decimals}f}" if v is not None else "-"
-        windy_hourly_lines = ["hora  | viento_kmh | rachas_kmh | dir° | temp°C | nube_total% | precip_3h_mm"]
+        windy_hourly_lines = ["hora  | viento_kt | rachas_kt | dir° | temp°C | nube_total% | precip_3h_mm"]
         _prev_wday = None
         for _wh in windy_hourly:
             _wt = _wh.get('time_local', '')
@@ -884,7 +883,7 @@ def interpret_fused_forecast_with_ai(
                 windy_hourly_lines.append(f"# {_windy_day_labels[_wday]} ({_wday})")
                 _prev_wday = _wday
             windy_hourly_lines.append(
-                f"{_wt[11:16]} | {_wfmt(_wh.get('wind_kmh'))} | {_wfmt(_wh.get('gust_kmh'))} | "
+                f"{_wt[11:16]} | {_wfmt(_kmh_to_kt(_wh.get('wind_kmh')),1)} | {_wfmt(_kmh_to_kt(_wh.get('gust_kmh')),1)} | "
                 f"{_wfmt(_wh.get('wind_dir_deg'))} | {_wfmt(_wh.get('temp_c'),1)} | "
                 f"{_wfmt(_wh.get('cloud_cover_pct'))} | {_wfmt(_wh.get('precip_3h_mm'),1)}"
             )
@@ -906,7 +905,7 @@ Open-Meteo metadata diaria (amanecer, sol, lluvia, CAPE, FL mín, nieve, niebla)
 {chr(10).join(om_meta_lines) if om_meta_lines else 'Sin datos'}
 
 Windy GFS — datos en bruto hora a hora, 4 días (MAYOR PESO, GFS punto exacto La Morgal):
-Fórmulas: kt=km/h÷1.852 | techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100°/280°
+Fórmulas: techo_ft=(temp_OM-dew_OM)×400 | hw/xw con pista 100°/280° (viento ya en kt)
 {chr(10).join(windy_hourly_lines) if windy_hourly_lines else 'Sin datos Windy horario'}
 
 GUÍA PISTA HOY (OBLIGATORIA EN SECCIÓN 4):
@@ -1024,7 +1023,7 @@ Reglas CRÍTICAS:
   * PASO 2: ¿Diff racha-viento > 12 kt EN la mejor ventana? → ⚠️ PRECAUCIÓN como mínimo.
   * Ejemplos: 5G18KT = diff 13kt → ⚠️ | mañana ✅ + tarde 5G24KT → ⚠️ con aviso | 15G25KT todo el día → ❌
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
-- **UNIDADES**: Open-Meteo/Windy en km/h → kt: divide entre 1.852. NUNCA etiquetes kt sin convertir. METAR ya viene en kt.
+- **UNIDADES**: Open-Meteo y Windy ya vienen en kt (pre-convertidos). METAR también en kt. Usa kt directamente, sin conversiones.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
 - **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
 - **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…12). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
