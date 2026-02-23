@@ -182,55 +182,6 @@ def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
     )
 
 
-def get_significant_map_url(
-    target_date: date,
-    period: str = "am",
-    ambito: str = "esp",
-) -> Optional[str]:
-    """
-    Obtiene la URL de un mapa significativo.
-    Intenta primero la URL directa de ama.aemet.es (más fiable);
-    si no existe, intenta la API OpenData como fallback.
-    """
-    # Elegir hora UTC según periodo
-    if period == "am":
-        utc_hour = "06"
-    else:
-        utc_hour = "18"
-
-    direct_url = _direct_sig_map_url(target_date, utc_hour)
-    try:
-        r = requests.head(direct_url, timeout=8)
-        if r.status_code == 200:
-            return direct_url
-    except Exception:
-        pass
-
-    # Fallback 1: intentar la otra hora del mismo tramo
-    alt_hour = "12" if period == "am" else "00"
-    alt_url = _direct_sig_map_url(target_date, alt_hour)
-    try:
-        r = requests.head(alt_url, timeout=8)
-        if r.status_code == 200:
-            return alt_url
-    except Exception:
-        pass
-
-    # Fallback 2: API OpenData
-    today = datetime.now(MADRID_TZ).date()
-    delta = (target_date - today).days
-    if 0 <= delta <= 2:
-        dia_code = DAY_PERIOD_CODES.get((delta, period))
-        if dia_code:
-            fecha_str = target_date.strftime("%Y-%m-%d")
-            endpoint = f"/api/mapasygraficos/mapassignificativos/fecha/{fecha_str}/{ambito}/{dia_code}"
-            meta = _aemet_get(endpoint)
-            if meta and meta.get("datos"):
-                return meta["datos"]
-
-    return None
-
-
 def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
     """
     Obtiene los mapas significativos para hoy y mañana
@@ -331,7 +282,6 @@ def get_analysis_map_b64() -> Optional[str]:
             
             if raw_bytes and len(raw_bytes) > 1000:  # Verificar que sea una imagen real
                 # Convertir a base64 para embedding directo
-                import base64
                 b64_str = base64.b64encode(raw_bytes).decode("ascii")
                 print(f"✅ Mapa análisis descargado: {len(raw_bytes)} bytes → {len(b64_str)} chars base64")
                 return f"data:image/png;base64,{b64_str}"

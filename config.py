@@ -74,8 +74,3 @@ LA_MORGAL_AERODROME = {
 METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
 OPEN_METEO_API = 'https://api.open-meteo.com/v1/forecast'
 WINDY_POINT_FORECAST_API = 'https://api.windy.com/api/point-forecast/v2'
-WINDY_EMBED_URL_TEMPLATE = (
-    'https://embed.windy.com/embed2.html?lat={lat}&lon={lon}&zoom=9&level=surface&overlay=wind'
-    '&menu=&message=true&marker=true&calendar=24&pressure=true&type=map&location=coordinates'
-    '&detail=true&detailLat={lat}&detailLon={lon}&metricWind=km%2Fh&metricTemp=%C2%B0C'
-)

@@ -420,6 +420,7 @@ if __name__ == '__main__':
     )
     
     if weather:
-        print(format_weather_report(weather))
+        import json
+        print(json.dumps(weather, indent=2, default=str))
     else:
         print("No se pudieron obtener datos meteorológicos")

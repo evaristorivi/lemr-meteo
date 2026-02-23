@@ -434,11 +434,11 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
 
     fused_ai = "⏳ Análisis IA en curso..."
     model_used_for_ui = None
+    model_cascade = getattr(config, "AI_MODEL_CASCADE", [])
+    primary_model = model_cascade[0] if model_cascade else "gpt-4o"
+    ai_provider = getattr(config, "AI_PROVIDER", "github").lower()
     if include_ai:
         # Determinar si se va a usar gpt-4o o mini, y qué proveedor
-        model_cascade = getattr(config, "AI_MODEL_CASCADE", [])
-        primary_model = model_cascade[0] if model_cascade else "gpt-4o"
-        ai_provider = getattr(config, "AI_PROVIDER", "github").lower()
         is_mini = "mini" in primary_model.lower()
         is_github = ai_provider == "github"
         

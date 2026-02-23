@@ -16,7 +16,7 @@ _FORCED_FALLBACK_CYCLE: Dict[tuple, str] = {}
 _AI_EXECUTION_CONTEXT = local()
 _MADRID_TZ = ZoneInfo("Europe/Madrid")
 _UPDATE_SLOTS = list(range(6, 24))  # Ciclos de 06:00 a 23:00
-_FINAL_DISCLAIMER = "⚠️ Este análisis es orientativo; sigue siempre las indicaciones de tus instructores y, en caso de duda, mejor no volar."
+_FINAL_DISCLAIMER = "⚠️ Este análisis es orientativo; la decisión final de volar es siempre responsabilidad del piloto al mando."
 
 
 def _set_last_ai_execution(provider: str, requested_model: Optional[str], used_model: Optional[str]):
@@ -78,10 +78,7 @@ def _current_cycle_id() -> str:
     now_local = datetime.now(_MADRID_TZ)
     current_hour = now_local.hour
 
-    slot = None
-    for candidate in _UPDATE_SLOTS:
-        if current_hour >= candidate:
-            slot = candidate
+    slot = current_hour if current_hour >= _UPDATE_SLOTS[0] else None
 
     cycle_date = now_local.date()
     if slot is None:
@@ -110,15 +107,6 @@ def _append_final_disclaimer(text: Optional[str]) -> str:
     content = (text or "").strip()
     if not content:
         return _FINAL_DISCLAIMER
-
-    normalized = content.lower()
-    if (
-        "análisis es orientativo" in normalized
-        and "instructores" in normalized
-        and "caso de duda" in normalized
-    ):
-        return content
-
     return f"{content}\n\n{_FINAL_DISCLAIMER}"
 
 
@@ -364,7 +352,7 @@ def _map_weather_code(code: Optional[int]) -> str:
         return "🌫️ NIEBLA"
     elif code in (2, 3):
         return "☁️ NUBLADO"
-    elif code in (1,):
+    elif code == 1:
         return "🌥️ PARCIAL"
     else:
         return "⛅ DESPEJADO"
@@ -516,14 +504,14 @@ def _detect_convective_risk(
     indicators_met = 0
     
     # Indicador 1: CAPE > 500 J/kg
-    if cape and cape > 500:
+    if cape is not None and cape > 500:
         result['indicators'].append(f"🔴 CAPE {cape:.0f} J/kg")
         indicators_met += 1
-    elif cape and cape > 250:
+    elif cape is not None and cape > 250:
         result['indicators'].append(f"🟡 CAPE {cape:.0f} J/kg")
     
     # Indicador 2: Precipitación > 0 mm/h
-    if precipitation and precipitation > 0:
+    if precipitation is not None and precipitation > 0:
         result['indicators'].append(f"🔴 Precip {precipitation:.1f} mm/h")
         indicators_met += 1
     
@@ -546,10 +534,10 @@ def _detect_convective_risk(
             indicators_met += 0.5  # Nubosidad baja estratos = riesgo para ULM
     
     # Indicador 5: Lifted Index < -6 = Tormentas fuertes (complementa CAPE)
-    if lifted_index and lifted_index < -6:
+    if lifted_index is not None and lifted_index < -6:
         result['indicators'].append(f"🔴 Lifted Index {lifted_index:.1f} (tormentas fuertes)")
         indicators_met += 1
-    elif lifted_index and lifted_index < -3:
+    elif lifted_index is not None and lifted_index < -3:
         result['indicators'].append(f"🟡 Lifted Index {lifted_index:.1f} (probable)")
     
     # Determinar nivel de riesgo basado en indicadores cumplidos
@@ -776,8 +764,8 @@ def interpret_fused_forecast_with_ai(
         )
         
         # Calcular resúmenes de techo y visibilidad (HOY solamente)
-        cloud_base_summary = _compute_cloud_base_summary(hourly_om[:24] if hourly_om else None)
-        visibility_summary = _compute_visibility_summary(hourly_om[:24] if hourly_om else None)
+        cloud_base_summary = _compute_cloud_base_summary(hourly_om if hourly_om else None)
+        visibility_summary = _compute_visibility_summary(hourly_om if hourly_om else None)
         weathercode_emoji = _map_weather_code(current.get('weather_code') if current else None)
         
         # Formato compacto del análisis convectivo
@@ -1104,7 +1092,7 @@ Reglas CRÍTICAS:
         
         # Condiciones actuales
         fallback_sections.append("**CONDICIONES ACTUALES (Open-Meteo):**")
-        fallback_sections.append(f"- Temperatura: {current.get('temperature', 'N/A')}°C (sensación: {current.get('feels_like', 'N/A')}°C)")
+        fallback_sections.append(f"- Temperatura: {current.get('temperature', 'N/A')}°C")
         fallback_sections.append(f"- Viento: {current.get('wind_speed', 'N/A')} km/h desde {current.get('wind_direction', 'N/A')}°")
         fallback_sections.append(f"- Rachas: {current.get('wind_gusts', 'N/A')} km/h")
         fallback_sections.append(f"- Presión: {current.get('pressure', 'N/A')} hPa")
