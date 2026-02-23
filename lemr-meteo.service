@@ -9,7 +9,7 @@ WorkingDirectory=/var/www/lemr-meteo
 Environment="PATH=/var/www/lemr-meteo/venv/bin"
 EnvironmentFile=/var/www/lemr-meteo/.env
 ExecStart=/bin/bash -c 'source /var/www/lemr-meteo/.env && exec /var/www/lemr-meteo/venv/bin/gunicorn \
-  --workers 3 \
+  --workers 1 \
   --worker-class gthread \
   --threads 4 \
   --bind ${WEB_HOST}:${WEB_PORT} \
