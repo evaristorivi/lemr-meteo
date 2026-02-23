@@ -234,12 +234,30 @@ def generate_metar_lemr(
         dp_for_lcl = dewpoint_c if dewpoint_c is not None else calculate_dewpoint(temp, humidity)
         lcl_ft = max(100, round((temp - dp_for_lcl) * 400 / 100) * 100)  # redondeado a 100ft
         lcl_hundreds = max(1, lcl_ft // 100)
-        if weather_code in [45, 48]:
-            # Niebla: forzar techo bajo independientemente de cloud_cover_low.
-            # Los modelos NWP no resuelven niebla de radiación/valle como nube baja.
+        # Niebla implícita: T−Td ≤ 1°C con alta cobertura baja indica niebla/stratus
+        # casi a nivel del suelo aunque Open-Meteo no emita código 45/48.
+        # Esto ocurre porque los modelos NWP no resuelven niebla de valle/radiación.
+        td_spread = temp - dp_for_lcl
+        implicit_fog = (td_spread <= 1.0) and (cloud_cover_low is not None) and (cloud_cover_low > 87)
+
+        if weather_code in [45, 48] or implicit_fog:
+            # Niebla (explícita o implícita): forzar techo bajo y visibilidad degradada.
             # LCL muy bajo → OVC001-004 típico. Mínimo OVC001 para no salir de LIFR/IFR.
             fog_ceiling = min(lcl_hundreds, 4)  # máx 400 ft (OVC004), mínimo 100 ft
             clouds = f"OVC{max(1, fog_ceiling):03d}"
+            # Si la visibilidad no estaba ya limitada por weather_code, forzarla.
+            if weather_code not in [45, 48] and visibility == "9999":
+                # T−Td ≤ 0.5 → niebla densa (≤300m), ≤1.0 → bruma/niebla (≤1000m)
+                if td_spread <= 0.5:
+                    visibility = "0300"
+                    if not wx:
+                        wx = "FG"
+                        wx_str = " FG"
+                else:
+                    visibility = "1000"
+                    if not wx:
+                        wx = "BR"
+                        wx_str = " BR"
         elif not cloud_cover_low:  # None o 0%
             clouds = "NCD"
         elif cloud_cover_low <= 25:
