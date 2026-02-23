@@ -943,7 +943,7 @@ Formato de cada sección:
    - >2h: PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
    - El veredicto principal es la pista calculada por headwind/crosswind. Usa PISTA_HOY_RECOMENDADA y NO la contradigas.
-   - Si el viento actual es ≤5 kt: tras la pista principal, añade UNA sola frase breve: "Con viento tan flojo, en LEMR suelen preferir PISTA 10 por comodidad operativa."
+   - Si el viento actual es ≤5 kt Y la pista calculada es PISTA 28: tras el resultado, añade UNA sola frase breve: "Con viento tan flojo, en LEMR suelen preferir PISTA 10 por comodidad operativa." Si la pista calculada ya es PISTA 10, NO añadas ningún comentario adicional.
    - No escribas dos veredictos de pista completos, solo la pista principal + opcionalmente esa frase.
    MAÑANA/PASADO/3 DÍAS: omite cálculo de pista (solo se calcula para HOY).
 
