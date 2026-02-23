@@ -925,10 +925,12 @@ Formato de cada sección:
 
 4) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
    Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL de Open-Meteo (sección “CONDICIONES ACTUALES” arriba). NO uses el viento de METAR LEAS para este cálculo — LEAS está a 30 km con orografía distinta.
-   - Antes apertura: "AÚN NO ABIERTO, evaluable desde apertura"
-   - <1h hasta cierre: "🕐 CIERRE INMINENTE - no merece la pena"
-   - 1-2h: "⚠️ TIEMPO LIMITADO - solo vuelo breve"
-   - >2h: PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
+   PRIORIDAD (evalúa en este orden exacto, para en la primera que se cumpla):
+   1. Si {hora_actual} >= {_close_hour:02d}:00 → "🔒 YA CERRADO. El aeródromo cerró a las {_close_hour:02d}:00. No hay operaciones hasta mañana." NO uses 🕐 ni ninguna otra etiqueta.
+   2. Si {hora_actual} < 09:00 → "AÚN NO ABIERTO, evaluable desde apertura"
+   3. Si quedan <1h para las {_close_hour:02d}:00 → "🕐 CIERRE INMINENTE - no merece la pena"
+   4. Si quedan 1-2h → "⚠️ TIEMPO LIMITADO - solo vuelo breve"
+   5. Si quedan >2h → PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
    - El veredicto principal es la pista calculada por headwind/crosswind. Usa PISTA_HOY_RECOMENDADA y NO la contradigas.
    - Si el viento actual es ≤5 kt Y la pista calculada es PISTA 28: tras el resultado, añade UNA sola frase breve: "Con viento tan flojo, en LEMR suelen preferir PISTA 10 por comodidad operativa." Si la pista calculada ya es PISTA 10, NO añadas ningún comentario adicional.
@@ -944,7 +946,7 @@ Formato de cada sección:
 
 6) **VEREDICTO POR DÍA** (los 4 días):
    HOY: combina CONDICIONES ACTUALES (hora presente) + pronóstico horario para las horas que quedan hasta cierre. Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS la evolución hora a hora del resto del día.
-   - <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
+   - hora_actual >= hora_cierre: 🔒 YA CERRADO (el aeródromo ya cerró hoy, no hay tiempo operativo) | <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
    🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado. Las condiciones actuales son nocturnas y NO representan las condiciones de vuelo del día completo. Basa el veredicto HOY en el pronóstico horario 09:00–cierre. PERO revisa el spread T−Td actual (incluido en «CONDICIONES ACTUALES»): si T−Td ≤ 1°C con nube baja >87%, HAY RIESGO de niebla o techo muy bajo a la apertura (09:00) — MENCIÓNALO en el veredicto. La niebla suele disiparse a las 09-11h en La Morgal; si el pronóstico horario 09-14h muestra T−Td > 2°C o nube baja <50%, el día sigue siendo aceptable pero con nota de esperar a que despeje.
    🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
@@ -973,7 +975,7 @@ Formato de cada sección:
    - 🏠 **NO MERECE LA PENA**: en el límite pero sin factor ❌ — no vale la pena el desplazamiento
    - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km. En el bar hay caldo de gaviota 🍲
 
-   ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Calcula cuánto tiempo queda desde {hora_actual} hasta el cierre ({_close_hour:02d}:00). Si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. Si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
+   ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Compara {hora_actual} con el horario del aeródromo (cierre {_close_hour:02d}:00). PRIMERO: si hora_actual >= {_close_hour:02d}:00 → etiqueta forzada 🔒 YA CERRADO (el aeródromo cerró hoy, no hay tiempo operativo restante). SEGUNDO: si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. TERCERO: si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
    🚨 REGLA PRE-APERTURA: Si hora_actual < 09:00, el aeródromo no ha abierto — quedan MUCHAS horas hasta el cierre, nunca uses 🕐 ni ⚠️ TIEMPO LIMITADO. Evalúa HOY con el pronóstico horario 09:00+. Si el spread T−Td actual ≤ 1°C, añade una nota de precaución sobre posible niebla/techo bajo a la apertura (habitualmente se disipa a las 09-11h).
    🚫 ESTA REGLA SOLO APLICA A HOY. MAÑANA/PASADO/3D nunca pueden ser 🕐 ni ⚠️ TIEMPO LIMITADO por razón de hora.
 
