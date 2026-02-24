@@ -1,3 +1,5 @@
+![Portada](portada.png)
+
 # 🛩️ LEMR Meteo Web · La Morgal
 
 ## 🌐 **[Ver aplicación en vivo →](https://lemr-meteo.evaristorivieccio.es/)**
