@@ -59,13 +59,15 @@ def _get_latest_ogimet_run_fast():
     """
     utc_now = datetime.now(ZoneInfo("UTC"))
     
-    if utc_now.hour >= 18:  # Después de las 18:00 UTC, usar run 12Z de hoy
+    # Ogimet tarda ~5-6h en publicar el run. Umbral 19 UTC (no 18) para
+    # garantizar que el run 12Z esté completo antes de apuntar a él.
+    if utc_now.hour >= 19:  # Después de las 19:00 UTC, usar run 12Z de hoy
         run = "12"
         run_date = utc_now
-    elif utc_now.hour >= 6:  # Entre 06:00 y 18:00 UTC, usar run 00Z de hoy
+    elif utc_now.hour >= 7:  # Entre 07:00 y 19:00 UTC, usar run 00Z de hoy
         run = "00"
         run_date = utc_now
-    else:  # Antes de las 06:00 UTC, usar run 12Z de ayer
+    else:  # Antes de las 07:00 UTC, usar run 12Z de ayer
         run = "12"
         run_date = utc_now - timedelta(days=1)
     
