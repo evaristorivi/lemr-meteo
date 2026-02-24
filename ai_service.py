@@ -962,7 +962,7 @@ Formato de cada sección:
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
    ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00. Si la mañana es aceptable pero la tarde se deteriora, el veredicto sigue siendo ✅ (o 🎉 si es ideal) con nota de volar antes de las Xh — NO degrades la etiqueta por lo que pasa en horas que no son la mejor ventana.
    Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad en la MEJOR franja horaria encontrada.
-   Criterio: ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <1500 ft / convección ALTA/CRÍTICA)
+   Criterio: 🎉 IDEAL: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip | ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | 🏠 NO MERECE LA PENA: en el límite pero sin factor ❌ — no vale la pena el desplazamiento | ☕ QUEDARSE EN EL BAR: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km (en el bar hay caldo de gaviota 🍲) | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <1500 ft / convección ALTA/CRÍTICA)
    ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
 
 7) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
@@ -977,42 +977,21 @@ Formato de cada sección:
 
    **DENTRO DE 3 DÍAS**: [frase narrativa o "Sin riesgos destacables."]
 
-8) **¿Cuándo merece la pena volar?** (los 4 días, en este orden exacto):
-   Etiquetas — criterios OBJETIVOS basados en rachas y viento medio calculados por ti en kt (÷1.852):
-   - 🎉 **SÍ, IDEAL**: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip
-   - ✅ **SÍ, ACEPTABLE**: rachas ≤15 kt Y viento medio ≤10 kt Y techo >2500 ft Y vis >8 km
-   - ⚠️ **PRECAUCIÓN**: rachas 15-22 kt O viento medio 10-15 kt O techo 1500-2500 ft O vis 5-8 km. Si los parámetros límite ocurren SOLO en una parte del día (ej. tarde), añade "MAÑANA BIEN, PRECAUCIÓN POR LA TARDE" y especifica la hora de corte.
-   - 🏠 **NO MERECE LA PENA**: en el límite pero sin factor ❌ — no vale la pena el desplazamiento
-   - ☕ **QUEDARSE EN EL BAR**: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km. En el bar hay caldo de gaviota 🍲
-
-   ⚠️ REGLA CRÍTICA PARA HOY — TIEMPO RESTANTE: Compara {hora_actual} con el horario del aeródromo (cierre {_close_hour:02d}:00). PRIMERO: si hora_actual >= {_close_hour:02d}:00 → etiqueta forzada 🔒 YA CERRADO (el aeródromo cerró hoy, no hay tiempo operativo restante). SEGUNDO: si quedan <1h → etiqueta forzada 🕐 CIERRE INMINENTE. TERCERO: si quedan 1-2h → etiqueta máxima ⚠️ TIEMPO LIMITADO aunque el tiempo sea perfecto. Solo si quedan >2h puedes usar 🎉 o ✅ para HOY.
-   🚨 REGLA PRE-APERTURA: Si hora_actual < 09:00, el aeródromo no ha abierto — quedan MUCHAS horas hasta el cierre, nunca uses 🕐 ni ⚠️ TIEMPO LIMITADO. Evalúa HOY con el pronóstico horario 09:00+. Si el spread T−Td actual ≤ 1°C, añade una nota de precaución sobre posible niebla/techo bajo a la apertura (habitualmente se disipa a las 09-11h).
-   🚫 ESTA REGLA SOLO APLICA A HOY. MAÑANA/PASADO/3D nunca pueden ser 🕐 ni ⚠️ TIEMPO LIMITADO por razón de hora.
-
-   ⚠️ METODOLOGÍA OBLIGATORIA: Para cada día, REVISA los datos Windy y Open-Meteo hora a hora. Localiza la mejor franja concreta del día. Escribe un párrafo descriptivo por día — NO uses bloques fijos como "09-14h" ni tabla de emojis. Explica en lenguaje natural la evolución del día, la mejor hora de salir y por qué. Sé específico: si la buena ventana es 11:00-13:30, di exactamente eso y por qué (viento en calma, despejando, rachas bajas).
-   🚫 REGLA CRÍTICA DE ETIQUETA: el emoji y la etiqueta reflejan la MEJOR VENTANA del día, NO las peores horas. Si la mañana es ✅ ACEPTABLE pero la tarde se deteriora a ⚠️, el veredicto del día es ✅ ACEPTABLE y en el texto explicas que hay que volar antes de las Xh. NUNCA degrades la etiqueta del día por condiciones que ocurren fuera de la mejor ventana.
-
-   Formato — párrafo 3-5 frases por día:
-   **HOY**: [emoji+etiqueta]. Tiempo restante, valores actuales, si vale la pena salir.
-   **MAÑANA**: [emoji+etiqueta]. Evolución hora a hora, mejor ventana exacta con valores y horas concretas.
-   **PASADO MAÑANA**: [emoji+etiqueta]. Mismo formato.
-   **DENTRO DE 3 DÍAS**: [emoji+etiqueta]. Mismo formato.
-
-9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
+8) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <1500 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
    Indica el día elegido, el ranking resumido, carácter (placentero/estable/agitado) y tipo de vuelo posible usando estos umbrales:
    - **Travesías largas**: techo >3000 ft Y vis >10 km Y rachas ≤12 kt
    - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
    - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
 
-10) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
+9) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
    La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
-11) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
+10) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
    Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar. Para MAÑANA: tendencia convectiva.
 
-12) **VEREDICTO FINAL GLOBAL**:
+11) **VEREDICTO FINAL GLOBAL**:
    UNA SOLA FRASE. Máximo 20 palabras. Directa, sin adornos, sin "aunque", sin "se debe tener precaución". Di exactamente qué día es el mejor y qué tipo de vuelo tiene sentido. Ejemplos del tono correcto: "Mañana sábado es el día: viento en calma 10-13h, ideal para travesías." | "Hoy agitado por la tarde, vuela antes de las 12." | "Fin de semana sin vuelo, lluvia y viento los 4 días." PROHIBIDO: frases genéricas tipo "buen día para volar con precaución" o listas de condiciones.
 
 Reglas CRÍTICAS:
@@ -1026,7 +1005,7 @@ Reglas CRÍTICAS:
 - **UNIDADES**: Open-Meteo y Windy ya vienen en kt (pre-convertidos). METAR también en kt. Usa kt directamente, sin conversiones.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
 - **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
-- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…12). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…11). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
