@@ -978,9 +978,12 @@ Formato de cada sección:
    **PASADO MAÑANA**: [tendencia convectiva, riesgo térmico]
    **DENTRO DE 3 DÍAS**: [tendencia convectiva, riesgo térmico]
 
-8) **�️ SENSACIÓN TÉRMICA EN VUELO**:
-   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
-
+8) **🌡️ SENSACIÓN TÉRMICA EN VUELO** (los 4 días):
+   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Para cada día indica: rango de temperatura previsto, sensación térmica real en cabina (frío/confortable/calor), recomendación de ropa (abrigo si temp <10°C, ropa ligera si >20°C) y nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+   **HOY**: [rango temp, sensación cabina, ropa recomendada]
+   **MAÑANA**: [rango temp, sensación cabina, ropa recomendada]
+   **PASADO MAÑANA**: [rango temp, sensación cabina, ropa recomendada]
+   **DENTRO DE 3 DÍAS**: [rango temp, sensación cabina, ropa recomendada]
 9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <1500 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
    Indica el día elegido y explícate con detalle: nombra el día ganador con su fecha, justifica por qué gana frente a los otros (compara brevemente los 4), señala la mejor ventana horaria concreta (ej. "10:00–14:00"), los valores que la hacen destacar (kt, ft, km), y el tipo de vuelo recomendado según estos umbrales:
