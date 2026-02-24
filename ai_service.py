@@ -914,7 +914,7 @@ GUÍA PISTA HOY (OBLIGATORIA EN SECCIÓN 4):
 ⚠️ AVISOS AEMET ACTIVOS (CAP):
 {avisos_cap if avisos_cap else 'Sin avisos activos'}
 
-⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 5, 6, 7 y 8 cada día va en su propia línea con línea en blanco entre días.
+⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 4, 5, 6 y 7 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
 0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS. ⚠️ NO ES representativo de LEMR. (máximo 2 líneas, sin jerga)
 
@@ -970,22 +970,24 @@ Formato de cada sección:
 
    **DENTRO DE 3 DÍAS**: [frase narrativa o "Sin riesgos destacables."]
 
-7) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
+7) **� TÉRMICAS Y CONVECCIÓN** (los 4 días):
+   Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde para cada día.
+   Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar.
+   **HOY**: [CAPE, nubosidad, térmicas mañana vs tarde]
+   **MAÑANA**: [tendencia convectiva, riesgo térmico]
+   **PASADO MAÑANA**: [tendencia convectiva, riesgo térmico]
+   **DENTRO DE 3 DÍAS**: [tendencia convectiva, riesgo térmico]
+
+8) **�️ SENSACIÓN TÉRMICA EN VUELO**:
+   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
+
+9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <1500 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
-   Indica el día elegido, el ranking resumido, carácter (placentero/estable/agitado) y tipo de vuelo posible usando estos umbrales:
+   Indica el día elegido y explícate con detalle: nombra el día ganador con su fecha, justifica por qué gana frente a los otros (compara brevemente los 4), señala la mejor ventana horaria concreta (ej. "10:00–14:00"), los valores que la hacen destacar (kt, ft, km), y el tipo de vuelo recomendado según estos umbrales:
    - **Travesías largas**: techo >3000 ft Y vis >10 km Y rachas ≤12 kt
    - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
    - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
-
-8) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
-   La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
-
-9) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
-   Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
-   Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar. Para MAÑANA: tendencia convectiva.
-
-10) **VEREDICTO FINAL GLOBAL**:
-   UNA SOLA FRASE. Máximo 20 palabras. Directa, sin adornos, sin "aunque", sin "se debe tener precaución". Di exactamente qué día es el mejor y qué tipo de vuelo tiene sentido. Ejemplos del tono correcto: "Mañana sábado es el día: viento en calma 10-13h, ideal para travesías." | "Hoy agitado por la tarde, vuela antes de las 12." | "Fin de semana sin vuelo, lluvia y viento los 4 días." PROHIBIDO: frases genéricas tipo "buen día para volar con precaución" o listas de condiciones.
+   Cierra con una frase directa tipo sentencia: qué día, a qué hora salir y qué tipo de vuelo hacerle. Si todos los días son ❌, escribe "NINGUNO — no hay ventana operativa en los próximos 4 días."
 
 Reglas CRÍTICAS:
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
@@ -998,7 +1000,7 @@ Reglas CRÍTICAS:
 - **UNIDADES**: Open-Meteo y Windy ya vienen en kt (pre-convertidos). METAR también en kt. Usa kt directamente, sin conversiones.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
 - **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
-- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…10). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…9). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
