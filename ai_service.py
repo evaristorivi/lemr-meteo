@@ -926,14 +926,7 @@ Formato de cada sección:
 
 2) **DISCREPANCIAS** clave entre fuentes y explicación meteorológica probable (frentes, borrascas, diferencias de modelo).
 
-3) **📊 EVOLUCIÓN METEOROLÓGICA POR DÍA** — UN DÍA POR LÍNEA (no en una sola línea separada por |): carácter (ESTABLE/CAMBIANTE/INESTABLE/DETERIORO/MEJORA), mañana vs tarde, tendencia viento. Pista solo para HOY.
-   Formato obligatorio — cada día en su propia línea:
-   HOY: ESTABLE, viento W constante, pista 28
-   MAÑANA: DETERIORO tarde
-   PASADO MAÑANA: CAMBIANTE
-   DENTRO DE 3 DÍAS: MEJORA
-
-4) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
+3) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
    Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL de Open-Meteo (sección “CONDICIONES ACTUALES” arriba). NO uses el viento de METAR LEAS para este cálculo — LEAS está a 30 km con orografía distinta.
    PRIORIDAD (evalúa en este orden exacto, para en la primera que se cumpla):
    1. Si {hora_actual} >= {_close_hour:02d}:00 → "🔒 YA CERRADO. El aeródromo cerró a las {_close_hour:02d}:00. No hay operaciones hasta mañana." NO uses 🕐 ni ninguna otra etiqueta.
@@ -947,14 +940,14 @@ Formato de cada sección:
    - No escribas dos veredictos de pista completos, solo la pista principal + opcionalmente esa frase.
    MAÑANA/PASADO/3 DÍAS: omite cálculo de pista (solo se calcula para HOY).
 
-5) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
+4) **🕐 EVOLUCIÓN MAÑANA/TARDE** (los 4 días):
    Para CADA UNO de los 4 días, redacta 2 frases narrativas — una para la mañana (09-14h) y otra para la tarde (14-cierre) — describiendo en lenguaje natural cómo evolucionan el viento, nubosidad y condiciones. Usa los datos horarios Windy y Open-Meteo. NO hagas listas de horas ni columnas. Formato obligatorio:
    **HOY** — Por la mañana: [frase]. Por la tarde: [frase].
    **MAÑANA** — Por la mañana: [frase]. Por la tarde: [frase].
    **PASADO MAÑANA** — Por la mañana: [frase]. Por la tarde: [frase].
    **DENTRO DE 3 DÍAS** — Por la mañana: [frase]. Por la tarde: [frase].
 
-6) **VEREDICTO POR DÍA** (los 4 días):
+5) **VEREDICTO POR DÍA** (los 4 días):
    HOY: combina CONDICIONES ACTUALES (hora presente) + pronóstico horario para las horas que quedan hasta cierre. Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS la evolución hora a hora del resto del día.
    - hora_actual >= hora_cierre: 🔒 YA CERRADO (el aeródromo ya cerró hoy, no hay tiempo operativo) | <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
    🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado. Las condiciones actuales son nocturnas y NO representan las condiciones de vuelo del día completo. Basa el veredicto HOY en el pronóstico horario 09:00–cierre. PERO revisa el spread T−Td actual (incluido en «CONDICIONES ACTUALES»): si T−Td ≤ 1°C con nube baja >87%, HAY RIESGO de niebla o techo muy bajo a la apertura (09:00) — MENCIÓNALO en el veredicto. La niebla suele disiparse a las 09-11h en La Morgal; si el pronóstico horario 09-14h muestra T−Td > 2°C o nube baja <50%, el día sigue siendo aceptable pero con nota de esperar a que despeje.
@@ -965,7 +958,7 @@ Formato de cada sección:
    Criterio: 🎉 IDEAL: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip | ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | 🏠 NO MERECE LA PENA: en el límite pero sin factor ❌ — no vale la pena el desplazamiento | ☕ QUEDARSE EN EL BAR: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km (en el bar hay caldo de gaviota 🍲) | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <1500 ft / convección ALTA/CRÍTICA)
    ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
 
-7) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
+6) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
    Para cada día escribe UNA sola frase narrativa que mencione SOLO los factores que realmente suponen un riesgo o llamada de atención. Si el día no tiene ningún riesgo relevante, escribe "Sin riesgos destacables."
    NO hagas listas de parámetros. NO repitas lo que ya está en el veredicto. Solo lo que merece una advertencia concreta.
    Umbrales que justifican mención: rachas >18 kt, diff racha-viento >8 kt, techo <3000 ft, vis <8 km, precip >0, CAPE >200 J/kg, crosswind >10 kt.
@@ -977,21 +970,21 @@ Formato de cada sección:
 
    **DENTRO DE 3 DÍAS**: [frase narrativa o "Sin riesgos destacables."]
 
-8) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
+7) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
    Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <1500 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
    Indica el día elegido, el ranking resumido, carácter (placentero/estable/agitado) y tipo de vuelo posible usando estos umbrales:
    - **Travesías largas**: techo >3000 ft Y vis >10 km Y rachas ≤12 kt
    - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
    - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
 
-9) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
+8) **🌡️ SENSACIÓN TÉRMICA EN VUELO**:
    La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Indica sensación térmica real en cabina (frío/confortable/calor) y recomienda abrigo si temp <10°C, ropa ligera si >20°C. Añade nota de densidad de altitud si temp >25°C o presión <1010 hPa.
 
-10) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
+9) **🌀 TÉRMICAS Y CONVECCIÓN** (HOY y mañana):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde.
    Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar. Para MAÑANA: tendencia convectiva.
 
-11) **VEREDICTO FINAL GLOBAL**:
+10) **VEREDICTO FINAL GLOBAL**:
    UNA SOLA FRASE. Máximo 20 palabras. Directa, sin adornos, sin "aunque", sin "se debe tener precaución". Di exactamente qué día es el mejor y qué tipo de vuelo tiene sentido. Ejemplos del tono correcto: "Mañana sábado es el día: viento en calma 10-13h, ideal para travesías." | "Hoy agitado por la tarde, vuela antes de las 12." | "Fin de semana sin vuelo, lluvia y viento los 4 días." PROHIBIDO: frases genéricas tipo "buen día para volar con precaución" o listas de condiciones.
 
 Reglas CRÍTICAS:
@@ -1005,7 +998,7 @@ Reglas CRÍTICAS:
 - **UNIDADES**: Open-Meteo y Windy ya vienen en kt (pre-convertidos). METAR también en kt. Usa kt directamente, sin conversiones.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
 - **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
-- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…11). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…10). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
