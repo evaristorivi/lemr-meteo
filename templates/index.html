@@ -1048,6 +1048,11 @@
       if (!v) return "N/A";
       try { return new Date(v).toLocaleString("es-ES", { hour12: false }); } catch { return v; }
     };
+    const fmtDate = (v) => {
+      if (!v) return "N/A";
+      const p = String(v).slice(0, 10).split('-');
+      return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : v;
+    };
 
     const renderKv = (id, entries) => {
       document.getElementById(id).innerHTML = entries.map(([k,v]) => `<dt>${k}</dt><dd>${v ?? "N/A"}</dd>`).join("");
@@ -1077,7 +1082,7 @@
 
         result.push(`
           <article class="day">
-            <div class="day-head">${d.label} · ${d.date}</div>
+            <div class="day-head">${d.label} · ${fmtDate(d.date)}</div>
             <div class="day-body">
               <div>
                 <span class="chip">UTC disponibles: ${(d.available_utc_hours || []).join(" · ") || "sin publicación"}</span>
@@ -1366,7 +1371,7 @@
         windyDailyTable.innerHTML = windyDaily.length
           ? windyDaily.map(d => `
               <tr>
-                <td>${d.date || "N/A"}</td>
+                <td>${fmtDate(d.date) || "N/A"}</td>
                 <td>${d.max_wind_kmh ?? "N/A"}</td>
                 <td>${d.max_gust_kmh ?? "N/A"}</td>
                 <td>${d.avg_temp_c ?? "N/A"}</td>

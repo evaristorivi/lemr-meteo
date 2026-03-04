@@ -686,6 +686,12 @@ def interpret_fused_forecast_with_ai(
     windy_daily = windy_data.get("daily_summary", []) if windy_data else []
     windy_hourly = windy_data.get("hourly", []) if windy_data else []
 
+    # Fecha/hora local — necesaria también en el bloque except (fallback)
+    now_local = datetime.now(_MADRID_TZ)
+    hora_actual = now_local.strftime("%H:%M")
+    fecha_actual = now_local.strftime("%Y-%m-%d")
+    def _dfmt(d): return d.strftime("%d-%m-%Y") if hasattr(d, 'strftime') else datetime.strptime(d, "%Y-%m-%d").strftime("%d-%m-%Y")
+
     try:
         # ── Metadata diaria compacta (solo campos NO disponibles en el horario hora a hora) ──
         # Incluye: amanecer/atardecer, horas de sol, horas/mm de lluvia, CAPE máx,
@@ -737,12 +743,6 @@ def interpret_fused_forecast_with_ai(
 
         map_urls = [u for u in (significant_map_urls or []) if u][:4]
         
-        # Obtener hora actual para contexto
-        now_local = datetime.now(_MADRID_TZ)
-        hora_actual = now_local.strftime("%H:%M")
-        fecha_actual = now_local.strftime("%Y-%m-%d")
-        def _dfmt(d): return d.strftime("%d-%m-%Y") if hasattr(d, 'strftime') else datetime.strptime(d, "%Y-%m-%d").strftime("%d-%m-%Y")
-
         # Formatear condiciones actuales Open-Meteo
         # Incluir campos relevantes para análisis ULM que no están en METAR LEAS: temp local, viento km/h, precip, CAPE.
         current_lines = []
@@ -881,7 +881,7 @@ def interpret_fused_forecast_with_ai(
             if _whh < _wstart or _whh > _close_hour:
                 continue
             if _wday != _prev_wday:
-                windy_hourly_lines.append(f"# {_windy_day_labels[_wday]} ({_wday})")
+                windy_hourly_lines.append(f"# {_windy_day_labels[_wday]} ({_dfmt(_wday)})")
                 _prev_wday = _wday
             windy_hourly_lines.append(
                 f"{_wt[11:16]} | {_wfmt(_kmh_to_kt(_wh.get('wind_kmh')),1)} | {_wfmt(_kmh_to_kt(_wh.get('gust_kmh')),1)} | "
@@ -889,7 +889,7 @@ def interpret_fused_forecast_with_ai(
                 f"{_wfmt(_wh.get('cloud_cover_pct'))} | {_wfmt(_wh.get('precip_3h_mm'),1)}"
             )
 
-        user_message = f"""Síntesis OPERATIVA ULM para {location}. ⏰ {hora_actual} (Europe/Madrid) — {fecha_actual}
+        user_message = f"""Síntesis OPERATIVA ULM para {location}. ⏰ {hora_actual} (Europe/Madrid) — {_dfmt(now_local.date())}
 
 METAR LEAS (Aeropuerto Asturias, ~30km de LEMR):
 {metar_leas or 'No disponible'}
@@ -919,7 +919,7 @@ GUÍA PISTA HOY (OBLIGATORIA EN SECCIÓN 4):
 Formato de cada sección:
 0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS. ⚠️ NO ES representativo de LEMR. (máximo 2 líneas, sin jerga)
 
-0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {fecha_actual} a las {hora_actual})**:
+0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {_dfmt(now_local.date())} a las {hora_actual})**:
    Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas, si la visibilidad sorprende. Usa los emojis ✅/⚠️/〰️ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique si las condiciones son adecuadas para volar o no.
 
 1) **COINCIDENCIAS** clave entre fuentes para los 4 días.
@@ -1096,7 +1096,9 @@ Reglas CRÍTICAS:
                 label = labels[i] if i < len(labels) else f"DÍA +{i}"
                 sunrise = day.get('sunrise', 'N/A')
                 sunset = day.get('sunset', 'N/A')
-                fallback_sections.append(f"\n{label} ({day.get('date', 'N/A')}):")
+                _raw_date = day.get('date', 'N/A')
+                _disp_date = _dfmt(_raw_date) if _raw_date != 'N/A' else 'N/A'
+                fallback_sections.append(f"\n{label} ({_disp_date}):")
                 fallback_sections.append(f"  🌡️ Temp: {day.get('temp_min', 'N/A')}°C - {day.get('temp_max', 'N/A')}°C")
                 fallback_sections.append(f"  💨 Viento max: {day.get('wind_max', 'N/A')} km/h")
                 fallback_sections.append(f"  🌬️ Rachas max: {day.get('wind_gusts_max', 'N/A')} km/h")
