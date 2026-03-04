@@ -741,6 +741,7 @@ def interpret_fused_forecast_with_ai(
         now_local = datetime.now(_MADRID_TZ)
         hora_actual = now_local.strftime("%H:%M")
         fecha_actual = now_local.strftime("%Y-%m-%d")
+        def _dfmt(d): return d.strftime("%d-%m-%Y") if hasattr(d, 'strftime') else datetime.strptime(d, "%Y-%m-%d").strftime("%d-%m-%Y")
 
         # Formatear condiciones actuales Open-Meteo
         # Incluir campos relevantes para análisis ULM que no están en METAR LEAS: temp local, viento km/h, precip, CAPE.
@@ -821,10 +822,10 @@ def interpret_fused_forecast_with_ai(
         _close_hour = 21 if _is_summer else 20
         _cur_hour   = now_local.hour
         _all_day_labels = {
-            fecha_actual:                                                       f"HOY ({fecha_actual})",
-            (now_local.date() + timedelta(days=1)).isoformat(): f"MAÑ ({(now_local.date()+timedelta(days=1)).isoformat()})",
-            (now_local.date() + timedelta(days=2)).isoformat(): f"PAS ({(now_local.date()+timedelta(days=2)).isoformat()})",
-            (now_local.date() + timedelta(days=3)).isoformat(): f"+3D ({(now_local.date()+timedelta(days=3)).isoformat()})",
+            fecha_actual:                                                       f"HOY ({_dfmt(now_local.date())})",
+            (now_local.date() + timedelta(days=1)).isoformat(): f"MAÑ ({_dfmt(now_local.date()+timedelta(days=1))})",
+            (now_local.date() + timedelta(days=2)).isoformat(): f"PAS ({_dfmt(now_local.date()+timedelta(days=2))})",
+            (now_local.date() + timedelta(days=3)).isoformat(): f"+3D ({_dfmt(now_local.date()+timedelta(days=3))})",
         }
         # ── Open-Meteo: tabla de datos en bruto (viento pre-convertido a kt) ─────
         def _fmt(v, decimals=0):

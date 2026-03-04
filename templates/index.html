@@ -1309,12 +1309,12 @@
           d.setDate(d.getDate() + (_dayOffset[label] ?? 0));
           return _wkNames[d.getDay()] + " " + d.getDate();
         };
-        const dayRe = /(PASADO MAÑANA|DENTRO DE 3 DÍAS|HOY|MAÑANA)(\s*—)/g;
+        const dayRe = /(?:<strong>)?(PASADO MAÑANA|DENTRO DE 3 DÍAS|HOY|MAÑANA)(?:<\/strong>)?(\s*[—:])/g;
         el.querySelectorAll('p').forEach(node => {
           if (!dayRe.test(node.innerHTML)) return;
           dayRe.lastIndex = 0;
-          node.innerHTML = node.innerHTML.replace(dayRe, (_, lbl, dash) =>
-            `<span class="ai-day-label">${lbl}</span><span class="ai-day-weekday">${_daySubtitle(lbl)}</span>${dash}`);
+          node.innerHTML = node.innerHTML.replace(dayRe, (_, lbl, sep) =>
+            `<span class="ai-day-label">${lbl}</span><span class="ai-day-weekday">${_daySubtitle(lbl)}</span>${sep}`);
         });
 
         // 4. VEREDICTO FINAL GLOBAL — card dorada
