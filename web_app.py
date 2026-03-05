@@ -469,6 +469,8 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
                 location=config.LA_MORGAL_COORDS["name"],
                 flight_category_leas=flight_cat_leas,
                 avisos_cap=avisos_cap,
+                metar_lemr=metar_lemr or "",
+                flight_category_lemr=flight_cat_lemr,
             )
             ai_exec = get_last_ai_execution()
             model_used_for_ui = ai_exec.get("used_model") or primary_model

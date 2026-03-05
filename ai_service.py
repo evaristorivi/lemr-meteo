@@ -669,6 +669,8 @@ def interpret_fused_forecast_with_ai(
     location: str = "La Morgal (LEMR)",
     flight_category_leas: Optional[Dict] = None,
     avisos_cap: Optional[str] = None,
+    metar_lemr: str = "",
+    flight_category_lemr: Optional[Dict] = None,
 ) -> Optional[str]:
     """
     Genera un veredicto experto fusionando Windy + METAR + Open-Meteo.
@@ -889,13 +891,28 @@ def interpret_fused_forecast_with_ai(
                 f"{_wfmt(_wh.get('cloud_cover_pct'))} | {_wfmt(_wh.get('precip_3h_mm'),1)}"
             )
 
+        # Nota explícita de discrepancia si LEMR METAR es IFR/LIFR pero Open-Meteo reporta visibilidad alta
+        _lemr_cat = (flight_category_lemr or {}).get('category', '')
+        _om_vis_line = next((l for l in current_lines if '👁️ Visibilidad' in l), '')
+        _vis_mismatch_note = ""
+        if _lemr_cat in ('LIFR', 'IFR') and '24' in _om_vis_line:
+            _vis_mismatch_note = (
+                "\n⚠️ AVISO: Open-Meteo reporta visibilidad alta (modelo NWP no resuelve niebla de valle). "
+                "El METAR LEMR estimado refleja condiciones reales con niebla/stratus implícito. "
+                "USA el METAR LEMR como referencia de condiciones actuales en el campo."
+            )
+
         user_message = f"""Síntesis OPERATIVA ULM para {location}. ⏰ {hora_actual} (Europe/Madrid) — {_dfmt(now_local.date())}
 
-METAR LEAS (Aeropuerto Asturias, ~30km de LEMR):
+METAR LEMR (estimado automático — CONDICIONES ACTUALES EN EL CAMPO, FUENTE PRIMARIA para sección 0.5):
+{metar_lemr or 'No disponible'}
+{f"{flight_category_lemr.get('emoji')} {flight_category_lemr.get('category')} - {flight_category_lemr.get('description')} ← CATEGORÍA ACTUAL EN LEMR" if flight_category_lemr else ""}{_vis_mismatch_note}
+
+METAR LEAS (Aeropuerto Asturias, ~30km de LEMR — solo referencia regional):
 {metar_leas or 'No disponible'}
 {f"{flight_category_leas.get('emoji')} {flight_category_leas.get('category')} - {flight_category_leas.get('description')}" if flight_category_leas else ""}
 
-Open-Meteo CONDICIONES ACTUALES en {location}:
+Open-Meteo CONDICIONES ACTUALES en {location} (modelo NWP — puede subestimar niebla/stratus de valle):
 {chr(10).join(current_lines) if current_lines else 'Sin datos actuales'}
 {convection_analysis}
 
@@ -917,10 +934,13 @@ GUÍA PISTA HOY (OBLIGATORIA EN SECCIÓN 4):
 
 ⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 4, 5, 6 y 7 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
-0) **METAR LEAS explicado** — LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS. ⚠️ NO ES representativo de LEMR. (máximo 2 líneas, sin jerga)
+0) **METAR LEAS y METAR LEMR explicados**
+   **LEAS**: LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS en 1-2 frases sin jerga. ⚠️ NO es representativo de LEMR.
+   **LEMR**: Explica el METAR estimado de La Morgal en 1-2 frases: qué viento, visibilidad, techo y categoría de vuelo hay AHORA en el campo. Aclara que es una estimación automática (no oficial). Si la categoría es LIFR o IFR, indícalo claramente con ❌.
 
 0.5) **📊 PRONÓSTICO vs REALIDAD ACTUAL (HOY {_dfmt(now_local.date())} a las {hora_actual})**:
-   Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas, si la visibilidad sorprende. Usa los emojis ✅/⚠️/〰️ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique si las condiciones son adecuadas para volar o no.
+   Usa como referencia PRIMARIA de condiciones actuales el METAR LEMR estimado (primer bloque del mensaje), NO la visibilidad bruta de Open-Meteo (el modelo NWP suele sobreestimar la visibilidad cuando hay niebla o stratus de valle). Si el METAR LEMR indica LIFR o IFR, DEBES reflejarlo como condición prohibitiva (❌) aunque Open-Meteo muestre visibilidad alta.
+   Escribe un párrafo breve y narrativo (2-4 frases naturales, no una tabla ni una lista de datos crudos). Cuenta en lenguaje fluido qué esperaba el pronóstico para hoy y qué está ocurriendo realmente: si el viento es más flojo o más fuerte de lo previsto, si las nubes son más altas o más bajas (usa la categoría LEMR como verdad de terreno), si la visibilidad sorprende. Usa los emojis ✅/⚠️/❌ solo al final para valorar el grado de coincidencia, y cierra con una frase que indique claramente si las condiciones son adecuadas para volar o no (❌ si LIFR/IFR, ⚠️ si MVFR, ✅ si VFR).
 
 1) **COINCIDENCIAS** clave entre fuentes para los 4 días.
    Si solo coinciden en algunos días, indícalo.
