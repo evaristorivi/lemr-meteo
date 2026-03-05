@@ -823,6 +823,32 @@ def interpret_fused_forecast_with_ai(
         _is_summer  = now_local.month in range(4, 10)
         _close_hour = 21 if _is_summer else 20
         _cur_hour   = now_local.hour
+
+        # Precomputar estado operativo en Python para evitar errores de aritmética del LLM
+        _now_hm        = now_local.hour * 60 + now_local.minute
+        _close_hm      = _close_hour * 60
+        _open_hm       = 9 * 60
+        _mins_to_close = _close_hm - _now_hm
+        if _now_hm >= _close_hm:
+            _op_status = f"🔒 YA CERRADO (cerró a las {_close_hour:02d}:00)"
+            _s3_pista   = f"🔒 YA CERRADO. El aeródromo cerró a las {_close_hour:02d}:00. No hay operaciones hasta mañana."
+            _aerodromo_abierto = False
+        elif _now_hm < _open_hm:
+            _op_status = "⏰ AÚN NO ABIERTO (abre a las 09:00)"
+            _s3_pista   = "AÚN NO ABIERTO, evaluable desde apertura."
+            _aerodromo_abierto = False
+        elif _mins_to_close < 60:
+            _op_status = f"🕐 CIERRE INMINENTE ({_mins_to_close} min hasta las {_close_hour:02d}:00)"
+            _s3_pista   = "🕐 CIERRE INMINENTE - no merece la pena."
+            _aerodromo_abierto = False
+        elif _mins_to_close <= 120:
+            _op_status = f"⚠️ TIEMPO LIMITADO ({_mins_to_close // 60}h{_mins_to_close % 60:02d}min hasta las {_close_hour:02d}:00)"
+            _s3_pista   = f"⚠️ TIEMPO LIMITADO - solo vuelo breve (quedan {_mins_to_close} min)."
+            _aerodromo_abierto = False
+        else:
+            _op_status = f"✅ ABIERTO ({_mins_to_close // 60}h{_mins_to_close % 60:02d}min hasta las {_close_hour:02d}:00)"
+            _s3_pista   = None  # LLM calcula la pista
+            _aerodromo_abierto = True
         _all_day_labels = {
             fecha_actual:                                                       f"HOY ({_dfmt(now_local.date())})",
             (now_local.date() + timedelta(days=1)).isoformat(): f"MAÑ ({_dfmt(now_local.date()+timedelta(days=1))})",
@@ -903,6 +929,7 @@ def interpret_fused_forecast_with_ai(
             )
 
         user_message = f"""Síntesis OPERATIVA ULM para {location}. ⏰ {hora_actual} (Europe/Madrid) — {_dfmt(now_local.date())}
+ESTADO AERÓDROMO: {_op_status}  ← PRECALCULADO EN PYTHON (NO recalcular ni modificar)
 
 METAR LEMR (estimado automático — CONDICIONES ACTUALES EN EL CAMPO, FUENTE PRIMARIA para sección 0.5):
 {metar_lemr or 'No disponible'}
@@ -948,13 +975,7 @@ Formato de cada sección:
 2) **DISCREPANCIAS** clave entre fuentes y explicación meteorológica probable (frentes, borrascas, diferencias de modelo).
 
 3) **🎯 ANÁLISIS DE PISTA PROBABLE EN SERVICIO** (solo HOY):
-   Valida {hora_actual} contra horario (invierno 09:00-20:00 / verano 09:00-21:45). Usa viento ACTUAL de Open-Meteo (sección “CONDICIONES ACTUALES” arriba). NO uses el viento de METAR LEAS para este cálculo — LEAS está a 30 km con orografía distinta.
-   PRIORIDAD (evalúa en este orden exacto, para en la primera que se cumpla):
-   1. Si {hora_actual} >= {_close_hour:02d}:00 → "🔒 YA CERRADO. El aeródromo cerró a las {_close_hour:02d}:00. No hay operaciones hasta mañana." NO uses 🕐 ni ninguna otra etiqueta.
-   2. Si {hora_actual} < 09:00 → "AÚN NO ABIERTO, evaluable desde apertura"
-   3. Si quedan <1h para las {_close_hour:02d}:00 → "🕐 CIERRE INMINENTE - no merece la pena"
-   4. Si quedan 1-2h → "⚠️ TIEMPO LIMITADO - solo vuelo breve"
-   5. Si quedan >2h → PISTA 10 o 28 + headwind/crosswind AMBAS pistas (con valores ACTUALES en kt)
+{"   " + _s3_pista if not _aerodromo_abierto else "   Estado: " + _op_status + " — calcula pista usando viento ACTUAL de Open-Meteo (NO el de METAR LEAS). PISTA 10 o 28 + headwind/crosswind AMBAS pistas (valores en kt)."}
    - Ejemplo: "HOY → PISTA 28 (viento ACTUAL 13 kt desde 268°, rachas 23 kt, hw 13 kt, xw 3 kt) ✅ - viable hasta 20:00"
    - El veredicto principal es la pista calculada por headwind/crosswind. Usa PISTA_HOY_RECOMENDADA y NO la contradigas.
    - Si el viento actual es ≤5 kt Y la pista calculada es PISTA 28: tras el resultado, añade UNA sola frase breve: "Con viento tan flojo, en LEMR suelen preferir PISTA 10 por comodidad operativa." Si la pista calculada ya es PISTA 10, NO añadas ningún comentario adicional.
@@ -969,8 +990,7 @@ Formato de cada sección:
    **DENTRO DE 3 DÍAS** — Por la mañana: [frase]. Por la tarde: [frase].
 
 5) **VEREDICTO POR DÍA** (los 4 días):
-   HOY: combina CONDICIONES ACTUALES (hora presente) + pronóstico horario para las horas que quedan hasta cierre. Evalúa PRIMERO tiempo restante hasta cierre, DESPUÉS riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato), DESPUÉS la evolución hora a hora del resto del día.
-   - hora_actual >= hora_cierre: 🔒 YA CERRADO (el aeródromo ya cerró hoy, no hay tiempo operativo) | <1h cierre: 🕐 CIERRE INMINENTE | 1-2h: ⚠️ TIEMPO LIMITADO | Antes apertura: evalúa igualmente (no es YA NO DISPONIBLE)
+   HOY [{_op_status}]: {'aeródromo cerrado hoy — escribe 🔒 YA CERRADO y omite el resto del análisis de HOY.' if not _aerodromo_abierto else 'combina condiciones actuales + pronóstico horario hasta cierre. Evalúa riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato) y evolución hora a hora.'}
    🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado. Las condiciones actuales son nocturnas y NO representan las condiciones de vuelo del día completo. Basa el veredicto HOY en el pronóstico horario 09:00–cierre. PERO revisa el spread T−Td actual (incluido en «CONDICIONES ACTUALES»): si T−Td ≤ 1°C con nube baja >87%, HAY RIESGO de niebla o techo muy bajo a la apertura (09:00) — MENCIÓNALO en el veredicto. La niebla suele disiparse a las 09-11h en La Morgal; si el pronóstico horario 09-14h muestra T−Td > 2°C o nube baja <50%, el día sigue siendo aceptable pero con nota de esperar a que despeje.
    🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
    MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
