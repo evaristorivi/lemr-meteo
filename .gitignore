@@ -48,6 +48,9 @@ Thumbs.db
 .coverage
 htmlcov/
 
+# Dev tools (local only)
+validate.py
+
 # Test and demo files (temporary)
 test_*.py
 demo_*.py

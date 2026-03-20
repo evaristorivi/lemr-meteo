@@ -228,6 +228,17 @@
       margin: 0 0 8px;
       font-size: clamp(1.4rem, 2.2vw, 2.1rem);
     }
+    .aero-info-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+      font-size: 0.73rem;
+      color: #7b98b8;
+      margin: 2px 0 0;
+      line-height: 1.6;
+    }
+    .aero-sep { color: rgba(255,255,255,0.12); padding: 0 2px; }
 
     .nav-menu {
       display: flex;
@@ -827,6 +838,154 @@
         justify-content: flex-start;
       }
     }
+
+    .mvw-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 12px 0;
+    }
+    /* ─── Main condiciones 3-col layout ─── */
+    .condiciones-row {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 1fr 1fr;
+      gap: 20px;
+      align-items: stretch;
+    }
+    @media (max-width: 960px) {
+      .condiciones-row { grid-template-columns: 1fr; }
+    }
+    /* ─── Free-floating compass panel (no card border) ─── */
+    .compass-free {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 14px 14px 16px;
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    .compass-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .header-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+    }
+    .compass-panel-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #cfe4ff;
+      letter-spacing: 0.01em;
+    }
+    .compass-panel-sub {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-weight: 400;
+      margin-top: 1px;
+    }
+    .metar-disclaimer {
+      font-size: 0.68rem;
+      color: var(--muted);
+      line-height: 1.45;
+      text-align: left;
+      margin: 0;
+      width: 100%;
+    }
+    .cat-badge {
+      display: inline-block;
+      padding: 5px 0;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 0.88rem;
+      letter-spacing: 0.06em;
+      background: #22c55e;
+      color: #000;
+      min-width: 90px;
+      text-align: center;
+    }
+    .wind-pill {
+      background: rgba(8,17,32,0.8);
+      border: 1px solid rgba(100,180,255,0.2);
+      border-radius: 20px;
+      padding: 4px 18px;
+      font-size: 0.83rem;
+      font-weight: 700;
+      color: #e9f0ff;
+      white-space: nowrap;
+    }
+    .mini-stats {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      font-size: 0.79rem;
+      color: #7b98b8;
+      padding: 2px 0 4px;
+    }
+    .metar-raw-box {
+      font-family: 'JetBrains Mono','Fira Mono',monospace;
+      font-size: 0.74rem;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(100,140,200,0.1);
+      padding: 6px 10px;
+      border-radius: 8px;
+      margin: 0;
+      word-break: break-all;
+      line-height: 1.5;
+      color: #b0c8e8;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #lemr-detail {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      box-sizing: border-box;
+    }
+    .detail-tiles {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-auto-rows: 1fr;
+      gap: 8px;
+      align-items: stretch;
+      flex: 1;
+    }
+    .detail-tile {
+      background: rgba(10,18,32,0.55);
+      border: 1px solid rgba(100,140,210,0.1);
+      border-radius: 8px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .detail-tile .t-label {
+      font-size: 0.63rem;
+      color: #556a84;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 3px;
+    }
+    .detail-tile .t-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #cfe4ff;
+      line-height: 1.3;
+    }
+    @media (max-width: 700px) {
+      .detail-tiles { grid-template-columns: repeat(2, 1fr); }
+    }
   </style>
 </head>
 <body>
@@ -837,6 +996,7 @@
         <h1>🛩️ LEMR Meteo · La Morgal</h1>
         <div class="muted" id="meta-line"></div>
         <div class="muted" id="refresh-line"></div>
+        <div class="aero-info-bar" id="aerodrome-info-bar"></div>
         <div class="muted" id="load-status">⏳ Cargando datos meteorológicos...</div>
       </div>
       <nav class="nav-menu">
@@ -849,30 +1009,54 @@
       </nav>
     </section>
 
-    <!-- TOP CARDS -->
-    <section class="grid" id="condiciones">
-      <article class="card">
-        <h2>📍 Aeródromo</h2>
-        <dl class="kv" id="aerodrome-kv"></dl>
-      </article>
+    <!-- Condiciones: 3-col (detail tiles | LEAS compass | LEMR compass) -->
+    <section class="condiciones-row" id="condiciones">
 
-      <article class="card">
-        <h2>🌤️ Condiciones actuales</h2>
-        <dl class="kv" id="current-kv"></dl>
-      </article>
+      <!-- Col 1: detail metric tiles -->
+      <div class="card" id="lemr-detail">
+        <h2>📋 Condiciones LEMR</h2>
+        <div class="detail-tiles" id="lemr-detail-tiles"></div>
+      </div>
 
-      <article class="card">
-        <h2>✈️ METAR LEAS (referencia oficial)</h2>
-        <p id="metar-leas-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px;margin-bottom:8px"></p>
-        <p id="metar-leas-category" style="font-size:0.9rem;font-weight:600;margin:0"></p>
-      </article>
+      <!-- Col 2: LEAS compass free-floating -->
+      <div class="compass-free">
+        <div class="compass-panel-header">
+          <div>
+            <span class="compass-panel-title">✈️ LEAS</span>
+            <span class="compass-panel-sub">Referencia oficial</span>
+          </div>
+          <span class="wind-pill" id="leas-wind-pill">— kt</span>
+          <span class="cat-badge" id="leas-cat-badge">—</span>
+        </div>
+        <div class="mini-stats">
+          <span id="leas-temp"></span>
+          <span id="leas-qnh"></span>
+          <span id="leas-dew"></span>
+        </div>
+        <p id="metar-leas-raw" class="metar-raw-box"></p>
+        <canvas id="compass-leas"></canvas>
+      </div>
 
-      <article class="card">
-        <h2>🎯 METAR LEMR (estimado automático) <span style="font-size:0.6em;vertical-align:middle;background:#f59e0b;color:#000;padding:2px 6px;border-radius:4px;font-weight:600;">Beta</span></h2>
-        <p id="metar-lemr-raw" class="analysis" style="font-family:monospace;font-size:0.88rem;background:rgba(0,0,0,.3);padding:8px;border-radius:8px;margin-bottom:8px"></p>
-        <p id="metar-lemr-category" style="font-size:0.9rem;font-weight:600;margin:0;margin-bottom:8px"></p>
-        <p id="metar-lemr-disclaimer" class="muted" style="font-size:0.8rem;line-height:1.4;margin:0"></p>
-      </article>
+      <!-- Col 3: LEMR compass free-floating -->
+      <div class="compass-free" id="lemr-condiciones">
+        <div class="compass-panel-header">
+          <div>
+            <span class="compass-panel-title">🎯 LEMR</span>
+            <span class="compass-panel-sub">Estimado · Beta</span>
+          </div>
+          <span class="wind-pill" id="lemr-wind-pill">— km/h</span>
+          <span class="cat-badge" id="mvw-badge">—</span>
+        </div>
+        <div class="mini-stats">
+          <span id="lemr-temp"></span>
+          <span id="lemr-qnh"></span>
+          <span id="lemr-rh"></span>
+        </div>
+        <p id="metar-lemr-raw" class="metar-raw-box"></p>
+        <p id="metar-lemr-disclaimer" class="metar-disclaimer"></p>
+        <canvas id="compass-lemr"></canvas>
+      </div>
+
     </section>
 
     <!-- WINDY POINT FORECAST -->
@@ -1133,6 +1317,226 @@
       windyMapLink.href = windy.map_link || "https://www.windy.com";
     };
 
+    // ── Reusable Compass Drawing ──────────────────────────────────────────────
+    const _compassAnims = {}; // per-canvas animation counters
+
+    // Draw a compass on any canvas.
+    // rwy = { hdg, lo, hi } e.g. { hdg:100, lo:'10', hi:'28' }
+    const drawCompass = (canvasId, windDir, isCalm, isVrb, rwy) => {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      // Responsive: fill parent column width (clamp 200–640px)
+      const parentW = canvas.parentElement ? canvas.parentElement.clientWidth : 360;
+      const SZ = Math.min(Math.max(Math.round(parentW * 0.96), 200), 640);
+      const R  = Math.round(SZ * 0.46);    // compass circle radius — fills ~92% of canvas
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width  = SZ * dpr; canvas.height = SZ * dpr;
+      canvas.style.width = SZ + 'px'; canvas.style.height = SZ + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const cx = SZ / 2, cy = SZ / 2;
+
+      const hXY = (deg, r) => ({
+        x: cx + r * Math.sin(deg * Math.PI / 180),
+        y: cy - r * Math.cos(deg * Math.PI / 180),
+      });
+
+      const paintCompass = (arrowDeg) => {
+        ctx.clearRect(0, 0, SZ, SZ);
+
+        // Background circle
+        const bg = ctx.createRadialGradient(cx, cy, R * 0.09, cx, cy, R);
+        bg.addColorStop(0, '#1a2d44'); bg.addColorStop(1, '#0c1626');
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+
+        // Outer ring
+        ctx.strokeStyle = 'rgba(150,180,220,0.25)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, R - 1, 0, Math.PI * 2); ctx.stroke();
+
+        // Tick marks every 10°
+        for (let d = 0; d < 360; d += 10) {
+          const isCard = d % 90 === 0, is30 = d % 30 === 0;
+          const o = hXY(d, R - 2);
+          const i = hXY(d, isCard ? R - R*0.163 : (is30 ? R - R*0.128 : R - R*0.081));
+          ctx.strokeStyle = isCard ? 'rgba(255,255,255,0.8)' : (is30 ? 'rgba(200,220,255,0.55)' : 'rgba(160,190,230,0.3)');
+          ctx.lineWidth   = isCard ? 2 : (is30 ? 1.3 : 0.8);
+          ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(i.x, i.y); ctx.stroke();
+        }
+
+        // Labels: N, E, S, W + intermediate numbers
+        const card = { 0:'N', 90:'E', 180:'S', 270:'W' };
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (let d = 0; d < 360; d += 30) {
+          const isC = d % 90 === 0;
+          const lp = hXY(d, R - R*0.256);
+          ctx.fillStyle = isC ? '#ffffff' : 'rgba(170,200,235,0.85)';
+          ctx.font = isC ? `bold ${Math.round(R*0.14)}px Inter,sans-serif` : `${Math.round(R*0.105)}px Inter,sans-serif`;
+          ctx.fillText(card[d] ?? String(d / 10), lp.x, lp.y);
+        }
+
+        // ── Runway ──
+        if (rwy) {
+          const rwyAng = (rwy.hdg - 90) * Math.PI / 180;
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(rwyAng);
+          const rL = Math.round(R * 0.581), rW = Math.round(R * 0.116);
+          ctx.fillStyle = '#0a0e18';
+          ctx.fillRect(-rL, -rW / 2, rL * 2, rW);
+          ctx.strokeStyle = 'rgba(200,220,255,0.35)'; ctx.lineWidth = 0.8;
+          ctx.strokeRect(-rL, -rW / 2, rL * 2, rW);
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          const sW = Math.round(R * 0.07), sH = Math.round(rW * 0.17), sGap = rW * 0.3;
+          for (let i = 0; i < 3; i++) {
+            ctx.fillRect(-rL + 2, -rW/2 + sH + i*sGap, sW, sH);
+            ctx.fillRect( rL - sW - 2, -rW/2 + sH + i*sGap, sW, sH);
+          }
+          const cl = Math.round(R * 0.442);
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.2;
+          ctx.setLineDash([Math.round(R*0.07), Math.round(R*0.058)]);
+          ctx.beginPath(); ctx.moveTo(-cl, 0); ctx.lineTo(cl, 0); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ffffff'; ctx.font = `bold ${Math.round(R*0.081)}px Inter,sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(rwy.lo, -rL + Math.round(R*0.14), 0);
+          ctx.fillText(rwy.hi,  rL - Math.round(R*0.14), 0);
+          ctx.restore();
+        }
+
+        // ── Wind arrow (FROM arrowDeg TOWARD opposite) ──
+        if (isCalm) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.2;
+          [R*0.14, R*0.07].forEach(r => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); });
+        } else if (isVrb || arrowDeg == null) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath(); ctx.arc(cx, cy, R * 0.465, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          const opp   = (arrowDeg + 180) % 360;
+          const tail  = hXY(arrowDeg, R - R*0.116);
+          const tipPt = hXY(opp, R * 0.35);
+          const angle = Math.atan2(tipPt.y - tail.y, tipPt.x - tail.x);
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5;
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(tipPt.x, tipPt.y); ctx.stroke();
+          const hl = R * 0.116, ha = 0.45;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.moveTo(tipPt.x, tipPt.y);
+          ctx.lineTo(tipPt.x - hl * Math.cos(angle - ha), tipPt.y - hl * Math.sin(angle - ha));
+          ctx.lineTo(tipPt.x - hl * Math.cos(angle + ha), tipPt.y - hl * Math.sin(angle + ha));
+          ctx.closePath(); ctx.fill();
+        }
+
+        // Center dot
+        const cd = Math.round(R * 0.047);
+        ctx.fillStyle = '#141F30';
+        ctx.beginPath(); ctx.arc(cx, cy, cd, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.arc(cx, cy, cd, 0, Math.PI * 2); ctx.stroke();
+      };
+
+      // Animate arrow from the opposite of the wind direction (dynamic per-wind, always 180° sweep)
+      _compassAnims[canvasId] = (_compassAnims[canvasId] || 0) + 1;
+      const animId = _compassAnims[canvasId];
+      if (!isCalm && !isVrb && windDir != null) {
+        const from = (windDir + 180) % 360;
+        let diff = windDir - from;
+        if (diff > 180) diff -= 360;
+        if (diff < -180) diff += 360;
+        const dur = 800, t0 = performance.now();
+        const tick = (now) => {
+          if (animId !== _compassAnims[canvasId]) return;
+          const t = Math.min((now - t0) / dur, 1);
+          const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          paintCompass(((from + diff * ease) % 360 + 360) % 360);
+          if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      } else {
+        paintCompass(windDir);
+      }
+    };
+
+    // ── Widget updater: populates both compasses + side data ──
+    const drawMetarCompassWidget = (data) => {
+      const cur  = data?.current;
+      const lemr = data?.metar?.lemr;
+      const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+      // ── LEMR compass: from Open-Meteo real-time data ──
+      if (cur) {
+        const wDir  = cur.wind_direction;
+        const wKmh  = cur.wind_speed_kmh;
+        const gKmh  = cur.wind_gusts_kmh;
+        const calm  = wKmh == null || wKmh === 0;
+        drawCompass('compass-lemr', wDir, calm, false, { hdg: 100, lo: '10', hi: '28' });
+
+        // Side info
+        const pill = document.getElementById('lemr-wind-pill');
+        if (pill) {
+          if (calm) pill.textContent = 'Calma';
+          else pill.textContent = wDir != null ? `${wDir}° ${wKmh} km/h` : `${wKmh} km/h`;
+        }
+        setTxt('lemr-temp', cur.temperature != null ? `🌡️ ${cur.temperature} °C` : '');
+        setTxt('lemr-qnh',  cur.pressure    != null ? `📊 ${cur.pressure} hPa` : '');
+        setTxt('lemr-rh',   cur.humidity    != null ? `💧 ${cur.humidity}% RH`  : '');
+
+        // Badge from LEMR flight category
+        const fc = lemr?.flight_category;
+        const badge = document.getElementById('mvw-badge');
+        if (badge && fc) {
+          badge.textContent      = fc.category;
+          badge.style.background = fc.color || '#22c55e';
+          badge.style.color      = ['#22c55e','#3b82f6'].includes(fc.color) ? '#000' : '#fff';
+        }
+      }
+
+      // ── LEAS compass: from METAR LEAS raw ──
+      const leasRaw = data?.metar?.leas?.raw || '';
+      const leasWind = leasRaw.match(/(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT/);
+      if (leasWind) {
+        const dirRaw = leasWind[1];
+        const kt     = parseInt(leasWind[2]);
+        const gust   = leasWind[3] ? parseInt(leasWind[3]) : null;
+        const dir    = dirRaw !== 'VRB' ? parseInt(dirRaw) : null;
+        const calm   = kt === 0;
+        const vrb    = dirRaw === 'VRB';
+        drawCompass('compass-leas', dir, calm, vrb, { hdg: 110, lo: '11', hi: '29' });
+        const pill = document.getElementById('leas-wind-pill');
+        if (pill) {
+          if (calm)     pill.textContent = 'Calma';
+          else if (vrb) pill.textContent = `VRB ${kt} kt`;
+          else          pill.textContent = `${dir}° ${kt}${gust ? ' G' + gust : ''} kt`;
+        }
+      } else {
+        drawCompass('compass-leas', null, true, false, { hdg: 110, lo: '11', hi: '29' });
+      }
+      // Parse temp / dew-point / QNH from raw METAR
+      const leasTdM  = leasRaw.match(/\b(M?\d{2})\/(M?\d{2})\b/);
+      const leasQnhM = leasRaw.match(/\bQ(\d{4})\b/);
+      const mrT = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
+      if (leasTdM) {
+        setTxt('leas-temp', `🌡️ ${mrT(leasTdM[1])} °C`);
+        setTxt('leas-dew',  `💧 Td ${mrT(leasTdM[2])} °C`);
+      } else {
+        setTxt('leas-temp', ''); setTxt('leas-dew', '');
+      }
+      setTxt('leas-qnh', leasQnhM ? `📊 ${leasQnhM[1]} hPa` : '');
+    };
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const renderTiles = (containerId, items) => {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      el.innerHTML = items
+        .filter(([, v]) => v != null && v !== '')
+        .map(([label, html]) => `<div class="detail-tile"><div class="t-label">${label}</div><div class="t-value">${html}</div></div>`)
+        .join('');
+    };
+
     const render = (data) => {
       if (!data || !data.location || !data.current) return;
 
@@ -1141,28 +1545,35 @@
       document.getElementById("refresh-line").textContent =
         `Última generación: ${fmtDateTime(data.generated_at)}`;
 
-      renderKv("aerodrome-kv", [
-        ["Coordenadas", data.location.coordinates],
-        ["Frecuencia", `${data.location.radio} MHz`],
-        ["Elevación", data.location.elevation],
-        ["Pista", data.location.runway],
-        ["Invierno", data.location.hours_invierno],
-        ["Verano", data.location.hours_verano],
-      ]);
+      // Aerodrome info bar in header
+      const aeroBar = document.getElementById('aerodrome-info-bar');
+      if (aeroBar && data.location) {
+        const loc = data.location;
+        aeroBar.innerHTML = [
+          loc.coordinates  ? `<span>📍 ${loc.coordinates}</span>`             : null,
+          loc.radio        ? `<span>📡 ${loc.radio} MHz</span>`               : null,
+          loc.elevation    ? `<span>🏔️ ${loc.elevation}</span>`              : null,
+          loc.runway       ? `<span>🛬 ${loc.runway}</span>`                  : null,
+          loc.hours_verano   ? `<span>☀️ Verano ${loc.hours_verano}</span>`   : null,
+          loc.hours_invierno ? `<span>❄️ Invierno ${loc.hours_invierno}</span>` : null,
+        ].filter(Boolean).join('<span class="aero-sep"> · </span>');
+      }
 
+      // Detail tiles
       const capeVal = data.current.cape;
       const capeStr = capeVal != null
         ? `${capeVal} J/kg (${capeVal < 250 ? 'nulo/débil' : capeVal < 500 ? 'moderado' : capeVal < 2000 ? '⚠️ fuerte' : '❌ extremo'})`
         : null;
       const precVal = data.current.precipitation;
       const precStr = precVal != null ? `${precVal} mm` : null;
-      renderKv("current-kv", [
+      renderTiles("lemr-detail-tiles", [
         ["Hora dato", fmtDateTime(data.current.time)],
+        ["Sens. térmica", `${data.current.feels_like}°C`],
         ["Condición", data.current.condition],
-        ["Temperatura", `${data.current.temperature}°C (sens. ${data.current.feels_like}°C)`],
-        ["Humedad", `${data.current.humidity}%`],
-        ["Viento", `${data.current.wind_speed_kmh} km/h desde ${data.current.wind_direction}°`],
+        ["Viento", `${data.current.wind_speed_kmh} km/h · ${data.current.wind_direction}°`],
         ["Rachas", `${data.current.wind_gusts_kmh} km/h`],
+        ...(precStr ? [["Precipitación", precStr]] : []),
+        ...(capeStr ? [["CAPE", capeStr]] : []),
         ["Nubosidad", (() => {
           const total = data.current.cloud_cover;
           const low   = data.current.cloud_cover_low;
@@ -1171,40 +1582,45 @@
           if (low == null) return `${total}%`;
           return `${total}% total<ul style="margin:4px 0 0 1em;padding:0;list-style:disc;color:var(--muted);font-size:0.85em"><li>Bajas (&lt;2000m): ${low}%</li><li>Medias: ${mid}%</li><li>Altas: ${high}%</li></ul>`;
         })()],
-        ["Presión", `${data.current.pressure} hPa`],
-        ...(precStr ? [["Precipitación", precStr]] : []),
-        ...(capeStr ? [["CAPE", capeStr]] : []),
       ]);
 
       // METAR LEAS (oficial)
       const metarLeas = data.metar?.leas?.raw || data.metar?.raw || "METAR LEAS no disponible en este ciclo.";
       document.getElementById("metar-leas-raw").textContent = metarLeas;
       
-      // Clasificación de vuelo LEAS
+      // Clasificación de vuelo LEAS → badge
       const leasCategory = data.metar?.leas?.flight_category;
-      if (leasCategory) {
-        document.getElementById("metar-leas-category").innerHTML = `${leasCategory.emoji} <span style="color:${leasCategory.color}">${leasCategory.category}</span> - ${leasCategory.description}`;
-      } else {
-        document.getElementById("metar-leas-category").textContent = "";
+      const leasBadge = document.getElementById('leas-cat-badge');
+      if (leasBadge) {
+        if (leasCategory) {
+          leasBadge.textContent      = leasCategory.category;
+          leasBadge.style.background = leasCategory.color || '#22c55e';
+          leasBadge.style.color      = ['#22c55e','#3b82f6'].includes(leasCategory.color) ? '#000' : '#fff';
+        } else {
+          leasBadge.textContent = '—';
+          leasBadge.style.background = '';
+          leasBadge.style.color = '';
+        }
       }
 
       // METAR LEMR (sintético)
       if (data.metar?.lemr) {
         document.getElementById("metar-lemr-raw").textContent = data.metar.lemr.raw || "METAR LEMR no generado";
-        document.getElementById("metar-lemr-disclaimer").textContent = data.metar.lemr.disclaimer || "";
-        
-        // Clasificación de vuelo LEMR
-        const lemrCategory = data.metar.lemr.flight_category;
-        if (lemrCategory) {
-          document.getElementById("metar-lemr-category").innerHTML = `${lemrCategory.emoji} <span style="color:${lemrCategory.color}">${lemrCategory.category}</span> - ${lemrCategory.description}`;
-        } else {
-          document.getElementById("metar-lemr-category").textContent = "";
-        }
+        document.getElementById("metar-lemr-disclaimer").textContent = "⚠️ Estimado · NO OFICIAL · Techo por LCL solo nubes bajas";
       } else {
         document.getElementById("metar-lemr-raw").textContent = "METAR LEMR no disponible";
         document.getElementById("metar-lemr-disclaimer").textContent = "";
-        document.getElementById("metar-lemr-category").textContent = "";
       }
+
+      // Compass widget LEMR
+      drawMetarCompassWidget(data);
+
+      // Redraw compasses on window resize
+      const _rdebounce = { t: null };
+      window.addEventListener('resize', () => {
+        clearTimeout(_rdebounce.t);
+        _rdebounce.t = setTimeout(() => drawMetarCompassWidget(data), 120);
+      }, { once: false, passive: true });
 
       // Mapa de análisis
       const analysisImg = document.getElementById("analysis-map-img");
