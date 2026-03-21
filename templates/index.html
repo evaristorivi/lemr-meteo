@@ -1044,7 +1044,7 @@
             <span class="compass-panel-title">🎯 LEMR</span>
             <span class="compass-panel-sub">Estimado · Beta</span>
           </div>
-          <span class="wind-pill" id="lemr-wind-pill">— km/h</span>
+          <span class="wind-pill" id="lemr-wind-pill">— kt</span>
           <span class="cat-badge" id="mvw-badge">—</span>
         </div>
         <div class="mini-stats">
@@ -1472,13 +1472,14 @@
         const wKmh  = cur.wind_speed_kmh;
         const gKmh  = cur.wind_gusts_kmh;
         const calm  = wKmh == null || wKmh === 0;
+        const wKt   = wKmh != null ? Math.round(wKmh / 1.852) : null;
         drawCompass('compass-lemr', wDir, calm, false, { hdg: 100, lo: '10', hi: '28' });
 
         // Side info
         const pill = document.getElementById('lemr-wind-pill');
         if (pill) {
           if (calm) pill.textContent = 'Calma';
-          else pill.textContent = wDir != null ? `${wDir}° ${wKmh} km/h` : `${wKmh} km/h`;
+          else pill.textContent = wDir != null ? `${wDir}° ${wKt} kt` : `${wKt} kt`;
         }
         setTxt('lemr-temp', cur.temperature != null ? `🌡️ ${cur.temperature} °C` : '');
         setTxt('lemr-qnh',  cur.pressure    != null ? `📊 ${cur.pressure} hPa` : '');
@@ -1688,7 +1689,7 @@
         return banner;
       }
 
-      function enrichAIAnalysis(el) {
+      function enrichAIAnalysis(el, generatedAt) {
         // 1. Colorea líneas por emoji de veredicto
         el.querySelectorAll('p, li').forEach(node => {
           const t = node.textContent;
@@ -1725,8 +1726,9 @@
         // 3. Chip en etiquetas de día (HOY —, MAÑANA —, PASADO MAÑANA —…)
         const _wkNames = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
         const _dayOffset = {"HOY":0,"MAÑANA":1,"PASADO MAÑANA":2,"DENTRO DE 3 DÍAS":3};
+        const _baseDate = generatedAt ? new Date(generatedAt) : new Date();
         const _daySubtitle = (label) => {
-          const d = new Date();
+          const d = new Date(_baseDate);
           d.setDate(d.getDate() + (_dayOffset[label] ?? 0));
           return _wkNames[d.getDay()] + " " + d.getDate();
         };
@@ -1758,7 +1760,7 @@
       if (typeof marked !== 'undefined') {
         try {
           aiElement.innerHTML = marked.parse(aiAnalysis);
-          enrichAIAnalysis(aiElement);
+          enrichAIAnalysis(aiElement, data.generated_at);
           const metarRaw = data.metar?.leas?.raw || data.metar?.raw || '';
           const banner = buildSourcesBanner(data.ai, data.forecast_days || [], data.windy || {}, metarRaw);
           aiElement.insertBefore(banner, aiElement.firstChild);
