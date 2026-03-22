@@ -1225,9 +1225,10 @@
     };
     // Inicializar aiCycleMeta con los datos del ciclo que viene del servidor al cargar la página
     state.aiCycleMeta = {
-      cycleId:  state.data?.cycle_id,
-      raw:      state.data?.metar?.leas?.raw,
-      category: state.data?.metar?.leas?.flight_category?.category,
+      cycleId:     state.data?.cycle_id,
+      raw:         state.data?.metar?.leas?.raw,
+      category:    state.data?.metar?.leas?.flight_category?.category,
+      lemrCategory: state.data?.metar?.lemr?.flight_category?.category,
     };
 
     // Smooth scroll para el menú de navegación
@@ -1908,9 +1909,10 @@
           state.data = d;
           // Nuevo ciclo IA → actualizar snapshot del METAR que vio la IA y limpiar aviso
           state.aiCycleMeta = {
-            cycleId:  d.cycle_id,
-            raw:      d.metar?.leas?.raw,
-            category: d.metar?.leas?.flight_category?.category,
+            cycleId:     d.cycle_id,
+            raw:         d.metar?.leas?.raw,
+            category:    d.metar?.leas?.flight_category?.category,
+            lemrCategory: d.metar?.lemr?.flight_category?.category,
           };
           const warnEl = document.getElementById('ai-metar-stale-warning');
           if (warnEl) warnEl.style.display = 'none';
@@ -2280,26 +2282,42 @@
           drawMetarCompassWidget(liveData);
         }
 
-        // ── Aviso desfase IA (basado en METAR LEAS vs ciclo IA) ──
-        const aiCat  = state.aiCycleMeta?.category;
-        const nowCat = liveCat?.category;
+        // ── Aviso desfase IA (basado en METAR LEAS y LEMR vs ciclo IA) ──
+        const aiCat      = state.aiCycleMeta?.category;
+        const nowCat     = liveCat?.category;
+        const aiLemrCat  = state.aiCycleMeta?.lemrCategory;
+        const nowLemrCat = dCurrent?.metar_lemr?.flight_category?.category;
         const warnEl = document.getElementById('ai-metar-stale-warning');
-        if (warnEl && aiCat && nowCat && aiCat !== nowCat) {
-          const aiRank  = _flightCatOrder[aiCat]  ?? -1;
-          const nowRank = _flightCatOrder[nowCat] ?? -1;
+
+        const leasChanged = aiCat     && nowCat     && aiCat     !== nowCat;
+        const lemrChanged = aiLemrCat && nowLemrCat && aiLemrCat !== nowLemrCat;
+
+        if (warnEl && (leasChanged || lemrChanged)) {
+          const aiRank      = _flightCatOrder[aiCat]      ?? -1;
+          const nowRank     = _flightCatOrder[nowCat]      ?? -1;
+          const aiLemrRank  = _flightCatOrder[aiLemrCat]  ?? -1;
+          const nowLemrRank = _flightCatOrder[nowLemrCat] ?? -1;
+
+          const leasWorsened = leasChanged && nowRank     < aiRank;
+          const lemrWorsened = lemrChanged && nowLemrRank < aiLemrRank;
+
           const aiTimeMatch   = state.aiCycleMeta?.raw?.match(/\d{2}(\d{2})(\d{2})Z/);
           const liveTimeMatch = leas?.raw?.match(/\d{2}(\d{2})(\d{2})Z/);
           const aiTimeStr   = aiTimeMatch   ? `${aiTimeMatch[1]}:${aiTimeMatch[2]}Z`   : 'el ciclo anterior';
           const liveTimeStr = liveTimeMatch ? `${liveTimeMatch[1]}:${liveTimeMatch[2]}Z` : 'ahora';
-          if (nowRank > aiRank) {
-            warnEl.style.cssText = 'display:"";background:rgba(250,200,50,0.13);border-color:rgba(250,200,50,0.4);color:#f0c040';
-            warnEl.textContent = `⚠️ El análisis IA se generó con el METAR de ${aiTimeStr} (${aiCat}). El METAR actual (${liveTimeStr}) ya indica ${nowCat} — las condiciones han mejorado. El veredicto puede ser más restrictivo de lo real. El próximo ciclo horario actualizará el análisis.`;
-            warnEl.style.display = '';
-          } else if (nowRank < aiRank) {
+
+          const parts = [];
+          if (leasChanged) parts.push(`LEAS: ${aiCat} → ${nowCat}`);
+          if (lemrChanged) parts.push(`LEMR (est.): ${aiLemrCat} → ${nowLemrCat}`);
+
+          if (leasWorsened || lemrWorsened) {
             warnEl.style.cssText = 'display:"";background:rgba(239,68,68,0.13);border-color:rgba(239,68,68,0.5);color:#f87171';
-            warnEl.textContent = `🚨 El análisis IA se generó con el METAR de ${aiTimeStr} (${aiCat}). El METAR actual (${liveTimeStr}) indica ${nowCat} — las condiciones han EMPEORADO. Revisa el METAR de LEAS antes de tomar ninguna decisión.`;
-            warnEl.style.display = '';
+            warnEl.textContent = `🚨 Condiciones cambiadas desde el análisis IA (${aiTimeStr} → ${liveTimeStr}): ${parts.join(' · ')} — han EMPEORADO. Revisa los METARs antes de tomar ninguna decisión.`;
+          } else {
+            warnEl.style.cssText = 'display:"";background:rgba(250,200,50,0.13);border-color:rgba(250,200,50,0.4);color:#f0c040';
+            warnEl.textContent = `⚠️ Condiciones cambiadas desde el análisis IA (${aiTimeStr} → ${liveTimeStr}): ${parts.join(' · ')} — han mejorado. El veredicto puede ser más restrictivo de lo real. El próximo ciclo actualizará el análisis.`;
           }
+          warnEl.style.display = '';
         } else if (warnEl) {
           warnEl.style.display = 'none';
         }
