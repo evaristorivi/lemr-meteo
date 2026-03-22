@@ -429,6 +429,39 @@
       max-width: min(85vw, 900px);
     }
 
+    /* ── FL Viento/Temp tabs ── */
+    .fl-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .fl-tab {
+      padding: 7px 16px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .fl-tab:hover {
+      background: rgba(102,227,255,0.10);
+      color: var(--text);
+    }
+    .fl-tab.active {
+      background: rgba(102,227,255,0.18);
+      border-color: rgba(102,227,255,0.55);
+      color: #fff;
+      font-weight: 600;
+    }
+    .fl-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+    }
+
     .analysis {
       line-height: 1.7;
       font-size: 0.93rem;
@@ -1003,6 +1036,7 @@
         <a href="#condiciones">🌤️ Actual</a>
         <a href="#windy">🌬️ Windy</a>
         <a href="#pronostico">📍 Mapas significativos</a>
+        <a href="#viento-niveles">💨 Viento FL</a>
         <a href="#analisis-ia">👨‍✈️ IA LEMR</a>
         <a href="#mapa-analisis">🗺️ Análisis en superficie</a>
         <a href="#ogimet-semana">📆 7 días</a>
@@ -1080,7 +1114,19 @@
       <div id="days" class="days"></div>
     </section>
 
-
+    <!-- MAPAS VIENTO Y TEMPERATURA EN NIVELES DE VUELO -->
+    <section class="card" id="viento-niveles">
+      <h2>💨 Viento y Temperatura · Niveles de vuelo</h2>
+      <div class="fl-tabs">
+        <button class="fl-tab active" data-fl="020">FL020 · 2 000 ft</button>
+        <button class="fl-tab" data-fl="050">FL050 · 5 000 ft</button>
+        <button class="fl-tab" data-fl="100">FL100 · 10 000 ft</button>
+      </div>
+      <div id="fl-run-info" class="chip" style="margin:8px 0 6px;display:none"></div>
+      <div id="fl-maps-container">
+        <p class="muted" style="text-align:center">⏳ Cargando mapas de niveles de vuelo...</p>
+      </div>
+    </section>
 
     <section class="card" id="analisis-ia">
       <h2>👨‍✈️ Análisis IA — LEMR La Morgal</h2>
@@ -1473,12 +1519,17 @@
         const gKmh  = cur.wind_gusts_kmh;
         const calm  = wKmh == null || wKmh === 0;
         const wKt   = wKmh != null ? Math.round(wKmh / 1.852) : null;
-        drawCompass('compass-lemr', wDir, calm, false, { hdg: 100, lo: '10', hi: '28' });
+        // Detect VRB from the generated LEMR METAR (matches metar_generator logic: speed < 3 kt)
+        const lemrRaw = lemr?.raw || '';
+        const lemrWindGrp = lemrRaw.match(/(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT/);
+        const vrb = lemrWindGrp ? lemrWindGrp[1] === 'VRB' : false;
+        drawCompass('compass-lemr', vrb ? null : wDir, calm, vrb, { hdg: 100, lo: '10', hi: '28' });
 
         // Side info
         const pill = document.getElementById('lemr-wind-pill');
         if (pill) {
-          if (calm) pill.textContent = 'Calma';
+          if (calm)     pill.textContent = 'Calma';
+          else if (vrb) pill.textContent = `VRB ${wKt} kt`;
           else pill.textContent = wDir != null ? `${wDir}° ${wKt} kt` : `${wKt} kt`;
         }
         setTxt('lemr-temp', cur.temperature != null ? `🌡️ ${cur.temperature} °C` : '');
@@ -1869,8 +1920,9 @@
         state.data = d;
         render(state.data);
         
-        // Cargar datos de Ogimet de forma diferida (no bloquea la carga inicial)
+        // Cargar datos de Ogimet y mapas FL de forma diferida (no bloquean la carga inicial)
         setTimeout(() => loadOgimetWeek(), 100);
+        setTimeout(() => renderFlMaps('020'), 200);
       } catch {
         setLoadStatus("⚠️ Error al cargar datos iniciales.", true);
       }
@@ -1961,6 +2013,137 @@
           }
         });
       }
+    });
+
+    // ========================================================================
+    // MAPAS VIENTO Y TEMPERATURA EN NIVELES DE VUELO (VTPLOT)
+    // ========================================================================
+
+    const _flSteps = ['003','006','009','012','015','018','021','024'];
+    let _flFoundRuns = null;
+    let _flActive    = '020';
+
+    const _flUrl = (date, runH, level, step) =>
+      `https://ama.aemet.es/o/estaticos/productos/atap/${date}/HMAR/${runH}/P3/${step}/VTPLOT_FL${level}__.1.png`;
+
+    const _flProbeImg = url => new Promise(res => {
+      const img = new Image();
+      img.onload  = () => res(true);
+      img.onerror = () => res(false);
+      img.referrerPolicy = 'no-referrer';
+      img.src = url;
+    });
+
+    async function _flDetectRuns() {
+      if (_flFoundRuns !== null) return;
+      const candidates = [];
+      const now = new Date();
+      for (let d = 0; d <= 1; d++) {
+        const dt = new Date(now);
+        dt.setDate(dt.getDate() - d);
+        const dateStr = dt.toISOString().slice(0, 10).replace(/-/g, '');
+        for (const h of ['18','12','06','00']) {
+          candidates.push({ date: dateStr, runH: h });
+        }
+      }
+      // Parallel probe — fast even with many candidates
+      const results = await Promise.all(
+        candidates.map(c =>
+          _flProbeImg(_flUrl(c.date, c.runH, '020', '003')).then(ok => ok ? c : null)
+        )
+      );
+      _flFoundRuns = results.filter(Boolean);
+    }
+
+    async function renderFlMaps(level) {
+      _flActive = level;
+      const container = document.getElementById('fl-maps-container');
+      const infoEl    = document.getElementById('fl-run-info');
+      container.innerHTML = '<p class="muted" style="text-align:center">⏳ Cargando...</p>';
+      if (infoEl) infoEl.style.display = 'none';
+
+      await _flDetectRuns();
+
+      if (!_flFoundRuns.length) {
+        container.innerHTML = '<p class="muted" style="text-align:center">⚠️ Mapas VTPLOT no disponibles en este momento.</p>';
+        return;
+      }
+
+      // Use only the most recent run found
+      const { date: runDate, runH } = _flFoundRuns[0];
+
+      const nowUtc      = new Date();
+      const todayStr    = nowUtc.toISOString().slice(0, 10).replace(/-/g, '');
+      const tmrwDt      = new Date(nowUtc); tmrwDt.setUTCDate(tmrwDt.getUTCDate() + 1);
+      const tmrwStr     = tmrwDt.toISOString().slice(0, 10).replace(/-/g, '');
+
+      // Group steps by the actual valid UTC date (run date + offset hours)
+      const groups = { [todayStr]: [], [tmrwStr]: [] };
+      const runMs = Date.UTC(
+        parseInt(runDate.slice(0,4), 10),
+        parseInt(runDate.slice(4,6), 10) - 1,
+        parseInt(runDate.slice(6,8), 10),
+        parseInt(runH, 10)
+      );
+      for (const step of _flSteps) {
+        const validMs  = runMs + parseInt(step, 10) * 3600000;
+        const validDt  = new Date(validMs);
+        const validDs  = validDt.toISOString().slice(0, 10).replace(/-/g, '');
+        const utcH     = String(validDt.getUTCHours()).padStart(2, '0');
+        if (groups[validDs] !== undefined) {
+          groups[validDs].push({ step, utcH, url: _flUrl(runDate, runH, level, step) });
+        }
+      }
+
+      const _fmtDs = ds => {
+        const fmt = `${ds.slice(6,8)}-${ds.slice(4,6)}-${ds.slice(0,4)}`;
+        if (ds === todayStr) return `Hoy · ${fmt}`;
+        if (ds === tmrwStr)  return `Mañana · ${fmt}`;
+        return fmt;
+      };
+
+      const cards = [todayStr, tmrwStr]
+        .filter(ds => groups[ds].length > 0 || ds === todayStr)
+        .map(ds => {
+          const slots = groups[ds];
+          // Mañana sin mapas → no mostrar (igual que mapas significativos)
+          if (slots.length === 0 && ds !== todayStr) return '';
+          const utcList = slots.map(s => s.utcH).join(' · ');
+          const slotsHtml = slots.length
+            ? slots.map(({ utcH, url }) => `
+            <div class="map-slot">
+              <div class="label">${utcH} UTC</div>
+              <a href="${url}" target="_blank" rel="noopener noreferrer">
+                <img class="map" src="${url}" alt="FL${level} ${utcH}Z"
+                     loading="lazy" referrerpolicy="no-referrer"
+                     onerror="this.closest('.map-slot').style.display='none'" />
+              </a>
+            </div>`).join('')
+            : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`;
+          return `
+            <article class="day">
+              <div class="day-head">${_fmtDs(ds)}</div>
+              <div class="day-body">
+                <div><span class="chip">UTC disponibles: ${utcList || 'sin publicación'}</span></div>
+                <div class="map-pair">${slotsHtml}</div>
+              </div>
+            </article>`;
+        }).join('');
+
+      if (infoEl) {
+        infoEl.style.display = '';
+        infoEl.textContent   = `📡 Pasada ${runDate.slice(0,4)}-${runDate.slice(4,6)}-${runDate.slice(6,8)} · Run ${runH}Z`;
+      }
+      container.innerHTML = `<div class="days">${cards}</div>`;
+    }
+
+    // Tab clicks for FL maps
+    document.querySelectorAll('.fl-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.fl-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderFlMaps(btn.dataset.fl);
+      });
     });
 
     // ========================================================================
