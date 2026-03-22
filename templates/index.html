@@ -1681,11 +1681,11 @@
       // Compass widget LEMR
       drawMetarCompassWidget(data);
 
-      // Redraw compasses on window resize
+      // Redraw compasses on window resize — use latest live data if available
       const _rdebounce = { t: null };
       window.addEventListener('resize', () => {
         clearTimeout(_rdebounce.t);
-        _rdebounce.t = setTimeout(() => drawMetarCompassWidget(data), 120);
+        _rdebounce.t = setTimeout(() => drawMetarCompassWidget(state._lastLiveData || data), 120);
       }, { once: false, passive: true });
 
       // Mapa de análisis
@@ -1942,7 +1942,10 @@
         }
         state.data = d;
         render(state.data);
-        
+        // Re-apply live METAR badge on top of AI-cycle render (prevents race where
+        // bootstrap.render() overwrites the badge already set by refreshMetarLive).
+        refreshMetarLive();
+
         // Cargar datos de Ogimet y mapas FL de forma diferida (no bloquean la carga inicial)
         setTimeout(() => loadOgimetWeek(), 100);
         setTimeout(() => renderFlMaps('020'), 200);
@@ -2284,6 +2287,7 @@
                 : state.data.metar?.lemr,
             },
           };
+          state._lastLiveData = liveData;  // persist for resize handler
           drawMetarCompassWidget(liveData);
         }
 
