@@ -2138,23 +2138,45 @@
         return { date, runH, today, tmrw };
       }));
 
-      // Best run for today = most recent with today slots
-      const todayRun = allGroups.find(g => g.today.length > 0) || allGroups[0];
-      // Best run for tomorrow = first one (any run) that has tomorrow slots
-      const tmrwRun  = allGroups.find(g => g.tmrw.length > 0) || null;
+      // Build a merged map: validTime → most-recent run that has it.
+      // _flFoundRuns is ordered most-recent first (18Z today → 12Z today → 06Z today → …)
+      // so the first entry that contains a given valid time wins.
+      const byValidTime = {};  // key: "YYYYMMDD_HH" → { utcH, url, runH, ds }
+      for (const { date, runH, today, tmrw } of allGroups) {
+        for (const slot of [...today, ...tmrw]) {
+          const key = `${slot.url.includes(todayStr) ? todayStr : tmrwStr}_${slot.utcH}`;
+          // derive ds from the url date segment — easier to rebuild from validMs
+          const runMs = Date.UTC(
+            parseInt(date.slice(0,4),10), parseInt(date.slice(4,6),10)-1,
+            parseInt(date.slice(6,8),10), parseInt(runH,10)
+          );
+          const validMs = runMs + parseInt(slot.step,10)*3600000;
+          const validDt = new Date(validMs);
+          const ds = validDt.toISOString().slice(0,10).replace(/-/g,'');
+          const tkey = `${ds}_${slot.utcH}`;
+          if (!byValidTime[tkey]) {   // first = most recent run
+            byValidTime[tkey] = { utcH: slot.utcH, url: slot.url, runH, ds };
+          }
+        }
+      }
 
-      const _fmtDs = (ds, runH) => {
+      // Group by day
+      const todaySlots = Object.values(byValidTime).filter(s => s.ds === todayStr).sort((a,b) => a.utcH.localeCompare(b.utcH));
+      const tmrwSlots  = Object.values(byValidTime).filter(s => s.ds === tmrwStr ).sort((a,b) => a.utcH.localeCompare(b.utcH));
+
+      const _fmtDs = (ds) => {
         const fmt = `${ds.slice(6,8)}-${ds.slice(4,6)}-${ds.slice(0,4)}`;
-        const label = ds === todayStr ? 'Hoy' : 'Mañana';
-        return `${label} · ${fmt}`;
+        return ds === todayStr ? `Hoy · ${fmt}` : `Mañana · ${fmt}`;
       };
 
-      const makeCard = (ds, slots, runH) => {
-        if (!slots || slots.length === 0) return '';
-        const utcList  = slots.map(s => s.utcH).join(' · ');
-        const slotsHtml = slots.map(({ utcH, url }) => `
+      const makeCard = (ds, slots) => {
+        if (!slots.length) return ds === todayStr
+          ? `<article class="day"><div class="day-head">${_fmtDs(ds)}</div><div class="day-body"><div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div></div></article>`
+          : '';
+        const utcList   = slots.map(s => s.utcH).join(' · ');
+        const slotsHtml = slots.map(({ utcH, url, runH }) => `
           <div class="map-slot">
-            <div class="label">${utcH} UTC</div>
+            <div class="label">${utcH} UTC <span style="font-size:.7em;opacity:.55">${runH}Z</span></div>
             <a href="${url}" target="_blank" rel="noopener noreferrer">
               <img class="map" src="${url}" alt="FL${level} ${utcH}Z"
                    loading="lazy" referrerpolicy="no-referrer" />
@@ -2162,7 +2184,7 @@
           </div>`).join('');
         return `
           <article class="day">
-            <div class="day-head">${_fmtDs(ds, runH)}</div>
+            <div class="day-head">${_fmtDs(ds)}</div>
             <div class="day-body">
               <div><span class="chip">UTC disponibles: ${utcList}</span></div>
               <div class="map-pair">${slotsHtml}</div>
@@ -2170,21 +2192,17 @@
           </article>`;
       };
 
-      // Today: always render (show "sin publicación" if empty)
-      const todayCard = todayRun && todayRun.today.length > 0
-        ? makeCard(todayStr, todayRun.today, todayRun.runH)
-        : `<article class="day"><div class="day-head">Hoy · ${todayStr.slice(6,8)}-${todayStr.slice(4,6)}-${todayStr.slice(0,4)}</div><div class="day-body"><div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div></div></article>`;
-      // Tomorrow: only show if confirmed slots exist
-      const tmrwCard = tmrwRun ? makeCard(tmrwStr, tmrwRun.tmrw, tmrwRun.runH) : '';
+      const todayCard = makeCard(todayStr, todaySlots);
+      const tmrwCard  = makeCard(tmrwStr,  tmrwSlots);
 
-      // Run info: show both runs if they differ
+      // Run info chip
       if (infoEl) {
-        const runs = [todayRun];
-        if (tmrwRun && tmrwRun.runH !== todayRun?.runH) runs.push(tmrwRun);
+        const runLabels = allGroups
+          .filter(g => g.today.length > 0 || g.tmrw.length > 0)
+          .map(g => `Run ${g.runH}Z`);
         infoEl.style.display = '';
-        infoEl.textContent = runs.map(r =>
-          `📡 ${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)} Run ${r.runH}Z`
-        ).join(' · ');
+        const baseDate = allGroups[0];
+        infoEl.textContent = `📡 ${baseDate.date.slice(0,4)}-${baseDate.date.slice(4,6)}-${baseDate.date.slice(6,8)} · ` + runLabels.join(' · ');
       }
       container.innerHTML = `<div class="days">${todayCard}${tmrwCard}</div>`;
     }
