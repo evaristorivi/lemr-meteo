@@ -1380,8 +1380,7 @@
         }));
 
         const slotData = window._utcSlots[dayId];
-        let defaultIdx = slots.findIndex(s => s.utc_hour === "12");
-        if (defaultIdx < 0) defaultIdx = 0;
+        const defaultIdx = slots.length - 1;
 
         const btnsHtml = slots.map((slot, i) => {
           const lbl = slot.utc_hour !== undefined ? slot.utc_hour : String(i);
@@ -2240,8 +2239,7 @@
         }));
 
         const slotData   = window._utcSlots[dayId];
-        let defaultIdx   = slots.findIndex(s => s.utcH === '12');
-        if (defaultIdx < 0) defaultIdx = 0;
+        const defaultIdx = slots.length - 1;
 
         const btnsHtml    = slots.map(({ utcH }, i) =>
           `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${utcH}</button>`
