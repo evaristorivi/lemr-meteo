@@ -403,6 +403,43 @@
       margin-bottom: 4px;
     }
 
+    /* ── UTC picker (un mapa por hora) ─────────────────────── */
+    .utc-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .utc-btn {
+      padding: 5px 14px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .utc-btn:hover {
+      background: rgba(102,227,255,0.10);
+      color: var(--text);
+    }
+    .utc-btn.active {
+      background: rgba(102,227,255,0.18);
+      border-color: rgba(102,227,255,0.55);
+      color: #fff;
+      font-weight: 600;
+    }
+    .map-single {
+      text-align: center;
+    }
+    .map-single > .label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
     .map {
       width: 100%;
       border-radius: 10px;
@@ -1312,38 +1349,62 @@
       return `<div class="map" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem">Mapa no disponible para este tramo</div>`;
     };
 
+    // ── Datos de slots para el picker UTC ───────────────────
+    window._utcSlots = window._utcSlots || {};
+    window._pickUtc = function (dayId, slotIdx) {
+      const slots = window._utcSlots[dayId];
+      if (!slots || !slots[slotIdx]) return;
+      const slot = slots[slotIdx];
+      document.querySelectorAll('#' + dayId + ' .utc-btn').forEach(function (b, i) {
+        b.classList.toggle('active', i === slotIdx);
+      });
+      const labelEl = document.getElementById(dayId + '-label');
+      if (labelEl) labelEl.innerHTML = slot.label;
+      const mapEl = document.getElementById(dayId + '-map');
+      if (mapEl) mapEl.innerHTML = slot.html;
+    };
+
     const renderDays = (days) => {
       const result = [];
 
-      for (const d of days) {
-        if (!d.show_aemet_maps) continue;
+      days.forEach((d, dayIdx) => {
+        if (!d.show_aemet_maps) return;
         const slots = d.map_slots || [];
         // Ocultar Mañana (y siguientes) si no tiene mapas publicados
-        if (slots.length === 0 && d.label !== "Hoy") continue;
+        if (slots.length === 0 && d.label !== "Hoy") return;
 
-        const gridClass = slots.length >= 4 ? "map-pair map-pair--4" : "map-pair";
+        const dayId = `day-aemet-${dayIdx}`;
+        window._utcSlots[dayId] = slots.map(slot => ({
+          label: slot.slot_label || (slot.utc_hour + " UTC"),
+          html:  mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`),
+        }));
+
+        const slotData = window._utcSlots[dayId];
+        let defaultIdx = slots.findIndex(s => s.utc_hour === "12");
+        if (defaultIdx < 0) defaultIdx = 0;
+
+        const btnsHtml = slots.map((slot, i) => {
+          const lbl = slot.utc_hour !== undefined ? slot.utc_hour : String(i);
+          return `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${lbl}</button>`;
+        }).join("");
+
+        const activeHtml  = slotData[defaultIdx]?.html  || `<div class="map" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem">Sin mapas publicados</div>`;
+        const activeLabel = slotData[defaultIdx]?.label || "";
 
         result.push(`
-          <article class="day">
+          <article class="day" id="${dayId}">
             <div class="day-head">${d.label} · ${fmtDate(d.date)}</div>
             <div class="day-body">
-              <div>
-                <span class="chip">UTC disponibles: ${(d.available_utc_hours || []).join(" · ") || "sin publicación"}</span>
-              </div>
-              <div class="${gridClass}">
-                ${slots.length
-                  ? slots.map(slot => `
-                      <div class="map-slot">
-                        <div class="label">${slot.slot_label || (slot.utc_hour + " UTC")}</div>
-                        ${mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`)}
-                      </div>
-                    `).join("")
-                  : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`}
-              </div>
+              ${slots.length ? `
+              <div class="utc-picker">${btnsHtml}</div>
+              <div class="map-single">
+                <div class="label" id="${dayId}-label">${activeLabel}</div>
+                <div id="${dayId}-map">${activeHtml}</div>
+              </div>` : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`}
             </div>
           </article>
         `);
-      }
+      });
 
       document.getElementById("days").innerHTML = result.join("");
     };
@@ -2170,21 +2231,33 @@
         if (!slots.length) return ds === todayStr
           ? `<article class="day"><div class="day-head">${_fmtDs(ds)}</div><div class="day-body"><div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div></div></article>`
           : '';
-        const utcList   = slots.map(s => s.utcH).join(' · ');
-        const slotsHtml = slots.map(({ utcH, url, runH }) => `
-          <div class="map-slot">
-            <div class="label">${utcH} UTC <span style="font-size:.7em;opacity:.55">${runH}Z</span></div>
-            <a href="${url}" target="_blank" rel="noopener noreferrer">
-              <img class="map" src="${url}" alt="FL${level} ${utcH}Z"
-                   loading="lazy" referrerpolicy="no-referrer" />
-            </a>
-          </div>`).join('');
+
+        const dayId = `fl-${ds}-${level}`;
+        window._utcSlots = window._utcSlots || {};
+        window._utcSlots[dayId] = slots.map(({ utcH, url, runH }) => ({
+          label: `${utcH} UTC <span style="font-size:.7em;opacity:.55">${runH}Z</span>`,
+          html:  `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="FL${level} ${utcH}Z" loading="lazy" referrerpolicy="no-referrer" /></a>`,
+        }));
+
+        const slotData   = window._utcSlots[dayId];
+        let defaultIdx   = slots.findIndex(s => s.utcH === '12');
+        if (defaultIdx < 0) defaultIdx = 0;
+
+        const btnsHtml    = slots.map(({ utcH }, i) =>
+          `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${utcH}</button>`
+        ).join('');
+        const activeHtml  = slotData[defaultIdx]?.html  || '';
+        const activeLabel = slotData[defaultIdx]?.label || '';
+
         return `
-          <article class="day">
+          <article class="day" id="${dayId}">
             <div class="day-head">${_fmtDs(ds)}</div>
             <div class="day-body">
-              <div><span class="chip">UTC disponibles: ${utcList}</span></div>
-              <div class="map-pair">${slotsHtml}</div>
+              <div class="utc-picker">${btnsHtml}</div>
+              <div class="map-single">
+                <div class="label" id="${dayId}-label">${activeLabel}</div>
+                <div id="${dayId}-map">${activeHtml}</div>
+              </div>
             </div>
           </article>`;
       };
