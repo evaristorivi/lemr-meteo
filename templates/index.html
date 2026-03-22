@@ -2071,8 +2071,12 @@
       _flActive = level;
       const container = document.getElementById('fl-maps-container');
       const infoEl    = document.getElementById('fl-run-info');
-      container.innerHTML = '<p class="muted" style="text-align:center">⏳ Cargando...</p>';
-      if (infoEl) infoEl.style.display = 'none';
+
+      // Only show spinner on first load (before runs are known)
+      if (_flFoundRuns === null) {
+        container.innerHTML = '<p class="muted" style="text-align:center">⏳ Cargando...</p>';
+        if (infoEl) infoEl.style.display = 'none';
+      }
 
       await _flDetectRuns();
 
