@@ -1029,7 +1029,7 @@
         <h1>🛩️ LEMR Meteo · La Morgal</h1>
         <div class="muted" id="meta-line"></div>
         <div class="muted" id="refresh-line"></div>
-        <div class="muted" id="live-refresh-line" style="font-size:0.78rem"></div>
+        <div class="muted" id="live-refresh-line" style="font-size:0.78rem">⏳ Actualizando condiciones en tiempo real…</div>
         <div class="aero-info-bar" id="aerodrome-info-bar"></div>
         <div class="muted" id="load-status">⏳ Cargando datos meteorológicos...</div>
       </div>
@@ -2310,9 +2310,8 @@
 
     bootstrap();
     setInterval(refreshData, 60 * 1000);
-    // METAR live: primer refresco a los 5 s para capturar el METAR más reciente
-    // sin bloquear la carga inicial; luego cada 15 min.
-    setTimeout(refreshMetarLive, 5000);
+    // METAR live: primer refresco a los 300 ms (caché de 15 min ya caliente, no bloquea).
+    setTimeout(refreshMetarLive, 300);
     setInterval(refreshMetarLive, 15 * 60 * 1000);
   </script>
 </body>

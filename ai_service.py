@@ -959,7 +959,7 @@ GUÍA PISTA HOY (OBLIGATORIA EN SECCIÓN 4):
 ⚠️ AVISOS AEMET ACTIVOS (CAP):
 {avisos_cap if avisos_cap else 'Sin avisos activos'}
 
-⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 4, 5, 6 y 7 cada día va en su propia línea con línea en blanco entre días.
+⚠️ FORMATO ESTRICTO: escribe CADA SECCIÓN numerada en su PROPIO PÁRRAFO separado por una LÍNEA EN BLANCO. NUNCA juntes dos secciones sin línea en blanco entre ellas. En las secciones 4, 5, 6, 7 y 8 cada día va en su propia línea con línea en blanco entre días.
 Formato de cada sección:
 0) **METAR LEAS y METAR LEMR explicados**
    **LEAS**: LEAS = Aeropuerto de Asturias (~30 km de La Morgal, orografía distinta). Explica qué tiempo hace AHORA en LEAS en 1-2 frases sin jerga. ⚠️ NO es representativo de LEMR.
@@ -989,17 +989,7 @@ Formato de cada sección:
    **PASADO MAÑANA** — Por la mañana: [frase]. Por la tarde: [frase].
    **DENTRO DE 3 DÍAS** — Por la mañana: [frase]. Por la tarde: [frase].
 
-5) **VEREDICTO POR DÍA** (los 4 días):
-   HOY [{_op_status}]: {'aeródromo cerrado hoy — escribe 🔒 YA CERRADO y omite el resto del análisis de HOY.' if not _aerodromo_abierto else 'combina condiciones actuales + pronóstico horario hasta cierre. Evalúa riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato) y evolución hora a hora.'}
-   🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado. Las condiciones actuales son nocturnas y NO representan las condiciones de vuelo del día completo. Basa el veredicto HOY en el pronóstico horario 09:00–cierre. PERO revisa el spread T−Td actual (incluido en «CONDICIONES ACTUALES»): si T−Td ≤ 1°C con nube baja >87%, HAY RIESGO de niebla o techo muy bajo a la apertura (09:00) — MENCIÓNALO en el veredicto. La niebla suele disiparse a las 09-11h en La Morgal; si el pronóstico horario 09-14h muestra T−Td > 2°C o nube baja <50%, el día sigue siendo aceptable pero con nota de esperar a que despeje.
-   🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
-   MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
-   ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00. Si la mañana es aceptable pero la tarde se deteriora, el veredicto sigue siendo ✅ (o 🎉 si es ideal) con nota de volar antes de las Xh — NO degrades la etiqueta por lo que pasa en horas que no son la mejor ventana.
-   Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad en la MEJOR franja horaria encontrada.
-   Criterio: 🎉 IDEAL: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip | ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | 🏠 NO MERECE LA PENA: en el límite pero sin factor ❌ — no vale la pena el desplazamiento | ☕ QUEDARSE EN EL BAR: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km (en el bar hay caldo de gaviota 🍲) | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <1500 ft / convección ALTA/CRÍTICA)
-   ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
-
-6) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
+5) **RIESGOS CRÍTICOS** (HOY, MAÑANA, PASADO MAÑANA, DENTRO DE 3 DÍAS):
    Para cada día escribe UNA sola frase narrativa que mencione SOLO los factores que realmente suponen un riesgo o llamada de atención. Si el día no tiene ningún riesgo relevante, escribe "Sin riesgos destacables."
    NO hagas listas de parámetros. NO repitas lo que ya está en el veredicto. Solo lo que merece una advertencia concreta.
    Umbrales que justifican mención: rachas >18 kt, diff racha-viento >8 kt, techo <3000 ft, vis <8 km, precip >0, CAPE >200 J/kg, crosswind >10 kt.
@@ -1011,7 +1001,7 @@ Formato de cada sección:
 
    **DENTRO DE 3 DÍAS**: [frase narrativa o "Sin riesgos destacables."]
 
-7) **� TÉRMICAS Y CONVECCIÓN** (los 4 días):
+6) **� TÉRMICAS Y CONVECCIÓN** (los 4 días):
    Con CAPE, nubosidad y temp: ¿térmicas aprovechables o peligrosas para ULM? Diferencia mañana vs tarde para cada día.
    Umbral ULM: térmicas >2 m/s incómodas; CAPE >500 J/kg = evitar.
    **HOY**: [CAPE, nubosidad, térmicas mañana vs tarde]
@@ -1019,19 +1009,22 @@ Formato de cada sección:
    **PASADO MAÑANA**: [tendencia convectiva, riesgo térmico]
    **DENTRO DE 3 DÍAS**: [tendencia convectiva, riesgo térmico]
 
-8) **🌡️ SENSACIÓN TÉRMICA EN VUELO** (los 4 días):
+7) **🌡️ SENSACIÓN TÉRMICA EN VUELO** (los 4 días):
    La aeronave es de CABINA CERRADA — NO aplicar wind chill de vuelo (el piloto está protegido del viento). Usa la temperatura ambiente directamente. Para cada día indica: rango de temperatura previsto, sensación térmica real en cabina (frío/confortable/calor), recomendación de ropa (abrigo si temp <10°C, ropa ligera si >20°C) y nota de densidad de altitud si temp >25°C o presión <1010 hPa.
    **HOY**: [rango temp, sensación cabina, ropa recomendada]
    **MAÑANA**: [rango temp, sensación cabina, ropa recomendada]
    **PASADO MAÑANA**: [rango temp, sensación cabina, ropa recomendada]
    **DENTRO DE 3 DÍAS**: [rango temp, sensación cabina, ropa recomendada]
-9) **🏆 MEJOR DÍA PARA VOLAR** (de los 4 días analizados):
-   Ranking: descarta ❌ (rachas >22 kt/lluvia/techo <1500 ft/convección ALTA) → ordena por: 1º menor racha, 2º menor diff racha-viento, 3º techo mayor, 4º mejor vis. Desempate: más horas operativas. Si todos ❌: "NINGUNO."
-   Indica el día elegido y explícate con detalle: nombra el día ganador con su fecha, justifica por qué gana frente a los otros (compara brevemente los 4), señala la mejor ventana horaria concreta (ej. "10:00–14:00"), los valores que la hacen destacar (kt, ft, km), y el tipo de vuelo recomendado según estos umbrales:
-   - **Travesías largas**: techo >3000 ft Y vis >10 km Y rachas ≤12 kt
-   - **Circuitos/navegación local**: techo 2000-3000 ft O rachas 12-18 kt O vis 8-10 km
-   - **Solo tráficos de escuela**: techo <2000 ft O rachas >18 kt O vis <8 km
-   Cierra con una frase directa tipo sentencia: qué día, a qué hora salir y qué tipo de vuelo hacerle. Si todos los días son ❌, escribe "NINGUNO — no hay ventana operativa en los próximos 4 días."
+8) **VEREDICTO POR DÍA** (los 4 días):
+   HOY [{_op_status}]: {'aeródromo cerrado hoy — escribe 🔒 YA CERRADO y omite el resto del análisis de HOY.' if not _aerodromo_abierto else 'combina condiciones actuales + pronóstico horario hasta cierre. Evalúa riesgo convectivo (CRÍTICO/ALTO → ❌ inmediato) y evolución hora a hora.'}
+   🚨 REGLA PRE-APERTURA (hora_actual < 09:00): El aeródromo está cerrado. Las condiciones actuales son nocturnas y NO representan las condiciones de vuelo del día completo. Basa el veredicto HOY en el pronóstico horario 09:00–cierre. PERO revisa el spread T−Td actual (incluido en «CONDICIONES ACTUALES»): si T−Td ≤ 1°C con nube baja >87%, HAY RIESGO de niebla o techo muy bajo a la apertura (09:00) — MENCIÓNALO en el veredicto. La niebla suele disiparse a las 09-11h en La Morgal; si el pronóstico horario 09-14h muestra T−Td > 2°C o nube baja <50%, el día sigue siendo aceptable pero con nota de esperar a que despeje.
+   🚫 PROHIBIDO: las etiquetas 🕐 CIERRE INMINENTE y ⚠️ TIEMPO LIMITADO son EXCLUSIVAS de HOY. NUNCA las uses en MAÑANA, PASADO MAÑANA ni DENTRO DE 3 DÍAS.
+   MAÑANA/PASADO/3 DÍAS: basado en pronóstico horario, usando ÚNICAMENTE criterios meteorológicos (✅/⚠️/❌).
+   ⚠️ METODOLOGÍA OBLIGATORIA para TODOS los días (HOY incluido): REVISA los datos horarios hora a hora de Windy y Open-Meteo para ese día. Busca la MEJOR VENTANA del día (menor viento+nube+vis), no el peor valor. El veredicto refleja esa mejor ventana. Si las condiciones son buenas de 10:00–14:00 pero malas a las 09:00, el veredicto es ✅ con nota de esperar a las 10:00. Si la mañana es aceptable pero la tarde se deteriora, el veredicto sigue siendo ✅ (o 🎉 si es ideal) con nota de volar antes de las Xh — NO degrades la etiqueta por lo que pasa en horas que no son la mejor ventana.
+   Justificación obligatoria cada día: viento kt, rachas kt, Δrachas-medio kt, techo ft, cobertura, precip, visibilidad en la MEJOR franja horaria encontrada.
+   Criterio: 🎉 IDEAL: rachas ≤10 kt Y viento medio ≤7 kt Y techo >4000 ft Y vis >10 km Y sin precip | ✅ todos OK + convección NULA/BAJA | ⚠️ 1 parámetro límite o convección MODERADA | 🏠 NO MERECE LA PENA: en el límite pero sin factor ❌ — no vale la pena el desplazamiento | ☕ QUEDARSE EN EL BAR: rachas >22 kt O lluvia O techo <1500 ft O vis <5 km (en el bar hay caldo de gaviota 🍲) | ❌ 2+ límite o factor crítico (rachas >22 kt / lluvia / techo <1500 ft / convección ALTA/CRÍTICA)
+   ⚠️ CRÍTICO: cuando el veredicto sea ⚠️, SIEMPRE nombra explícitamente qué parámetro(s) están en el límite. NO escribas solo "1 parámetro límite" — di cuál: ej. "⚠️ techo bajo (1800 ft BKN)", "⚠️ rachas límite (20 kt)", "⚠️ visibilidad reducida (6 km)", etc.
+
 
 Reglas CRÍTICAS:
 - **VALIDACIÓN HORARIA EN HOY ES CRÍTICA**: detecta invierno/verano (ver DATOS FIJOS), valida {hora_actual} contra límites operativos. Pista solo para HOY (días futuros: sin dirección disponible).
@@ -1043,8 +1036,7 @@ Reglas CRÍTICAS:
 - **SÉ CONSERVADOR**: Si hay 2+ factores límite simultáneos, marca ❌ NO APTO
 - **UNIDADES**: Open-Meteo y Windy ya vienen en kt (pre-convertidos). METAR también en kt. Usa kt directamente, sin conversiones.
 - **DATOS CONCRETOS**: cada día cita ≥4 valores (viento/racha/precip/nube/vis). Si hay incertidumbre, dilo.
-- **MEJOR DÍA**: indica siempre cuál es (o NINGUNO si todos son malos).
-- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…9). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
+- **NUMERACIÓN Y SALTOS (CRÍTICO)**: Incluye SIEMPRE el número de sección (0, 0.5, 1…8). Separa cada sección con línea en blanco. No escribas instrucciones internas del prompt en tu respuesta."""
 
         user_content: list[dict] = [{"type": "text", "text": user_message}]
 
