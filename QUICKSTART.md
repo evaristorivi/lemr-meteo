@@ -54,6 +54,9 @@ Ver [DEPLOYMENT.md](DEPLOYMENT.md) para más detalles.
 
 ## �🔁 Política de actualización
 
-La app refresca internamente la información cada hora de 06:00 a 23:00.
+La app tiene dos frecuencias de refresco independientes:
+
+- **Cada 15 min** — METAR LEAS (oficial), condiciones actuales Open-Meteo y METAR sintético LEMR (viento, temp, nubosidad, visibilidad). Sin coste de IA.
+- **Cada hora** (06:00 – 23:00) — Análisis completo: veredicto IA, pronóstico 4 días, Windy Point Forecast, mapas AEMET.
 
 Zona horaria: Europe/Madrid.

@@ -1029,6 +1029,7 @@
         <h1>🛩️ LEMR Meteo · La Morgal</h1>
         <div class="muted" id="meta-line"></div>
         <div class="muted" id="refresh-line"></div>
+        <div class="muted" id="live-refresh-line" style="font-size:0.78rem"></div>
         <div class="aero-info-bar" id="aerodrome-info-bar"></div>
         <div class="muted" id="load-status">⏳ Cargando datos meteorológicos...</div>
       </div>
@@ -1058,6 +1059,7 @@
           <div>
             <span class="compass-panel-title">✈️ LEAS</span>
             <span class="compass-panel-sub">Referencia oficial</span>
+            <span id="metar-leas-live-ts" style="display:none;font-size:0.68rem;color:#56b4f0;margin-left:6px"></span>
           </div>
           <span class="wind-pill" id="leas-wind-pill">— kt</span>
           <span class="cat-badge" id="leas-cat-badge">—</span>
@@ -1130,6 +1132,7 @@
 
     <section class="card" id="analisis-ia">
       <h2>👨‍✈️ Análisis IA — LEMR La Morgal</h2>
+      <div id="ai-metar-stale-warning" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:8px;background:rgba(250,200,50,0.13);border:1px solid rgba(250,200,50,0.4);font-size:0.82rem;color:#f0c040;"></div>
       <div id="expert-final" class="analysis"></div>
       <div class="maps-cta">
         <span class="maps-cta-icon">🗺️</span>
@@ -1179,7 +1182,7 @@
       <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>,
       <a href="https://www.windy.com" target="_blank">Windy</a> y
       <a href="https://www.ogimet.com" target="_blank">Ogimet</a>.
-      Actualización automática · cada hora de 06:00 a 23:00 (Europe/Madrid).
+      Actualización automática · condiciones en tiempo real (METAR LEAS + Open-Meteo) cada 15 min · análisis IA + pronóstico cada hora de 06:00 a 23:00 (Europe/Madrid).
     </div>
 
     <footer style="
@@ -1215,6 +1218,16 @@
     const state = {
       data: {{ data | tojson }},
       windyModel: null,
+      // Snapshot del METAR/categoría con el que se generó el ciclo IA activo.
+      // Solo se actualiza cuando cycle_id cambia (no cuando refreshMetarLive trae datos nuevos).
+      // Sirve de referencia estable para detectar si el METAR vivo difiere del que vio la IA.
+      aiCycleMeta: null,
+    };
+    // Inicializar aiCycleMeta con los datos del ciclo que viene del servidor al cargar la página
+    state.aiCycleMeta = {
+      cycleId:  state.data?.cycle_id,
+      raw:      state.data?.metar?.leas?.raw,
+      category: state.data?.metar?.leas?.flight_category?.category,
     };
 
     // Smooth scroll para el menú de navegación
@@ -1596,7 +1609,7 @@
       document.getElementById("meta-line").textContent =
         `${data.location.name} · ${data.location.icao} · ${data.location.municipality}`;
       document.getElementById("refresh-line").textContent =
-        `Última generación: ${fmtDateTime(data.generated_at)}`;
+        `Análisis IA generado: ${fmtDateTime(data.generated_at)}`;
 
       // Aerodrome info bar in header
       const aeroBar = document.getElementById('aerodrome-info-bar');
@@ -1893,6 +1906,14 @@
         if (!d) return;
         if (!state.data || d.cycle_id !== state.data.cycle_id || d.generated_at !== state.data.generated_at) {
           state.data = d;
+          // Nuevo ciclo IA → actualizar snapshot del METAR que vio la IA y limpiar aviso
+          state.aiCycleMeta = {
+            cycleId:  d.cycle_id,
+            raw:      d.metar?.leas?.raw,
+            category: d.metar?.leas?.flight_category?.category,
+          };
+          const warnEl = document.getElementById('ai-metar-stale-warning');
+          if (warnEl) warnEl.style.display = 'none';
           render(state.data);
         }
       } catch {}
@@ -2172,9 +2193,127 @@
     });
 
     // ========================================================================
+    // REFRESCO EN VIVO — LEAS (METAR oficial) + LEMR (Open-Meteo) cada 15 min
+    // ========================================================================
+
+    const _flightCatOrder = { 'LIFR': 0, 'IFR': 1, 'MVFR': 2, 'VFR': 3, 'DESCONOCIDO': -1 };
+
+    const _applyBadge = (id, cat) => {
+      const el = document.getElementById(id);
+      if (!el || !cat) return;
+      el.textContent      = cat.category;
+      el.style.background = cat.color || '#22c55e';
+      el.style.color      = ['#22c55e','#3b82f6'].includes(cat.color) ? '#000' : '#fff';
+    };
+
+    const refreshMetarLive = async () => {
+      try {
+        // Ambas peticiones en paralelo: METAR LEAS oficial + condiciones Open-Meteo/LEMR
+        const [rMetar, rCurrent] = await Promise.all([
+          fetch('/api/metar',   { cache: 'no-store' }),
+          fetch('/api/current', { cache: 'no-store' }),
+        ]);
+        const dMetar   = rMetar.ok   ? await rMetar.json()   : null;
+        const dCurrent = rCurrent.ok ? await rCurrent.json() : null;
+
+        const leas    = dMetar?.leas;
+        const liveCat = leas?.flight_category;
+
+        // ── LEAS: texto, badge ──
+        if (leas?.raw) document.getElementById('metar-leas-raw').textContent = leas.raw;
+        _applyBadge('leas-cat-badge', liveCat);
+
+        // ── LEMR: texto, badge ──
+        if (dCurrent?.metar_lemr?.raw) {
+          document.getElementById('metar-lemr-raw').textContent = dCurrent.metar_lemr.raw;
+          _applyBadge('mvw-badge', dCurrent.metar_lemr.flight_category);
+        }
+
+        // ── Tiles de condiciones LEMR actualizadas ──
+        if (dCurrent?.current) {
+          const cur = dCurrent.current;
+          const capeVal = cur.cape;
+          const capeStr = capeVal != null
+            ? `${capeVal} J/kg (${capeVal < 250 ? 'nulo/débil' : capeVal < 500 ? 'moderado' : capeVal < 2000 ? '⚠️ fuerte' : '❌ extremo'})`
+            : null;
+          const precStr = cur.precipitation != null ? `${cur.precipitation} mm` : null;
+          renderTiles('lemr-detail-tiles', [
+            ['Hora dato',    fmtDateTime(cur.time)],
+            ['Sens. térmica', `${cur.feels_like}°C`],
+            ['Condición',    cur.condition],
+            ['Viento',       `${cur.wind_speed_kmh} km/h · ${cur.wind_direction}°`],
+            ['Rachas',       `${cur.wind_gusts_kmh} km/h`],
+            ...(precStr ? [['Precipitación', precStr]] : []),
+            ...(capeStr ? [['CAPE', capeStr]] : []),
+            ['Nubosidad', (() => {
+              const low = cur.cloud_cover_low;
+              if (low == null) return `${cur.cloud_cover}%`;
+              return `${cur.cloud_cover}% total<ul style="margin:4px 0 0 1em;padding:0;list-style:disc;color:var(--muted);font-size:0.85em"><li>Bajas (&lt;2000m): ${low}%</li><li>Medias: ${cur.cloud_cover_mid}%</li><li>Altas: ${cur.cloud_cover_high}%</li></ul>`;
+            })()],
+          ]);
+        }
+
+        // ── Timestamp de última actualización ──
+        const tsEl = document.getElementById('metar-leas-live-ts');
+        const liveLineEl = document.getElementById('live-refresh-line');
+        if (dMetar?.fetched_at) {
+          const hhmm = new Date(dMetar.fetched_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          if (tsEl) { tsEl.textContent = `↺ ${hhmm}`; tsEl.style.display = ''; }
+          if (liveLineEl) liveLineEl.textContent = `Condiciones en tiempo real actualizadas: ${hhmm} · próxima actualización en ~15 min`;
+        }
+
+        // ── Redibujar ambos compasses con datos vivos ──
+        if (state.data) {
+          const liveData = {
+            ...state.data,
+            current: dCurrent?.current ?? state.data.current,
+            metar: {
+              ...state.data.metar,
+              leas: leas
+                ? { ...state.data.metar?.leas, raw: leas.raw, flight_category: liveCat ?? state.data.metar?.leas?.flight_category }
+                : state.data.metar?.leas,
+              lemr: dCurrent?.metar_lemr
+                ? { ...state.data.metar?.lemr, raw: dCurrent.metar_lemr.raw, flight_category: dCurrent.metar_lemr.flight_category }
+                : state.data.metar?.lemr,
+            },
+          };
+          drawMetarCompassWidget(liveData);
+        }
+
+        // ── Aviso desfase IA (basado en METAR LEAS vs ciclo IA) ──
+        const aiCat  = state.aiCycleMeta?.category;
+        const nowCat = liveCat?.category;
+        const warnEl = document.getElementById('ai-metar-stale-warning');
+        if (warnEl && aiCat && nowCat && aiCat !== nowCat) {
+          const aiRank  = _flightCatOrder[aiCat]  ?? -1;
+          const nowRank = _flightCatOrder[nowCat] ?? -1;
+          const aiTimeMatch   = state.aiCycleMeta?.raw?.match(/\d{2}(\d{2})(\d{2})Z/);
+          const liveTimeMatch = leas?.raw?.match(/\d{2}(\d{2})(\d{2})Z/);
+          const aiTimeStr   = aiTimeMatch   ? `${aiTimeMatch[1]}:${aiTimeMatch[2]}Z`   : 'el ciclo anterior';
+          const liveTimeStr = liveTimeMatch ? `${liveTimeMatch[1]}:${liveTimeMatch[2]}Z` : 'ahora';
+          if (nowRank > aiRank) {
+            warnEl.style.cssText = 'display:"";background:rgba(250,200,50,0.13);border-color:rgba(250,200,50,0.4);color:#f0c040';
+            warnEl.textContent = `⚠️ El análisis IA se generó con el METAR de ${aiTimeStr} (${aiCat}). El METAR actual (${liveTimeStr}) ya indica ${nowCat} — las condiciones han mejorado. El veredicto puede ser más restrictivo de lo real. El próximo ciclo horario actualizará el análisis.`;
+            warnEl.style.display = '';
+          } else if (nowRank < aiRank) {
+            warnEl.style.cssText = 'display:"";background:rgba(239,68,68,0.13);border-color:rgba(239,68,68,0.5);color:#f87171';
+            warnEl.textContent = `🚨 El análisis IA se generó con el METAR de ${aiTimeStr} (${aiCat}). El METAR actual (${liveTimeStr}) indica ${nowCat} — las condiciones han EMPEORADO. Revisa el METAR de LEAS antes de tomar ninguna decisión.`;
+            warnEl.style.display = '';
+          }
+        } else if (warnEl) {
+          warnEl.style.display = 'none';
+        }
+      } catch {}
+    };
+
+    // ========================================================================
 
     bootstrap();
     setInterval(refreshData, 60 * 1000);
+    // METAR live: primer refresco a los 5 s para capturar el METAR más reciente
+    // sin bloquear la carga inicial; luego cada 15 min.
+    setTimeout(refreshMetarLive, 5000);
+    setInterval(refreshMetarLive, 15 * 60 * 1000);
   </script>
 </body>
 </html>

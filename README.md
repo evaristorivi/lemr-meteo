@@ -9,7 +9,7 @@ Web moderna para pilotos ULM de La Morgal (Asturias), con:
 - Predicción local para LEMR (hoy, mañana y pasado mañana)
 - Mapa AEMET incrustado por día
 - Interpretación IA para novatos (centrada en Asturias/La Morgal)
-- Actualización automática **cada hora** (06:00 - 23:00 · Europe/Madrid)
+- Actualización automática **cada 15 min** para condiciones en tiempo real (METAR LEAS + Open-Meteo) y **cada hora** para análisis IA completo (06:00 - 23:00 · Europe/Madrid)
 
 ## ✨ Qué hace esta aplicación
 

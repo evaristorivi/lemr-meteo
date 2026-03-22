@@ -254,6 +254,15 @@ _CACHE = {
 }
 _WARMER_STARTED = False
 
+# Caché independiente para METAR en vivo (TTL 15 min, refresca sin esperar ciclo horario)
+_METAR_CACHE_LOCK = Lock()
+_METAR_CACHE: dict = {"data": None, "expires_at": None}
+_METAR_CACHE_TTL_SECONDS = 15 * 60  # 15 minutos
+
+# Caché independiente para condiciones actuales Open-Meteo + METAR LEMR (TTL 15 min)
+_OPENMETEO_CACHE_LOCK = Lock()
+_OPENMETEO_CACHE: dict = {"data": None, "expires_at": None}
+
 SUPPORTED_WINDY_MODELS = ["gfs", "iconEu", "arome"]
 
 
@@ -660,6 +669,125 @@ def api_report():
     windy_model = request.args.get("windy_model", config.WINDY_MODEL)
     payload = get_report_payload(force=False, windy_model=windy_model, include_ai=True)
     return jsonify(payload)
+
+
+def _get_live_metar_data() -> dict:
+    """
+    Devuelve datos METAR frescos de LEAS con caché independiente de 15 minutos.
+    Permite ver condiciones actualizadas aunque el ciclo horario no haya rotado.
+    """
+    now_local = datetime.now(MADRID_TZ)
+    with _METAR_CACHE_LOCK:
+        # Double-check inside the lock: another thread may have refreshed while we waited.
+        if (
+            _METAR_CACHE["data"]
+            and _METAR_CACHE["expires_at"]
+            and now_local < _METAR_CACHE["expires_at"]
+        ):
+            return _METAR_CACHE["data"]
+        # Only one thread reaches here; the rest wait at the lock and hit the cache above.
+        metar_leas = get_metar(config.LEAS_ICAO)
+        flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
+        data = {
+            "fetched_at": now_local.isoformat(),
+            "leas": {
+                "station": config.LEAS_ICAO,
+                "raw": metar_leas,
+                "flight_category": flight_cat_leas,
+            },
+        }
+        _METAR_CACHE["data"] = data
+        _METAR_CACHE["expires_at"] = now_local + timedelta(seconds=_METAR_CACHE_TTL_SECONDS)
+        return data
+
+
+@app.get("/api/metar")
+@limiter.limit("20 per minute")
+def api_metar():
+    """METAR en vivo para LEAS. Caché independiente de 15 min, sin esperar ciclo horario."""
+    data = _get_live_metar_data()
+    return jsonify(data)
+
+
+def _get_live_openmeteo_data() -> dict:
+    """
+    Devuelve condiciones actuales Open-Meteo + METAR LEMR sintético con caché de 15 minutos.
+    Permite refrescar LEMR sin esperar el ciclo horario completo (IA + Windy + AEMET).
+    """
+    now_local = datetime.now(MADRID_TZ)
+    with _OPENMETEO_CACHE_LOCK:
+        # Double-check inside the lock: another thread may have refreshed while we waited.
+        if (
+            _OPENMETEO_CACHE["data"]
+            and _OPENMETEO_CACHE["expires_at"]
+            and now_local < _OPENMETEO_CACHE["expires_at"]
+        ):
+            return _OPENMETEO_CACHE["data"]
+        # Only one thread reaches here; the rest wait at the lock and hit the cache above.
+        weather_data = get_weather_forecast(
+            config.LA_MORGAL_COORDS["lat"],
+            config.LA_MORGAL_COORDS["lon"],
+            config.LA_MORGAL_COORDS["name"],
+        )
+        if not weather_data:
+            return {}
+
+        current = weather_data.get("current", {})
+        hourly_om = weather_data.get("hourly_forecast", [])
+        _now_hour_str = current.get("time", "")[:13]
+        _h_current = next(
+            (h for h in hourly_om if h.get("time", "")[:13] == _now_hour_str),
+            hourly_om[0] if hourly_om else {}
+        )
+        _visibility_km = _h_current.get("visibility")
+        _dewpoint_c = _h_current.get("dewpoint")
+        _cloud_cover_low = _h_current.get("cloud_cover_low")
+        metar_lemr = generate_metar_lemr(
+            current,
+            icao="LEMR",
+            elevation_m=config.LA_MORGAL_AERODROME["elevation_m"],
+            visibility_km=_visibility_km,
+            dewpoint_c=_dewpoint_c,
+            cloud_cover_low=_cloud_cover_low,
+        ) or "LEMR METAR NOT AVAILABLE"
+        flight_cat_lemr = classify_flight_category(metar_lemr)
+
+        data = {
+            "fetched_at": now_local.isoformat(),
+            "current": {
+                "time": current.get("time"),
+                "temperature": current.get("temperature"),
+                "feels_like": current.get("feels_like"),
+                "humidity": current.get("humidity"),
+                "wind_speed_kmh": current.get("wind_speed"),
+                "wind_direction": current.get("wind_direction"),
+                "wind_gusts_kmh": current.get("wind_gusts"),
+                "pressure": current.get("pressure"),
+                "cloud_cover": current.get("cloud_cover"),
+                "cloud_cover_low": _h_current.get("cloud_cover_low"),
+                "cloud_cover_mid": _h_current.get("cloud_cover_mid"),
+                "cloud_cover_high": _h_current.get("cloud_cover_high"),
+                "precipitation": current.get("precipitation"),
+                "cape": current.get("cape"),
+                "condition": weather_code_to_description(current.get("weather_code")),
+            },
+            "metar_lemr": {
+                "station": "LEMR",
+                "raw": metar_lemr,
+                "flight_category": flight_cat_lemr,
+            },
+        }
+        _OPENMETEO_CACHE["data"] = data
+        _OPENMETEO_CACHE["expires_at"] = now_local + timedelta(seconds=_METAR_CACHE_TTL_SECONDS)
+        return data
+
+
+@app.get("/api/current")
+@limiter.limit("20 per minute")
+def api_current():
+    """Condiciones actuales Open-Meteo + METAR LEMR sintético. Caché independiente de 15 min."""
+    data = _get_live_openmeteo_data()
+    return jsonify(data)
 
 
 @app.get("/api/windy")
