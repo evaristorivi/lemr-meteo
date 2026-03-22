@@ -1916,6 +1916,8 @@
           const warnEl = document.getElementById('ai-metar-stale-warning');
           if (warnEl) warnEl.style.display = 'none';
           render(state.data);
+          // Re-apply live badge after render so it reflects current conditions, not the new AI cycle.
+          refreshMetarLive();
         }
       } catch {}
     };
