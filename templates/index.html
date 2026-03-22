@@ -2144,15 +2144,12 @@
       const byValidTime = {};  // key: "YYYYMMDD_HH" → { utcH, url, runH, ds }
       for (const { date, runH, today, tmrw } of allGroups) {
         for (const slot of [...today, ...tmrw]) {
-          const key = `${slot.url.includes(todayStr) ? todayStr : tmrwStr}_${slot.utcH}`;
-          // derive ds from the url date segment — easier to rebuild from validMs
           const runMs = Date.UTC(
             parseInt(date.slice(0,4),10), parseInt(date.slice(4,6),10)-1,
             parseInt(date.slice(6,8),10), parseInt(runH,10)
           );
-          const validMs = runMs + parseInt(slot.step,10)*3600000;
-          const validDt = new Date(validMs);
-          const ds = validDt.toISOString().slice(0,10).replace(/-/g,'');
+          const validDt = new Date(runMs + parseInt(slot.step,10)*3600000);
+          const ds   = validDt.toISOString().slice(0,10).replace(/-/g,'');
           const tkey = `${ds}_${slot.utcH}`;
           if (!byValidTime[tkey]) {   // first = most recent run
             byValidTime[tkey] = { utcH: slot.utcH, url: slot.url, runH, ds };
