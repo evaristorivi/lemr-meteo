@@ -1058,7 +1058,6 @@
         <div class="compass-panel-header">
           <div>
             <span class="compass-panel-title">✈️ LEAS</span>
-            <span class="compass-panel-sub">Referencia oficial</span>
             <span id="metar-leas-live-ts" style="display:none;font-size:0.68rem;color:#56b4f0;margin-left:6px"></span>
           </div>
           <span class="wind-pill" id="leas-wind-pill">— kt</span>
@@ -1079,6 +1078,7 @@
           <div>
             <span class="compass-panel-title">🎯 LEMR</span>
             <span class="compass-panel-sub">Estimado · Beta</span>
+            <span id="metar-lemr-live-ts" style="display:none;font-size:0.68rem;color:#56b4f0;margin-left:6px"></span>
           </div>
           <span class="wind-pill" id="lemr-wind-pill">— kt</span>
           <span class="cat-badge" id="mvw-badge">—</span>
@@ -2257,11 +2257,17 @@
 
         // ── Timestamp de última actualización ──
         const tsEl = document.getElementById('metar-leas-live-ts');
+        const tsLemrEl = document.getElementById('metar-lemr-live-ts');
         const liveLineEl = document.getElementById('live-refresh-line');
         if (dMetar?.fetched_at) {
           const hhmm = new Date(dMetar.fetched_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
           if (tsEl) { tsEl.textContent = `↺ ${hhmm}`; tsEl.style.display = ''; }
           if (liveLineEl) liveLineEl.textContent = `Condiciones en tiempo real actualizadas: ${hhmm} · próxima actualización en ~15 min`;
+        }
+        if (dCurrent?.fetched_at && tsLemrEl) {
+          const hhmmLemr = new Date(dCurrent.fetched_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          tsLemrEl.textContent = `↺ ${hhmmLemr}`;
+          tsLemrEl.style.display = '';
         }
 
         // ── Redibujar ambos compasses con datos vivos ──
