@@ -1517,12 +1517,13 @@
         const wDir  = cur.wind_direction;
         const wKmh  = cur.wind_speed_kmh;
         const gKmh  = cur.wind_gusts_kmh;
-        const calm  = wKmh == null || wKmh === 0;
         const wKt   = wKmh != null ? Math.round(wKmh / 1.852) : null;
-        // Detect VRB from the generated LEMR METAR (matches metar_generator logic: speed < 3 kt)
+        // Detect calm/VRB from the generated LEMR METAR (source of truth)
         const lemrRaw = lemr?.raw || '';
         const lemrWindGrp = lemrRaw.match(/(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT/);
-        const vrb = lemrWindGrp ? lemrWindGrp[1] === 'VRB' : false;
+        const metarKt = lemrWindGrp ? parseInt(lemrWindGrp[2], 10) : null;
+        const calm  = wKmh == null || wKmh === 0 || metarKt === 0;
+        const vrb   = lemrWindGrp ? lemrWindGrp[1] === 'VRB' : false;
         drawCompass('compass-lemr', vrb ? null : wDir, calm, vrb, { hdg: 100, lo: '10', hi: '28' });
 
         // Side info
@@ -2019,9 +2020,10 @@
     // MAPAS VIENTO Y TEMPERATURA EN NIVELES DE VUELO (VTPLOT)
     // ========================================================================
 
-    const _flSteps = ['003','006','009','012','015','018','021','024'];
+    const _flSteps = ['003','006','009','012','015','018','021','024','027','030','033','036'];
     let _flFoundRuns = null;
     let _flActive    = '020';
+    const _flStepCache = {}; // key: `${date}_${runH}_${level}` → confirmed step array
 
     const _flUrl = (date, runH, level, step) =>
       `https://ama.aemet.es/o/estaticos/productos/atap/${date}/HMAR/${runH}/P3/${step}/VTPLOT_FL${level}__.1.png`;
@@ -2046,13 +2048,23 @@
           candidates.push({ date: dateStr, runH: h });
         }
       }
-      // Parallel probe — fast even with many candidates
       const results = await Promise.all(
         candidates.map(c =>
           _flProbeImg(_flUrl(c.date, c.runH, '020', '003')).then(ok => ok ? c : null)
         )
       );
       _flFoundRuns = results.filter(Boolean);
+    }
+
+    async function _flGetConfirmedSteps(date, runH, level) {
+      const key = `${date}_${runH}_${level}`;
+      if (_flStepCache[key]) return _flStepCache[key];
+      // Probe all steps in parallel for this run + level
+      const probes = await Promise.all(
+        _flSteps.map(s => _flProbeImg(_flUrl(date, runH, level, s)).then(ok => ok ? s : null))
+      );
+      _flStepCache[key] = probes.filter(Boolean);
+      return _flStepCache[key];
     }
 
     async function renderFlMaps(level) {
@@ -2069,72 +2081,81 @@
         return;
       }
 
-      // Use only the most recent run found
-      const { date: runDate, runH } = _flFoundRuns[0];
+      const nowUtc   = new Date();
+      const todayStr = nowUtc.toISOString().slice(0, 10).replace(/-/g, '');
+      const tmrwDt   = new Date(nowUtc); tmrwDt.setUTCDate(tmrwDt.getUTCDate() + 1);
+      const tmrwStr  = tmrwDt.toISOString().slice(0, 10).replace(/-/g, '');
 
-      const nowUtc      = new Date();
-      const todayStr    = nowUtc.toISOString().slice(0, 10).replace(/-/g, '');
-      const tmrwDt      = new Date(nowUtc); tmrwDt.setUTCDate(tmrwDt.getUTCDate() + 1);
-      const tmrwStr     = tmrwDt.toISOString().slice(0, 10).replace(/-/g, '');
-
-      // Group steps by the actual valid UTC date (run date + offset hours)
-      const groups = { [todayStr]: [], [tmrwStr]: [] };
-      const runMs = Date.UTC(
-        parseInt(runDate.slice(0,4), 10),
-        parseInt(runDate.slice(4,6), 10) - 1,
-        parseInt(runDate.slice(6,8), 10),
-        parseInt(runH, 10)
-      );
-      for (const step of _flSteps) {
-        const validMs  = runMs + parseInt(step, 10) * 3600000;
-        const validDt  = new Date(validMs);
-        const validDs  = validDt.toISOString().slice(0, 10).replace(/-/g, '');
-        const utcH     = String(validDt.getUTCHours()).padStart(2, '0');
-        if (groups[validDs] !== undefined) {
-          groups[validDs].push({ step, utcH, url: _flUrl(runDate, runH, level, step) });
+      // Build confirmed slot groups by probing each candidate run in parallel
+      const allGroups = await Promise.all(_flFoundRuns.map(async ({ date, runH }) => {
+        const confirmedSteps = await _flGetConfirmedSteps(date, runH, level);
+        const runMs = Date.UTC(
+          parseInt(date.slice(0,4), 10),
+          parseInt(date.slice(4,6), 10) - 1,
+          parseInt(date.slice(6,8), 10),
+          parseInt(runH, 10)
+        );
+        const today = [], tmrw = [];
+        for (const step of confirmedSteps) {
+          const validMs = runMs + parseInt(step, 10) * 3600000;
+          const validDt = new Date(validMs);
+          const validDs = validDt.toISOString().slice(0, 10).replace(/-/g, '');
+          const utcH    = String(validDt.getUTCHours()).padStart(2, '0');
+          if      (validDs === todayStr) today.push({ step, utcH, url: _flUrl(date, runH, level, step) });
+          else if (validDs === tmrwStr)  tmrw.push({ step, utcH, url: _flUrl(date, runH, level, step) });
         }
-      }
+        return { date, runH, today, tmrw };
+      }));
 
-      const _fmtDs = ds => {
+      // Best run for today = most recent with today slots
+      const todayRun = allGroups.find(g => g.today.length > 0) || allGroups[0];
+      // Best run for tomorrow = first one (any run) that has tomorrow slots
+      const tmrwRun  = allGroups.find(g => g.tmrw.length > 0) || null;
+
+      const _fmtDs = (ds, runH) => {
         const fmt = `${ds.slice(6,8)}-${ds.slice(4,6)}-${ds.slice(0,4)}`;
-        if (ds === todayStr) return `Hoy · ${fmt}`;
-        if (ds === tmrwStr)  return `Mañana · ${fmt}`;
-        return fmt;
+        const label = ds === todayStr ? 'Hoy' : 'Mañana';
+        return `${label} · ${fmt}`;
       };
 
-      const cards = [todayStr, tmrwStr]
-        .filter(ds => groups[ds].length > 0 || ds === todayStr)
-        .map(ds => {
-          const slots = groups[ds];
-          // Mañana sin mapas → no mostrar (igual que mapas significativos)
-          if (slots.length === 0 && ds !== todayStr) return '';
-          const utcList = slots.map(s => s.utcH).join(' · ');
-          const slotsHtml = slots.length
-            ? slots.map(({ utcH, url }) => `
-            <div class="map-slot">
-              <div class="label">${utcH} UTC</div>
-              <a href="${url}" target="_blank" rel="noopener noreferrer">
-                <img class="map" src="${url}" alt="FL${level} ${utcH}Z"
-                     loading="lazy" referrerpolicy="no-referrer"
-                     onerror="this.closest('.map-slot').style.display='none'" />
-              </a>
-            </div>`).join('')
-            : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`;
-          return `
-            <article class="day">
-              <div class="day-head">${_fmtDs(ds)}</div>
-              <div class="day-body">
-                <div><span class="chip">UTC disponibles: ${utcList || 'sin publicación'}</span></div>
-                <div class="map-pair">${slotsHtml}</div>
-              </div>
-            </article>`;
-        }).join('');
+      const makeCard = (ds, slots, runH) => {
+        if (!slots || slots.length === 0) return '';
+        const utcList  = slots.map(s => s.utcH).join(' · ');
+        const slotsHtml = slots.map(({ utcH, url }) => `
+          <div class="map-slot">
+            <div class="label">${utcH} UTC</div>
+            <a href="${url}" target="_blank" rel="noopener noreferrer">
+              <img class="map" src="${url}" alt="FL${level} ${utcH}Z"
+                   loading="lazy" referrerpolicy="no-referrer" />
+            </a>
+          </div>`).join('');
+        return `
+          <article class="day">
+            <div class="day-head">${_fmtDs(ds, runH)}</div>
+            <div class="day-body">
+              <div><span class="chip">UTC disponibles: ${utcList}</span></div>
+              <div class="map-pair">${slotsHtml}</div>
+            </div>
+          </article>`;
+      };
 
+      // Today: always render (show "sin publicación" if empty)
+      const todayCard = todayRun && todayRun.today.length > 0
+        ? makeCard(todayStr, todayRun.today, todayRun.runH)
+        : `<article class="day"><div class="day-head">Hoy · ${todayStr.slice(6,8)}-${todayStr.slice(4,6)}-${todayStr.slice(0,4)}</div><div class="day-body"><div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div></div></article>`;
+      // Tomorrow: only show if confirmed slots exist
+      const tmrwCard = tmrwRun ? makeCard(tmrwStr, tmrwRun.tmrw, tmrwRun.runH) : '';
+
+      // Run info: show both runs if they differ
       if (infoEl) {
+        const runs = [todayRun];
+        if (tmrwRun && tmrwRun.runH !== todayRun?.runH) runs.push(tmrwRun);
         infoEl.style.display = '';
-        infoEl.textContent   = `📡 Pasada ${runDate.slice(0,4)}-${runDate.slice(4,6)}-${runDate.slice(6,8)} · Run ${runH}Z`;
+        infoEl.textContent = runs.map(r =>
+          `📡 ${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)} Run ${r.runH}Z`
+        ).join(' · ');
       }
-      container.innerHTML = `<div class="days">${cards}</div>`;
+      container.innerHTML = `<div class="days">${todayCard}${tmrwCard}</div>`;
     }
 
     // Tab clicks for FL maps
