@@ -1741,20 +1741,16 @@
       // Compass widget LEMR
       drawMetarCompassWidget(data);
 
-      // Redraw compasses on window resize — use latest live data if available
+      // Redraw compasses on window resize / browser zoom
       const _rdebounce = { t: null };
       const _redrawCompasses = () => {
         clearTimeout(_rdebounce.t);
         _rdebounce.t = setTimeout(() => drawMetarCompassWidget(state._lastLiveData || data), 150);
       };
       window.addEventListener('resize', _redrawCompasses, { passive: true });
-      // ResizeObserver: detecta zoom del navegador (Chrome) con más fiabilidad que window.resize
-      if (typeof ResizeObserver !== 'undefined') {
-        const _compassRO = new ResizeObserver(_redrawCompasses);
-        ['compass-leas', 'compass-lemr'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el?.parentElement) _compassRO.observe(el.parentElement);
-        });
+      // visualViewport.resize captura cambios de zoom de Chrome sin crear bucles de feedback
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', _redrawCompasses);
       }
 
       // Mapa de análisis
