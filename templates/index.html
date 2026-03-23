@@ -1743,10 +1743,19 @@
 
       // Redraw compasses on window resize — use latest live data if available
       const _rdebounce = { t: null };
-      window.addEventListener('resize', () => {
+      const _redrawCompasses = () => {
         clearTimeout(_rdebounce.t);
-        _rdebounce.t = setTimeout(() => drawMetarCompassWidget(state._lastLiveData || data), 120);
-      }, { once: false, passive: true });
+        _rdebounce.t = setTimeout(() => drawMetarCompassWidget(state._lastLiveData || data), 150);
+      };
+      window.addEventListener('resize', _redrawCompasses, { passive: true });
+      // ResizeObserver: detecta zoom del navegador (Chrome) con más fiabilidad que window.resize
+      if (typeof ResizeObserver !== 'undefined') {
+        const _compassRO = new ResizeObserver(_redrawCompasses);
+        ['compass-leas', 'compass-lemr'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el?.parentElement) _compassRO.observe(el.parentElement);
+        });
+      }
 
       // Mapa de análisis
       const analysisImg = document.getElementById("analysis-map-img");
