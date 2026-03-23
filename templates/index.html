@@ -917,7 +917,7 @@
     /* ─── Main condiciones 3-col layout ─── */
     .condiciones-row {
       display: grid;
-      grid-template-columns: minmax(240px, 1fr) 1fr 1fr;
+      grid-template-columns: 1fr 1fr minmax(240px, 1fr);
       gap: 20px;
       align-items: stretch;
     }
@@ -1083,16 +1083,10 @@
       </nav>
     </section>
 
-    <!-- Condiciones: 3-col (detail tiles | LEAS compass | LEMR compass) -->
+    <!-- Condiciones: 3-col (LEAS compass | LEMR compass | detail tiles) -->
     <section class="condiciones-row" id="condiciones">
 
-      <!-- Col 1: detail metric tiles -->
-      <div class="card" id="lemr-detail">
-        <h2>📋 Condiciones LEMR</h2>
-        <div class="detail-tiles" id="lemr-detail-tiles"></div>
-      </div>
-
-      <!-- Col 2: LEAS compass free-floating -->
+      <!-- Col 1: LEAS compass free-floating -->
       <div class="compass-free">
         <div class="compass-panel-header">
           <div>
@@ -1111,7 +1105,7 @@
         <canvas id="compass-leas"></canvas>
       </div>
 
-      <!-- Col 3: LEMR compass free-floating -->
+      <!-- Col 2: LEMR compass free-floating -->
       <div class="compass-free" id="lemr-condiciones">
         <div class="compass-panel-header">
           <div>
@@ -1129,6 +1123,12 @@
         <p id="metar-lemr-raw" class="metar-raw-box"></p>
         <p id="metar-lemr-disclaimer" class="metar-disclaimer"></p>
         <canvas id="compass-lemr"></canvas>
+      </div>
+
+      <!-- Col 3: detail metric tiles -->
+      <div class="card" id="lemr-detail">
+        <h2>📋 Condiciones LEMR</h2>
+        <div class="detail-tiles" id="lemr-detail-tiles"></div>
       </div>
 
     </section>
