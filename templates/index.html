@@ -932,6 +932,8 @@
       gap: 4px;
       padding: 14px 14px 16px;
       width: 100%;
+      min-width: 0;        /* evita que el canvas infle la columna grid 1fr */
+      overflow: hidden;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -1444,6 +1446,8 @@
     const drawCompass = (canvasId, windDir, isCalm, isVrb, rwy) => {
       const canvas = document.getElementById(canvasId);
       if (!canvas) return;
+      // Limpiar tamaño previo para que no infle el clientWidth del padre
+      canvas.style.width = ''; canvas.style.height = '';
       // Responsive: fill parent column width (clamp 200–640px)
       const parentW = canvas.parentElement ? canvas.parentElement.clientWidth : 360;
       const SZ = Math.min(Math.max(Math.round(parentW * 0.96), 200), 640);
