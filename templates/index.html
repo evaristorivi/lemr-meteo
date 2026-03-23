@@ -2369,7 +2369,12 @@
         if (dMetar?.fetched_at) {
           const hhmm = new Date(dMetar.fetched_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
           if (tsEl) { tsEl.textContent = `↺ ${hhmm}`; tsEl.style.display = ''; }
-          if (liveLineEl) liveLineEl.textContent = `Condiciones en tiempo real actualizadas: ${hhmm} · próxima actualización en ~15 min`;
+          const nextRefreshAt = dMetar?.next_refresh_at || dCurrent?.next_refresh_at;
+          const nextHhmm = nextRefreshAt
+            ? new Date(nextRefreshAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+            : null;
+          if (liveLineEl) liveLineEl.textContent = `Condiciones en tiempo real actualizadas: ${hhmm}` +
+            (nextHhmm ? ` · próxima actualización: ${nextHhmm}` : ' · próxima actualización en ~15 min');
         }
         if (dCurrent?.fetched_at && tsLemrEl) {
           const hhmmLemr = new Date(dCurrent.fetched_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -2448,9 +2453,26 @@
 
     bootstrap();
     setInterval(refreshData, 60 * 1000);
-    // METAR live: primer refresco a los 300 ms (caché de 15 min ya caliente, no bloquea).
+
+    // METAR live: alineado a cuartos de hora exactos (:15/:30/:45)
+    const _nextQuarterMs = () => {
+      const now = new Date();
+      const q = Math.floor(now.getMinutes() / 15) * 15;
+      const next = new Date(now);
+      next.setMinutes(q, 0, 0);
+      next.setMinutes(next.getMinutes() + 15);
+      // Saltar :00 — el ciclo completo ya llama a OpenMeteo en la frontera de hora
+      if (next.getMinutes() === 0) next.setMinutes(15);
+      return Math.max(next - now, 1000);
+    };
+    const _scheduleLiveRefresh = () => {
+      setTimeout(async () => {
+        await refreshMetarLive();
+        _scheduleLiveRefresh();
+      }, _nextQuarterMs());
+    };
     setTimeout(refreshMetarLive, 300);
-    setInterval(refreshMetarLive, 15 * 60 * 1000);
+    _scheduleLiveRefresh();
   </script>
 </body>
 </html>

@@ -254,14 +254,27 @@ _CACHE = {
 }
 _WARMER_STARTED = False
 
-# Caché independiente para METAR en vivo (TTL 15 min, refresca sin esperar ciclo horario)
+# Caché independiente para METAR en vivo (alineada a cuartos de hora :15/:30/:45)
 _METAR_CACHE_LOCK = Lock()
 _METAR_CACHE: dict = {"data": None, "expires_at": None}
-_METAR_CACHE_TTL_SECONDS = 15 * 60  # 15 minutos
+_METAR_CACHE_TTL_SECONDS = 15 * 60  # solo se usa como fallback
 
-# Caché independiente para condiciones actuales Open-Meteo + METAR LEMR (TTL 15 min)
+# Caché independiente para condiciones actuales Open-Meteo + METAR LEMR (alineada a cuartos de hora)
 _OPENMETEO_CACHE_LOCK = Lock()
 _OPENMETEO_CACHE: dict = {"data": None, "expires_at": None}
+
+
+def _next_live_refresh_boundary(now: datetime) -> datetime:
+    """Devuelve el próximo cuarto de hora :15, :30 o :45 (nunca :00).
+    El ciclo completo ya cubre la frontera de :00; el live cache salta esa.
+    """
+    base = now.replace(second=0, microsecond=0)
+    quarter = (base.minute // 15) * 15
+    candidate = base.replace(minute=quarter) + timedelta(minutes=15)
+    # Si el candidato cae en :00 (inicio de hora), saltar a :15 de esa hora
+    if candidate.minute == 0:
+        candidate = candidate + timedelta(minutes=15)
+    return candidate
 
 SUPPORTED_WINDY_MODELS = ["gfs", "iconEu", "arome"]
 
@@ -498,6 +511,41 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
         flight_cat_leas = classify_flight_category(metar_leas) if metar_leas else None
         flight_cat_lemr = classify_flight_category(metar_lemr) if metar_lemr else None
 
+    # Alimentar _OPENMETEO_CACHE con los datos ya obtenidos, para que el primer
+    # /api/current tras un reinicio/ciclo no haga una llamada duplicada a Open-Meteo.
+    if weather_data and weather_data.get("current"):
+        _flight_cat_lemr_live = classify_flight_category(metar_lemr) if metar_lemr else None
+        _live_payload = {
+            "fetched_at": now_local.isoformat(),
+            "current": {
+                "time": current.get("time"),
+                "temperature": current.get("temperature"),
+                "feels_like": current.get("feels_like"),
+                "humidity": current.get("humidity"),
+                "wind_speed_kmh": current.get("wind_speed"),
+                "wind_direction": current.get("wind_direction"),
+                "wind_gusts_kmh": current.get("wind_gusts"),
+                "pressure": current.get("pressure"),
+                "cloud_cover": current.get("cloud_cover"),
+                "cloud_cover_low": _h_current.get("cloud_cover_low"),
+                "cloud_cover_mid": _h_current.get("cloud_cover_mid"),
+                "cloud_cover_high": _h_current.get("cloud_cover_high"),
+                "precipitation": current.get("precipitation"),
+                "cape": current.get("cape"),
+                "condition": weather_code_to_description(current.get("weather_code")),
+            },
+            "metar_lemr": {
+                "station": "LEMR",
+                "raw": metar_lemr,
+                "flight_category": _flight_cat_lemr_live,
+            },
+        }
+        _next_refresh = _next_live_refresh_boundary(now_local)
+        _live_payload["next_refresh_at"] = _next_refresh.isoformat()
+        with _OPENMETEO_CACHE_LOCK:
+            _OPENMETEO_CACHE["data"] = _live_payload
+            _OPENMETEO_CACHE["expires_at"] = _next_refresh
+
     # Log de peticiones AEMET realizadas en este ciclo
     aemet_count_end = get_aemet_request_count()
     aemet_requests_this_cycle = aemet_count_end - aemet_count_start
@@ -696,8 +744,10 @@ def _get_live_metar_data() -> dict:
                 "flight_category": flight_cat_leas,
             },
         }
+        next_refresh = _next_live_refresh_boundary(now_local)
+        data["next_refresh_at"] = next_refresh.isoformat()
         _METAR_CACHE["data"] = data
-        _METAR_CACHE["expires_at"] = now_local + timedelta(seconds=_METAR_CACHE_TTL_SECONDS)
+        _METAR_CACHE["expires_at"] = next_refresh
         return data
 
 
@@ -777,8 +827,10 @@ def _get_live_openmeteo_data() -> dict:
                 "flight_category": flight_cat_lemr,
             },
         }
+        next_refresh = _next_live_refresh_boundary(now_local)
+        data["next_refresh_at"] = next_refresh.isoformat()
         _OPENMETEO_CACHE["data"] = data
-        _OPENMETEO_CACHE["expires_at"] = now_local + timedelta(seconds=_METAR_CACHE_TTL_SECONDS)
+        _OPENMETEO_CACHE["expires_at"] = next_refresh
         return data
 
 
