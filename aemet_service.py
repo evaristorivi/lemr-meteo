@@ -116,8 +116,11 @@ def _fetch_datos_url(datos_url: str, timeout: int = 15, as_bytes: bool = False):
 
 
 # ─────── Mapas significativos (vía URL directa ama.aemet.es) ───────
-# La API OpenData no siempre devuelve datos para mapas significativos;
-# ama.aemet.es publica las imágenes con el patrón:
+# ⚠️ NO se usa la API OpenData autenticada para los mapas significativos.
+# El endpoint /api/mapasygraficos/mapassignificativos/... existe pero AEMET
+# no publica datos por él de forma fiable (devuelve 404 "No hay datos que
+# satisfagan esos criterios" la mayoría del tiempo, verificado 2026-03-23).
+# En cambio, ama.aemet.es publica las imágenes con el patrón:
 #   QGQE70LEMM{HH}00________{YYYYMMDD}.png
 # donde HH = 00, 06, 12, 18 (horas UTC)
 AMA_MAP_BASE = "https://ama.aemet.es/o/estaticos/bbdd/imagenes"
@@ -223,7 +226,7 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
             
             if not _url_has_image(url, timeout=5):
                 continue
-            
+
             day_results.append({
                 "date": target.isoformat(),
                 "label": labels[delta],

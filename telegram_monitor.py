@@ -2,15 +2,19 @@
 Sistema de monitorización vía Telegram para LEMR-Meteo.
 
 Envía alertas cuando hay errores reales en fuentes de datos o en el análisis IA.
-Anti-spam: máximo 1 alerta por fuente cada 30 minutos.
+Anti-spam: máximo 1 alerta por fuente cada 30 minutos (persistido en disco,
+supervive reinicios del servicio).
 
 Configurar en .env:
     TELEGRAM_BOT_TOKEN=<token de @BotFather>
     TELEGRAM_CHAT_ID=<tu chat_id (puede ser negativo para grupos)>
 """
+import json
+import os
 import time
 import traceback
 from datetime import datetime
+from threading import Lock
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -18,9 +22,33 @@ import requests as _requests
 
 _MADRID_TZ = ZoneInfo("Europe/Madrid")
 
-# Anti-spam: guarda timestamp del último envío por fuente
-_last_alert: dict[str, float] = {}
-_MIN_INTERVAL = 1800  # 30 minutos entre alertas de la misma fuente
+# Anti-spam persistente: timestamps guardados en disco para sobrevivir reinicios
+_ANTISPAM_FILE = "/tmp/lemr_tg_antispam.json"
+_antispam_lock = Lock()
+_MIN_INTERVAL = 1800  # 30 minutos entre alertas de la misma fuente (por defecto)
+# Intervalos específicos por fuente (sobrescriben _MIN_INTERVAL si están definidos)
+_SOURCE_INTERVALS: dict[str, int] = {
+    "aemet_maps": 7200,  # 2 horas — mapa de análisis cae con frecuencia
+}
+
+
+def _read_antispam() -> dict[str, float]:
+    """Lee los timestamps de anti-spam desde el archivo en disco."""
+    try:
+        with open(_ANTISPAM_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return {k: float(v) for k, v in data.items()}
+    except Exception:
+        return {}
+
+
+def _write_antispam(timestamps: dict[str, float]) -> None:
+    """Persiste los timestamps de anti-spam en disco."""
+    try:
+        with open(_ANTISPAM_FILE, "w", encoding="utf-8") as f:
+            json.dump(timestamps, f)
+    except Exception as e:
+        print(f"⚠️ No se pudo escribir anti-spam en disco: {e}")
 
 
 def send_alert(
@@ -53,12 +81,16 @@ def send_alert(
         # No configurado, silencio total
         return False
 
-    # Anti-spam
+    # Anti-spam persistente (thread-safe + supervive reinicios)
+    interval = _SOURCE_INTERVALS.get(source, _MIN_INTERVAL)
     now = time.time()
-    if now - _last_alert.get(source, 0) < _MIN_INTERVAL:
-        print(f"📵 Telegram: alerta suprimida por anti-spam (fuente={source})")
-        return False
-    _last_alert[source] = now
+    with _antispam_lock:
+        timestamps = _read_antispam()
+        if now - timestamps.get(source, 0) < interval:
+            print(f"📵 Telegram: alerta suprimida por anti-spam (fuente={source}, intervalo={interval}s)")
+            return False
+        timestamps[source] = now
+        _write_antispam(timestamps)
 
     # Construir texto
     now_str = datetime.now(_MADRID_TZ).strftime("%Y-%m-%d %H:%M")

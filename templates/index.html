@@ -1345,7 +1345,7 @@
         return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" /></a>`;
       }
       if (b64) {
-        const src = `data:image/png;base64,${b64}`;
+        const src = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
         return `<a href="${src}" target="_blank" rel="noopener noreferrer"><img class="map" src="${src}" alt="${alt}" loading="lazy" /></a>`;
       }
       return `<div class="map" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem">Mapa no disponible para este tramo</div>`;
