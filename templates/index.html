@@ -2248,7 +2248,15 @@
         }));
 
         const slotData   = window._utcSlots[dayId];
-        const defaultIdx = slots.length - 1;
+        // Default: slot más cercano a las 12 UTC
+        const defaultIdx = (() => {
+          let best = 0, bestDiff = Infinity;
+          slots.forEach(({ utcH }, i) => {
+            const diff = Math.abs(parseInt(utcH, 10) - 12);
+            if (diff < bestDiff) { bestDiff = diff; best = i; }
+          });
+          return best;
+        })();
 
         const btnsHtml    = slots.map(({ utcH }, i) =>
           `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${utcH}</button>`
