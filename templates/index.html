@@ -2461,8 +2461,6 @@
       const next = new Date(now);
       next.setMinutes(q, 0, 0);
       next.setMinutes(next.getMinutes() + 15);
-      // Saltar :00 — el ciclo completo ya llama a OpenMeteo en la frontera de hora
-      if (next.getMinutes() === 0) next.setMinutes(15);
       return Math.max(next - now, 1000);
     };
     const _scheduleLiveRefresh = () => {

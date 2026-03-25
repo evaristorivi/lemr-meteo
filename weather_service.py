@@ -2,9 +2,15 @@
 Módulo para obtener datos meteorológicos de ubicaciones sin servicio METAR
 """
 import requests
+from threading import Lock
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 import config
+
+# Micro-caché para deduplicar llamadas concurrentes a Open-Meteo (TTL 2 min)
+_WF_CACHE: dict = {"data": None, "expires_at": None, "key": None}
+_WF_CACHE_LOCK = Lock()
+_WF_CACHE_TTL = 120  # segundos
 
 
 def _compute_fog_risk(date_str: str, hourly_forecast: list) -> dict:
@@ -122,6 +128,16 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
     Returns:
         Diccionario con datos meteorológicos o None si hay error
     """
+    _cache_key = (round(lat, 4), round(lon, 4))
+    with _WF_CACHE_LOCK:
+        _now = datetime.utcnow()
+        if (
+            _WF_CACHE["key"] == _cache_key
+            and _WF_CACHE["data"] is not None
+            and _WF_CACHE["expires_at"] is not None
+            and _now < _WF_CACHE["expires_at"]
+        ):
+            return _WF_CACHE["data"]
     try:
         # Parámetros para la API de Open-Meteo
         params = {
@@ -357,12 +373,17 @@ def get_weather_forecast(lat: float, lon: float, location_name: str = "") -> Opt
                 entry['fog_risk'] = _compute_fog_risk(date_str, hourly_forecast)
                 daily_forecast.append(entry)
         
-        return {
+        _result = {
             'current': current_weather,
             'hourly_forecast': hourly_forecast,
             'daily_forecast': daily_forecast
         }
-        
+        with _WF_CACHE_LOCK:
+            _WF_CACHE["key"] = _cache_key
+            _WF_CACHE["data"] = _result
+            _WF_CACHE["expires_at"] = datetime.utcnow() + timedelta(seconds=_WF_CACHE_TTL)
+        return _result
+
     except requests.exceptions.RequestException as e:
         print(f"Error obteniendo datos meteorológicos: {e}")
         return None

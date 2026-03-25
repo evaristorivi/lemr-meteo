@@ -265,15 +265,10 @@ _OPENMETEO_CACHE: dict = {"data": None, "expires_at": None}
 
 
 def _next_live_refresh_boundary(now: datetime) -> datetime:
-    """Devuelve el próximo cuarto de hora :15, :30 o :45 (nunca :00).
-    El ciclo completo ya cubre la frontera de :00; el live cache salta esa.
-    """
+    """Devuelve el próximo cuarto de hora: :00, :15, :30 o :45."""
     base = now.replace(second=0, microsecond=0)
     quarter = (base.minute // 15) * 15
     candidate = base.replace(minute=quarter) + timedelta(minutes=15)
-    # Si el candidato cae en :00 (inicio de hora), saltar a :15 de esa hora
-    if candidate.minute == 0:
-        candidate = candidate + timedelta(minutes=15)
     return candidate
 
 SUPPORTED_WINDY_MODELS = ["gfs", "iconEu", "arome"]
