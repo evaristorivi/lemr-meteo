@@ -210,21 +210,20 @@ def get_ai_client():
     Returns:
         Cliente configurado o None si no hay configuración válida
     """
-    # Intentar GitHub Models primero (gratuito con GitHub token)
-    if config.GITHUB_TOKEN and config.AI_PROVIDER == 'github':
+    # Gemini vía endpoint compatible con OpenAI (gratuito, AI Studio)
+    if config.GEMINI_API_KEY and config.AI_PROVIDER == 'gemini':
         try:
             from openai import OpenAI
-            
-            print("🚀 Usando GitHub Models (Gratuito)")
+            print("🚀 Usando Gemini (Gratuito, AI Studio)")
             client = OpenAI(
-                api_key=config.GITHUB_TOKEN,
-                base_url="https://models.inference.ai.azure.com",
+                api_key=config.GEMINI_API_KEY,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
                 max_retries=0,
-                timeout=120,  # 120s para modelos open source más lentos
+                timeout=120,
             )
-            return ('github', client)
+            return ('gemini', client)
         except Exception as e:
-            print(f"Error configurando GitHub Models: {e}")
+            print(f"Error configurando Gemini: {e}")
             return None
     
     # Intentar OpenAI si está configurado

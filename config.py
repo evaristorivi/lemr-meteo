@@ -14,17 +14,16 @@ WEB_HOST = os.getenv('WEB_HOST', '127.0.0.1')
 WEB_PORT = int(os.getenv('WEB_PORT', '8000'))
 
 # Configuración de IA
-AI_PROVIDER = os.getenv('AI_PROVIDER', 'github')  # 'github' o 'openai'
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+AI_PROVIDER = os.getenv('AI_PROVIDER')  
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Sistema de cascada automática de modelos
 # El sistema prueba cada modelo en orden hasta encontrar uno disponible
 AI_MODEL_CASCADE = [
-    'gpt-4o',                          # ⭐ Mejor calidad, límite bajo (50/día)
-    'gpt-4o-mini',                     # 🥈 Buena calidad, límite medio (150/día)
-    'meta-llama-3.1-405b-instruct',   # 🔥 Gran modelo open source (límite alto)
-    'phi-4',                           # 🚀 Modelo Microsoft (8k ctx — funciona si payload < 8000)
+    "gemini-3.5-flash",       # frontier, gratuito con límites de AI Studio
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite",  # más ligero, buen último escalón
 ]
 
 # AEMET OpenData
