@@ -459,12 +459,12 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     if include_ai:
         # Determinar si se va a usar gpt-4o o mini, y qué proveedor
         is_mini = "mini" in primary_model.lower()
-        is_github = ai_provider == "github"
         
-        # Excluir mapas para: mini models O GitHub (60k tokens/min - muy restrictivo)
-        # Solo incluir mapas para OpenAI (límite de tokens más alto)
+        # Excluir mapas para todo lo que no sea OpenAI: Gemini (capa OpenAI-compatible)
+        # espera imágenes en base64/data-URI o Files API, no URLs remotas como las de
+        # AEMET, y enviarlas gastaría tokens/cuota gratuita sin necesidad.
         map_urls_for_ai = []
-        if not is_mini and not is_github:
+        if ai_provider == "openai" and not is_mini:
             # Solo para OpenAI con gpt-4o: incluir URL del mapa análisis + mapas significativos
             if analysis_map_url:
                 map_urls_for_ai.append(analysis_map_url)

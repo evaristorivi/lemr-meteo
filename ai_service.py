@@ -281,7 +281,7 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     )
 
 
-_TOKEN_INPUT_WARN = 9000  # Umbral de aviso para tokens de entrada
+_TOKEN_INPUT_WARN = 100000  # Umbral de aviso para tokens de entrada (Gemini: contexto de 1,048,576)
 
 def _print_rate_limit_info(response, model_name: str):
     """Imprime uso de tokens de la respuesta (el SDK openai v1 no expone headers en el objeto ChatCompletion).
@@ -596,7 +596,8 @@ def _create_chat_completion_with_fallback(
     
     last_exception = None
     attempted_models = []
-    
+    truncated_fallback = None  # (response, used_model) del mejor intento truncado, por si todo lo demás falla
+
     for model_name in model_cascade:
         # Saltar modelos bloqueados en este ciclo
         if _is_primary_locked_for_cycle(provider, model_name):
@@ -606,16 +607,48 @@ def _create_chat_completion_with_fallback(
         
         try:
             print(f"🔄 Intentando con modelo: {model_name}")
-            response = client.chat.completions.create(
+            request_kwargs = dict(
                 model=model_name,
                 messages=messages,
-                temperature=temperature,
                 max_tokens=max_tokens,
             )
-            
-            # ¡Éxito!
+            if provider == 'gemini':
+                # Google recomienda NO tocar temperature en la serie Gemini 3: valores
+                # distintos de 1.0 (el default) pueden causar bucles/degradación y
+                # respuestas cortadas. Se omite para dejar el valor por defecto del modelo.
+                # https://ai.google.dev/gemini-api/docs/gemini-3#temperature
+                #
+                # Los modelos "thinking" además consumen max_tokens con su razonamiento
+                # interno antes de escribir la respuesta visible. Para una tarea de
+                # redacción (no matemática/lógica compleja) limitamos el "pensamiento"
+                # para que no se coma el presupuesto y trunque la respuesta final.
+                request_kwargs['reasoning_effort'] = 'low'
+            else:
+                request_kwargs['temperature'] = temperature
+
+            response = client.chat.completions.create(**request_kwargs)
+
             used_model = getattr(response, 'model', model_name) or model_name
             _print_rate_limit_info(response, model_name)
+            finish_reason = getattr(response.choices[0], 'finish_reason', None) if response.choices else None
+
+            if finish_reason == 'length':
+                # Respuesta cortada por agotar max_tokens: NO se acepta como éxito.
+                # Se guarda como red de seguridad y se prueba el siguiente modelo
+                # de la cascada, que puede completar el informe entero.
+                attempted_models.append(f"{model_name} (truncado)")
+                print(f"⚠️ {model_name} agotó max_tokens ({max_tokens}) — respuesta truncada (finish_reason=length)")
+                _tg_alert(
+                    f"Modelo IA {model_name} devolvió una respuesta truncada (finish_reason=length, "
+                    f"max_tokens={max_tokens}). Probando siguiente modelo de la cascada.",
+                    source=f"ia_{model_name}",
+                    level="WARNING",
+                )
+                if truncated_fallback is None:
+                    truncated_fallback = (response, used_model)
+                continue
+
+            # ¡Éxito!
             print(f"✅ Análisis completado con {used_model}")
             return response, used_model
             
@@ -652,8 +685,25 @@ def _create_chat_completion_with_fallback(
             last_exception = exc
             # Continuar con el siguiente modelo en la cascada
     
-    # Si llegamos aquí, todos los modelos fallaron
+    # Todos los modelos fallaron o solo dieron respuestas truncadas
+    if truncated_fallback is not None:
+        response, used_model = truncated_fallback
+        print(f"⚠️ Todos los modelos fallaron o truncaron. Usando respuesta truncada de {used_model} como último recurso.")
+        _tg_alert(
+            f"Ningún modelo de la cascada completó una respuesta entera. Se usa la respuesta "
+            f"truncada de {used_model} como último recurso. Intentados: {', '.join(attempted_models)}",
+            source="ia_cascade",
+            level="ERROR",
+        )
+        return response, used_model
+
     print(f"❌ Todos los modelos fallaron. Intentados: {', '.join(attempted_models)}")
+    _tg_alert(
+        f"Todos los modelos de la cascada IA fallaron en este ciclo. Intentados: {', '.join(attempted_models)}. "
+        f"Se usará el resumen de datos crudos como fallback.",
+        source="ia_cascade",
+        level="ERROR",
+    )
     if last_exception:
         raise last_exception
     else:
@@ -1046,10 +1096,12 @@ Reglas CRÍTICAS:
         primary_model = model_cascade[0] if model_cascade else "gpt-4o"
         is_mini_model = "mini" in primary_model.lower() or "small" in primary_model.lower()
         is_github_provider = provider.lower() == "github"
+        is_openai_provider = provider.lower() == "openai"
 
-        # Excluir imágenes si: es mini, está bloqueado, O es GitHub Models
-        # Solo incluir imágenes para OpenAI (límites más altos)
-        if not is_mini_model and not is_github_provider and not (_is_primary_locked_for_cycle(provider, primary_model)):
+        # Los mapas solo se incluyen para OpenAI: Gemini (vía capa OpenAI-compatible)
+        # espera imágenes en base64/data-URI o subidas por su Files API, no URLs remotas
+        # como las de AEMET, y además consumiría tokens/cuota gratuita en vano.
+        if is_openai_provider and not is_mini_model and not (_is_primary_locked_for_cycle(provider, primary_model)):
             # Solo agregar imágenes si es OpenAI con modelo potente
             # Usar URLs (mucho menos tokens que base64: ~100 vs ~15k por imagen)
             for url in map_urls:
@@ -1061,6 +1113,8 @@ Reglas CRÍTICAS:
                 reason = f"es modelo limitado ({primary_model})"
             if is_github_provider:
                 reason = "es GitHub Models (60k tokens/min)"
+            if not is_openai_provider:
+                reason = f"proveedor {provider} no soporta URLs de imagen remotas / cuota gratuita limitada"
             print(f"⚠️ NO incluyendo imágenes ({reason})")
 
         # Conteo EXACTO de tokens del payload completo (sistema + usuario)
@@ -1070,10 +1124,13 @@ Reglas CRÍTICAS:
         ]
         exact_tokens = _count_tokens(full_messages_preview, model=primary_model)
         print(f"📊 Tokens de entrada EXACTOS: {exact_tokens} (payload completo sistema+usuario)")
-        if exact_tokens > 7500:
-            print(f"⚠️  ADVERTENCIA: payload cerca del límite de 8000 tokens ({exact_tokens}/8000)")
-        elif exact_tokens > 6000:
-            print(f"⚠️  Payload elevado: {exact_tokens} tokens — considera reducir datos")
+        # Gemini 3.x admite 1,048,576 tokens de entrada — estos umbrales ya NO son un
+        # límite duro (heredados de GitHub Models, ~8k contexto). Solo sirven de aviso
+        # informativo por coste/latencia si el payload crece mucho (ej. muchas imágenes).
+        if exact_tokens > 100000:
+            print(f"⚠️  Payload muy elevado: {exact_tokens} tokens — revisa coste/latencia (contexto Gemini: 1,048,576)")
+        elif exact_tokens > 50000:
+            print(f"ℹ️  Payload elevado: {exact_tokens} tokens — dentro de límite, solo informativo")
         else:
             print(f"✅ Payload OK: {exact_tokens} tokens")
 
@@ -1086,7 +1143,10 @@ Reglas CRÍTICAS:
                 {"role": "user", "content": user_content},
             ],
             temperature=0.4,
-            max_tokens=4000,
+            # Los modelos Gemini 3.x soportan hasta 65536 tokens de salida y no se
+            # cobra por el techo sin usar, solo por lo realmente generado. Se deja
+            # margen amplio para que el "thinking" + la respuesta no se corten.
+            max_tokens=16000,
         )
 
         _set_last_ai_execution(provider=provider, requested_model=primary_model, used_model=used_model)

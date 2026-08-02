@@ -20,9 +20,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Sistema de cascada automática de modelos
 # El sistema prueba cada modelo en orden hasta encontrar uno disponible
+# (gratuito vía AI Studio; ver ai_service.py para el manejo de temperature/reasoning_effort)
 AI_MODEL_CASCADE = [
-    # "gemini-3.5-flash",       # frontier, gratuito con límites de AI Studio
-    "gemini-3-flash-preview",
+    "gemini-3.6-flash",       # frontier, más reciente y estable
+    "gemini-3.5-flash",       # frontier, fallback si 3.6 no está disponible
+    "gemini-3-flash-preview", # preview probado, free tier confirmado
     "gemini-3.1-flash-lite",  # más ligero, buen último escalón
 ]
 
