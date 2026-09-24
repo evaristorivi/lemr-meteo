@@ -314,22 +314,22 @@ fi
 if [ "$CREATE_ENV" = true ]; then
     echo "⚙️ Creando archivo .env..."
     
-    GITHUB_TOKEN=$(ask_question "Token de GitHub (obligatorio)" "")
+    GEMINI_API_KEY=$(ask_question "API key de Gemini / Google AI Studio (obligatoria)" "")
     AEMET_KEY=$(ask_question "API Key de AEMET (opcional, Enter para omitir)" "")
     
     cat > "$INSTALL_DIR/.env" << EOF
 # Configuración generada por deploy-interactive.sh
 # $(date)
 
-# GitHub Token (obligatorio)
-GITHUB_TOKEN=$GITHUB_TOKEN
+# Gemini API key (obligatoria)
+GEMINI_API_KEY=$GEMINI_API_KEY
 
 # Puerto y host
 WEB_PORT=$SERVICE_PORT
 WEB_HOST=127.0.0.1
 
 # Proveedor de IA (cascada automática de modelos)
-AI_PROVIDER=github
+AI_PROVIDER=gemini
 
 # AEMET API (opcional pero recomendado)
 EOF
