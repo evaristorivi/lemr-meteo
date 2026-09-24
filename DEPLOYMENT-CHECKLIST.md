@@ -8,7 +8,7 @@ Usa este checklist para asegurarte de que no te saltas ningún paso.
 - [ ] Mi servidor tiene Ubuntu/Debian (o similar)
 - [ ] Apache está instalado y funcionando
 - [ ] Tengo permisos sudo
-- [ ] Tengo un token de GitHub (https://github.com/settings/tokens)
+- [ ] Tengo una API key de Gemini en Google AI Studio (https://aistudio.google.com/app/apikey)
 - [ ] Tengo API key de AEMET (https://opendata.aemet.es) - gratis y recomendada
 - [ ] He decidido entre:
   - [ ] Usar subdominio dedicado (ej: meteo.midominio.com)
@@ -36,7 +36,7 @@ Usa este checklist para asegurarte de que no te saltas ningún paso.
 - [ ] He ejecutado el script de instalación: `sudo bash install-production.sh`
 - [ ] El script terminó sin errores
 - [ ] He editado el archivo `.env`: `sudo nano /var/www/lemr-meteo/.env`
-- [ ] He configurado `GITHUB_TOKEN` en el `.env`
+- [ ] He configurado `GEMINI_API_KEY` en el `.env`
 - [ ] He configurado `WEB_PORT=8001` (u otro puerto libre)
 - [ ] He configurado `WEB_HOST=127.0.0.1`
 - [ ] He configurado `AEMET_API_KEY` (recomendado para predicciones textuales)

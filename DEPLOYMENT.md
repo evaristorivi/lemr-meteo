@@ -29,7 +29,7 @@ sudo bash deploy-interactive.sh
 - ✅ Te pregunta el tipo de instalación (subdominio o subdirectorio)
 - ✅ Te pregunta el dominio/subdominio
 - ✅ Te pregunta el puerto
-- ✅ Te pide las credenciales (GitHub token, AEMET API)
+- ✅ Te pide las credenciales (Gemini API key, AEMET API)
 - ✅ **Detecta configuraciones Apache existentes y hace backup automático**
 - ✅ Instala dependencias, crea el servicio, configura Apache
 - ✅ Verifica que todo funcione
@@ -68,15 +68,15 @@ sudo nano /var/www/lemr-meteo/.env
 Variables **obligatorias**:
 
 ```env
-# Token de GitHub (gratis)
-GITHUB_TOKEN=ghp_tu_token_aqui
+# API key de Gemini (gratis en Google AI Studio)
+GEMINI_API_KEY=tu_key_de_aistudio
 
 # Puerto para la app (no usar 80 o 443, Apache los usa)
 WEB_PORT=8001
 WEB_HOST=127.0.0.1
 
 # Proveedor de IA (el sistema usa cascada automática de modelos)
-AI_PROVIDER=github
+AI_PROVIDER=gemini
 ```
 
 Variables **opcionales** pero recomendadas:
@@ -245,7 +245,7 @@ Puedes recibir alertas en Telegram cuando la app detecta errores en las fuentes 
 | `ERROR` | `general` | Excepción en la actualización de caché en segundo plano |
 | `ERROR` | `general` | Excepción en el endpoint `/api/ogimet/week` |
 
-Anti-spam: se envía como máximo **1 alerta por fuente cada 30 minutos**. Las alertas por modelo IA (`ia_gpt-4o`, `ia_gpt-4o-mini`, etc.) tienen contador independiente.
+Anti-spam: se envía como máximo **1 alerta por fuente cada 30 minutos**. Las alertas por modelo IA (`ia_gemini-3.6-flash`, `ia_gemini-3.5-flash`, etc.) tienen contador independiente.
 
 ### Configuración
 

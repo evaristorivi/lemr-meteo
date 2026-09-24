@@ -39,13 +39,13 @@ copy .env.example .env
 Edita `.env` y define como mínimo:
 
 ```env
-AI_PROVIDER=github
-GITHUB_TOKEN=tu_token
+AI_PROVIDER=gemini
+GEMINI_API_KEY=tu_key_de_aistudio
 WEB_HOST=127.0.0.1
 WEB_PORT=8000  # Para desarrollo local
 ```
 
-> 📚 **Nota sobre modelos IA:** El sistema usa automáticamente una cascada de modelos (gpt-4o → gpt-4o-mini → llama → phi-4). No necesitas configurar nada.
+> 📚 **Nota sobre modelos IA:** El sistema usa Gemini vía Google AI Studio y prueba automáticamente la cascada definida en `config.py` (`gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-3.1-flash-lite`). No necesitas configurar los modelos uno a uno.
 
 
 **Muy recomendado** (gratis en https://opendata.aemet.es):
@@ -66,7 +66,7 @@ TELEGRAM_CHAT_ID=123456789
 Crea el bot con `@BotFather`, obtén el `chat_id` visitando `https://api.telegram.org/bot<TOKEN>/getUpdates`. Si no se configura, el sistema funciona con normalidad sin enviar alertas. Ver [DEPLOYMENT.md](DEPLOYMENT.md#-alertas-telegram-opcional) para la lista completa de eventos monitorizados.
 
 Recomendación para publicación/despliegue:
-- Regenera todos los tokens/claves si han estado expuestos (`GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`).
+- Regenera todos los tokens/claves si han estado expuestos (`GEMINI_API_KEY`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`).
 - No subas nunca `.env` al repositorio (usa solo `.env.example`).
 
 Ejecuta:
@@ -107,7 +107,7 @@ sudo bash deploy-interactive.sh
 - ✅ Dominio o subdominio
 - ✅ Tipo de instalación (subdominio dedicado vs subdirectorio)
 - ✅ Puerto de la aplicación
-- ✅ Credenciales (GitHub token, AEMET API)
+- ✅ Credenciales (Gemini API key, AEMET API)
 - ✅ Detecta y hace backup de configuraciones Apache existentes
 - ✅ Verifica que todo funcione correctamente
 
@@ -176,8 +176,8 @@ nano .env
 Configura las variables para producción:
 
 ```env
-AI_PROVIDER=github
-GITHUB_TOKEN=tu_token_regenerado
+AI_PROVIDER=gemini
+GEMINI_API_KEY=tu_key_de_aistudio
 AEMET_API_KEY=tu_api_key_aemet
 WEB_HOST=127.0.0.1
 WEB_PORT=8001

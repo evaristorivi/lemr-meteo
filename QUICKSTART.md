@@ -15,20 +15,20 @@ copy .env.example .env
 Configura `.env` con al menos:
 
 ```env
-AI_PROVIDER=github
-GITHUB_TOKEN=tu_token_github
+AI_PROVIDER=gemini
+GEMINI_API_KEY=tu_key_de_aistudio
 WEB_HOST=127.0.0.1
 WEB_PORT=8000  # Para desarrollo local
 AEMET_API_KEY=tu_aemet_key  # Recomendado (gratis en opendata.aemet.es)
 ```
 
-> 🤖 **Modelos IA:** El sistema usa cascada automática (no necesitas configurar nada).
+> 🤖 **Modelos IA:** El sistema usa Gemini vía Google AI Studio y una cascada automática definida en `config.py` (no necesitas configurar modelos uno a uno).
 
 
 ## 🔐 Seguridad de tokens
 
 - Si alguna clave se ha mostrado por terminal/chat, regénérala antes de subir a GitHub o desplegar.
-- Variables sensibles típicas: `GITHUB_TOKEN`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`.
+- Variables sensibles típicas: `GEMINI_API_KEY`, `AEMET_API_KEY`, `WINDY_POINT_FORECAST_API_KEY`.
 - Mantén `.env` fuera de git y comparte solo `.env.example`.
 
 ## 3) Ejecuta la web
