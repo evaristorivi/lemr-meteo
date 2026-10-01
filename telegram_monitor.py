@@ -29,6 +29,7 @@ _MIN_INTERVAL = 1800  # 30 minutos entre alertas de la misma fuente (por defecto
 # Intervalos específicos por fuente (sobrescriben _MIN_INTERVAL si están definidos)
 _SOURCE_INTERVALS: dict[str, int] = {
     "aemet_maps": 7200,  # 2 horas — mapa de análisis cae con frecuencia
+    "aemet_sig_maps": 7200,  # 2 horas — mapas significativos
 }
 
 

@@ -126,8 +126,19 @@ def _fetch_datos_url(datos_url: str, timeout: int = 15, as_bytes: bool = False):
 AMA_MAP_BASE = "https://ama.aemet.es/o/estaticos/bbdd/imagenes"
 SIG_MAP_UTC_HOURS = ["00", "06", "12", "18"]
 
+# Cabeceras de navegador real: algunos hostings (datacenter) reciben 403/redirect
+# de ama.aemet.es con el User-Agent por defecto de requests (anti-bot).
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8",
+}
+
 # Caché de URLs verificadas (evita verificar la misma URL múltiples veces)
-_URL_AVAILABILITY_CACHE: Dict[str, bool] = {}
+# valores: 'ok' | '404' | 'uncertain'
+_URL_AVAILABILITY_CACHE: Dict[str, str] = {}
 _CACHE_LAST_CLEAR_TIME = time.time()
 _CACHE_CLEAR_INTERVAL = 1800  # Limpiar caché cada 30 minutos
 
@@ -149,32 +160,49 @@ def get_aemet_request_count() -> int:
     return _AEMET_REQUEST_COUNT
 
 
-def _url_has_image(url: str, timeout: int = 5) -> bool:
-    # Usar caché para evitar verificaciones repetidas
+def _check_map_status(url: str, timeout: int = 5) -> str:
+    """Clasifica la disponibilidad de una URL de mapa significativo.
+
+    Devuelve 'ok' (imagen confirmada), '404' (AEMET confirma que aún no lo ha
+    publicado — normal, sobre todo para 'Mañana') o 'uncertain' (403/5xx/
+    timeout/error de red — no podemos confiar en que el mapa no exista, puede
+    ser un bloqueo del hosting hacia ama.aemet.es, no un 404 real).
+    """
     if url in _URL_AVAILABILITY_CACHE:
         return _URL_AVAILABILITY_CACHE[url]
-    
-    result = False
+
+    status: str = "uncertain"
+    last_info = None
     try:
-        resp = requests.head(url, timeout=timeout, allow_redirects=True)
+        resp = requests.head(url, timeout=timeout, allow_redirects=True, headers=_BROWSER_HEADERS)
+        last_info = resp.status_code
         if resp.status_code == 200:
             content_type = (resp.headers.get("Content-Type") or "").lower()
             if "image" in content_type or "png" in content_type or not content_type:
-                result = True
-    except Exception:
-        pass
+                status = "ok"
+        elif resp.status_code == 404:
+            status = "404"
+    except Exception as exc:
+        last_info = f"EXC:{exc}"
 
-    if not result:
+    if status == "uncertain":
         try:
-            resp = requests.get(url, timeout=timeout, stream=True)
-            result = resp.status_code == 200
+            resp = requests.get(url, timeout=timeout, stream=True, headers=_BROWSER_HEADERS)
+            last_info = resp.status_code
+            if resp.status_code == 200:
+                status = "ok"
+            elif resp.status_code == 404:
+                status = "404"
             resp.close()
-        except Exception:
-            pass
-    
+        except Exception as exc:
+            last_info = f"EXC:{exc}"
+
+    if status != "ok":
+        print(f"⚠️ Mapa significativo [{status}] ({last_info}): {url}")
+
     # Cachear resultado (evita verificar de nuevo en este ciclo)
-    _URL_AVAILABILITY_CACHE[url] = result
-    return result
+    _URL_AVAILABILITY_CACHE[url] = status
+    return status
 
 
 def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
@@ -187,13 +215,16 @@ def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
 
 def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
     """
-    Obtiene los mapas significativos para hoy y mañana
-    por slots UTC reales (00, 06, 12, 18). Descarga SIEMPRE como base64 porque las URLs
-    de ama.aemet.es redirigen a login cuando se acceden desde un navegador
-    (anti-hotlinking), así que solo funcionan embebidas como data-URI.
+    Obtiene los mapas significativos para hoy y mañana por slots UTC reales
+    (00, 06, 12, 18). Se sirve la URL directa (map_url) y el frontend la carga
+    con referrerpolicy="no-referrer" para esquivar el anti-hotlinking de
+    ama.aemet.es; map_b64 se deja reservado por si algún día hace falta volver
+    a incrustar en base64.
 
     Returns:
-        Lista de dicts con keys: date, label, utc_hour, slot_label, map_url, map_b64
+        Lista de dicts con keys: date, label, utc_hour, slot_label, map_url,
+        map_b64, source_date, source_utc_hour, verified (bool, True si el
+        backend pudo confirmar la imagen con HTTP 200).
     """
     today = datetime.now(MADRID_TZ).date()
     labels = ["Hoy", "Mañana"]
@@ -223,8 +254,15 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
             source_h = mapping.get("source_hour", target_hour)
             
             url = _direct_sig_map_url(source_d, source_h)
-            
-            if not _url_has_image(url, timeout=5):
+
+            status = _check_map_status(url, timeout=5)
+            # Solo descartamos si AEMET confirma 404 (aún no publicado).
+            # Si es 'uncertain' (posible bloqueo de red al hosting) lo incluimos
+            # igualmente: el navegador del usuario carga la URL directamente
+            # (referrerpolicy=no-referrer) y sí suele funcionar aunque el backend
+            # no pueda verificarla; si al final tampoco existe, el <img onerror>
+            # del frontend la oculta.
+            if status == "404":
                 continue
 
             day_results.append({
@@ -236,7 +274,20 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
                 "map_b64": None,
                 "source_date": source_d.isoformat(),
                 "source_utc_hour": source_h,
+                "verified": status == "ok",
             })
+
+        # "Hoy" (delta=0) solo llega aquí vacío si AEMET confirmó 404 (no
+        # 'uncertain', esos ya se incluyen de forma optimista) en los 4 slots:
+        # señal real de que AEMET no ha publicado nada todavía, no de bloqueo.
+        if delta == 0 and not day_results:
+            from telegram_monitor import send_alert as _tg_alert_maps
+            _tg_alert_maps(
+                "Mapas significativos AEMET: AEMET confirma 404 (no publicado) "
+                "en los 4 slots UTC de HOY. Revisa https://ama.aemet.es manualmente.",
+                source="aemet_sig_maps",
+                level="ERROR",
+            )
 
         results.extend(day_results)
 

@@ -17,15 +17,25 @@ WEB_PORT = int(os.getenv('WEB_PORT', '8000'))
 AI_PROVIDER = os.getenv('AI_PROVIDER')  
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # fallback opcional vía GitHub Models
 
 # Sistema de cascada automática de modelos
 # El sistema prueba cada modelo en orden hasta encontrar uno disponible
 # (gratuito vía AI Studio; ver ai_service.py para el manejo de temperature/reasoning_effort)
+# Actualizado 2026-10-01 contra https://ai.google.dev/gemini-api/docs/models:
+# cada nombre de modelo tiene su propio cupo gratuito independiente, así que
+# cuantos más modelos distintos haya en la cascada, más resistente es a 429.
+# Probado en vivo con la API key gratuita: 3.8-flash y 3.7-flash devuelven 503
+# "high demand" ahora mismo (recién lanzados, saturados) — van al final para no
+# retrasar cada petición; el resto respondió OK en <2s.
 AI_MODEL_CASCADE = [
-    "gemini-3.6-flash",       # frontier, más reciente y estable
-    "gemini-3.5-flash",       # frontier, fallback si 3.6 no está disponible
-    "gemini-3-flash-preview", # preview probado, free tier confirmado
-    "gemini-3.1-flash-lite",  # más ligero, buen último escalón
+    "gemini-3.6-flash",       # probado OK, estable
+    "gemini-3.5-flash",       # probado OK, legado, alto throughput
+    "gemini-3.5-flash-lite",  # probado OK, rápido/barato
+    "gemini-3.1-flash-lite",  # probado OK, frontier-class a bajo coste
+    "gemini-3-flash-preview", # probado OK (preview, cupo más restrictivo)
+    "gemini-3.8-flash",       # flagship más reciente, pero saturado (503) ahora mismo
+    "gemini-3.7-flash",       # generación anterior, también saturado (503) ahora mismo
 ]
 
 # AEMET OpenData

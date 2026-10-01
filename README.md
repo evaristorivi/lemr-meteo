@@ -45,7 +45,7 @@ WEB_HOST=127.0.0.1
 WEB_PORT=8000  # Para desarrollo local
 ```
 
-> 📚 **Nota sobre modelos IA:** El sistema usa Gemini vía Google AI Studio y prueba automáticamente la cascada definida en `config.py` (`gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-3.1-flash-lite`). No necesitas configurar los modelos uno a uno.
+> 📚 **Nota sobre modelos IA:** El sistema usa Gemini vía Google AI Studio y prueba automáticamente la cascada definida en `config.py` (`gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-3-flash-preview` → `gemini-3.8-flash` → `gemini-3.7-flash`). Los dos últimos son los modelos más nuevos pero con alta demanda (503) en el tier gratuito; se dejan al final para no ralentizar cada análisis. No necesitas configurar los modelos uno a uno.
 
 
 **Muy recomendado** (gratis en https://opendata.aemet.es):

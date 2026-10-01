@@ -1342,7 +1342,7 @@
 
     const mapImg = (b64, url, alt) => {
       if (url) {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" /></a>`;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" onerror="if(!this.dataset.failed){this.dataset.failed='1';this.closest('a').style.display='none';const err=document.createElement('div');err.className='map';err.style.cssText='display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem';err.textContent='⚠️ Imagen no disponible';this.closest('a').insertAdjacentElement('afterend',err);}" /></a>`;
       }
       if (b64) {
         const src = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
@@ -1366,14 +1366,32 @@
       if (mapEl) mapEl.innerHTML = slot.html;
     };
 
-    const renderDays = (days) => {
+    const probeMapImg = url => new Promise(res => {
+      const img = new Image();
+      img.onload  = () => res(true);
+      img.onerror = () => res(false);
+      img.referrerPolicy = 'no-referrer';
+      img.src = url;
+    });
+
+    const renderDays = async (days) => {
       const result = [];
 
-      days.forEach((d, dayIdx) => {
-        if (!d.show_aemet_maps) return;
-        const slots = d.map_slots || [];
+      for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
+        const d = days[dayIdx];
+        if (!d.show_aemet_maps) continue;
+        const rawSlots = d.map_slots || [];
+
+        // El backend puede fallar al verificar ama.aemet.es (bloqueo del hosting),
+        // igual que pasaba con los mapas VTPLOT. Igual que VTPLOT, confirmamos cada
+        // slot cargando la imagen desde el propio navegador antes de mostrarla.
+        const checked = await Promise.all(
+          rawSlots.map(slot => probeMapImg(slot.map_url).then(ok => ok ? slot : null))
+        );
+        const slots = checked.filter(Boolean);
+
         // Ocultar Mañana (y siguientes) si no tiene mapas publicados
-        if (slots.length === 0 && d.label !== "Hoy") return;
+        if (slots.length === 0 && d.label !== "Hoy") continue;
 
         const dayId = `day-aemet-${dayIdx}`;
         window._utcSlots[dayId] = slots.map(slot => ({
@@ -1405,7 +1423,7 @@
             </div>
           </article>
         `);
-      });
+      }
 
       document.getElementById("days").innerHTML = result.join("");
     };
