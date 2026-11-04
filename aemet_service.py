@@ -7,8 +7,10 @@ Flujo AEMET en dos pasos:
   2) GET a esa URL temporal → contenido real (imagen PNG, JSON, etc.)
 """
 import base64
+import re
+import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Dict, List
 from zoneinfo import ZoneInfo
 
@@ -50,10 +52,7 @@ def _aemet_get(endpoint: str, timeout: int = 15) -> Optional[dict]:
     Añade delay automático entre peticiones para evitar bloqueos.
     """
     global _LAST_AEMET_REQUEST_TIME, _AEMET_REQUEST_COUNT
-    
-    # Limpiar caché si es necesario
-    _clear_cache_if_needed()
-    
+
     # Protección rate-limit: esperar si la última petición fue muy reciente
     time_since_last = time.time() - _LAST_AEMET_REQUEST_TIME
     if time_since_last < _MIN_REQUEST_INTERVAL:
@@ -122,87 +121,27 @@ def _fetch_datos_url(datos_url: str, timeout: int = 15, as_bytes: bool = False):
 # satisfagan esos criterios" la mayoría del tiempo, verificado 2026-03-23).
 # En cambio, ama.aemet.es publica las imágenes con el patrón:
 #   QGQE70LEMM{HH}00________{YYYYMMDD}.png
-# donde HH = 00, 06, 12, 18 (horas UTC)
+# donde HH = 00, 06, 12, 18 (hora UTC de emisión; validez = emisión + 12h)
+#
+# ⚠️ CERO peticiones desde el backend (desde 2026-11-04): ama.aemet.es está
+# detrás de un WAF anti-bot (F5) que bloquea por IP ante patrones de sondeo.
+# Las URLs se CALCULAN de forma determinista y el navegador del usuario carga
+# cada imagen una sola vez; si falla, el <img onerror> del frontend lo indica.
 AMA_MAP_BASE = "https://ama.aemet.es/o/estaticos/bbdd/imagenes"
 SIG_MAP_UTC_HOURS = ["00", "06", "12", "18"]
 
-# Cabeceras de navegador real: algunos hostings (datacenter) reciben 403/redirect
-# de ama.aemet.es con el User-Agent por defecto de requests (anti-bot).
-_BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
-    ),
-    "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8",
-}
+# Horas que tarda AEMET en publicar un mapa tras su hora nominal de emisión.
+# Demasiado bajo → durante un rato sale "Imagen no disponible" en el último
+# slot; demasiado alto → el mapa aparece más tarde. Ajustable por env.
+SIG_MAP_PUBLISH_LAG_H = float(getattr(config, "SIG_MAP_PUBLISH_LAG_H", 3))
 
-# Caché de URLs verificadas (evita verificar la misma URL múltiples veces)
-# valores: 'ok' | '404' | 'uncertain'
-_URL_AVAILABILITY_CACHE: Dict[str, str] = {}
-_CACHE_LAST_CLEAR_TIME = time.time()
-_CACHE_CLEAR_INTERVAL = 1800  # Limpiar caché cada 30 minutos
-
-# Contador de peticiones AEMET (para monitoring)
+# Contador de peticiones AEMET OpenData (para monitoring)
 _AEMET_REQUEST_COUNT = 0
-
-
-def _clear_cache_if_needed():
-    """Limpia el caché de URLs si ha pasado el intervalo de tiempo."""
-    global _URL_AVAILABILITY_CACHE, _CACHE_LAST_CLEAR_TIME
-    if time.time() - _CACHE_LAST_CLEAR_TIME > _CACHE_CLEAR_INTERVAL:
-        _URL_AVAILABILITY_CACHE.clear()
-        _CACHE_LAST_CLEAR_TIME = time.time()
-        print("🧹 Caché de URLs AEMET limpiado")
 
 
 def get_aemet_request_count() -> int:
     """Devuelve el número de peticiones AEMET realizadas desde el inicio."""
     return _AEMET_REQUEST_COUNT
-
-
-def _check_map_status(url: str, timeout: int = 5) -> str:
-    """Clasifica la disponibilidad de una URL de mapa significativo.
-
-    Devuelve 'ok' (imagen confirmada), '404' (AEMET confirma que aún no lo ha
-    publicado — normal, sobre todo para 'Mañana') o 'uncertain' (403/5xx/
-    timeout/error de red — no podemos confiar en que el mapa no exista, puede
-    ser un bloqueo del hosting hacia ama.aemet.es, no un 404 real).
-    """
-    if url in _URL_AVAILABILITY_CACHE:
-        return _URL_AVAILABILITY_CACHE[url]
-
-    status: str = "uncertain"
-    last_info = None
-    try:
-        resp = requests.head(url, timeout=timeout, allow_redirects=True, headers=_BROWSER_HEADERS)
-        last_info = resp.status_code
-        if resp.status_code == 200:
-            content_type = (resp.headers.get("Content-Type") or "").lower()
-            if "image" in content_type or "png" in content_type or not content_type:
-                status = "ok"
-        elif resp.status_code == 404:
-            status = "404"
-    except Exception as exc:
-        last_info = f"EXC:{exc}"
-
-    if status == "uncertain":
-        try:
-            resp = requests.get(url, timeout=timeout, stream=True, headers=_BROWSER_HEADERS)
-            last_info = resp.status_code
-            if resp.status_code == 200:
-                status = "ok"
-            elif resp.status_code == 404:
-                status = "404"
-            resp.close()
-        except Exception as exc:
-            last_info = f"EXC:{exc}"
-
-    if status != "ok":
-        print(f"⚠️ Mapa significativo [{status}] ({last_info}): {url}")
-
-    # Cachear resultado (evita verificar de nuevo en este ciclo)
-    _URL_AVAILABILITY_CACHE[url] = status
-    return status
 
 
 def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
@@ -215,81 +154,48 @@ def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
 
 def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
     """
-    Obtiene los mapas significativos para hoy y mañana por slots UTC reales
-    (00, 06, 12, 18). Se sirve la URL directa (map_url) y el frontend la carga
-    con referrerpolicy="no-referrer" para esquivar el anti-hotlinking de
-    ama.aemet.es; map_b64 se deja reservado por si algún día hace falta volver
-    a incrustar en base64.
+    Calcula, SIN hacer ninguna petición HTTP, los mapas significativos para
+    hoy y mañana por slots UTC de validez (00, 06, 12, 18).
+
+    Cada slot de validez V se cubre con el fichero emitido 12h antes
+    (V - 12h), equivalente al mapeo verificado con AerBrava:
+      00 UTC → QGQE70LEMM1200 del día anterior · 06 UTC → 1800 día anterior
+      12 UTC → QGQE70LEMM0000 del mismo día    · 18 UTC → 0600 mismo día
+    Solo se incluyen los slots cuyo fichero ya debería estar publicado:
+    emisión + SIG_MAP_PUBLISH_LAG_H <= ahora (UTC).
 
     Returns:
         Lista de dicts con keys: date, label, utc_hour, slot_label, map_url,
-        map_b64, source_date, source_utc_hour, verified (bool, True si el
-        backend pudo confirmar la imagen con HTTP 200).
+        map_b64, source_date, source_utc_hour, verified (siempre False: el
+        backend ya no verifica; lo comprueba el navegador al cargar).
     """
+    now_utc = datetime.now(timezone.utc)
     today = datetime.now(MADRID_TZ).date()
     labels = ["Hoy", "Mañana"]
-    results = []
-
-    # Mapeo de desfase conocido para AEMET (verificado con AerBrava):
-    # AEMET publica mapas con anticipación. La fuente de verdad es este mapeo:
-    # - 00 UTC: QGQE70LEMM1200________{fecha_anterior}
-    # - 06 UTC: QGQE70LEMM1800________{fecha_anterior}
-    # - 12 UTC: QGQE70LEMM0000________{fecha_actual}
-    # - 18 UTC: QGQE70LEMM0600________{fecha_actual}
-    desfase_map = {
-        "00": {"delta_date": -1, "source_hour": "12"},
-        "06": {"delta_date": -1, "source_hour": "18"},
-        "12": {"delta_date": 0, "source_hour": "00"},
-        "18": {"delta_date": 0, "source_hour": "06"},
-    }
+    results: List[Dict] = []
 
     for delta in range(2):
         target = today + timedelta(days=delta)
-        day_results: List[Dict] = []
-
-        # Intentar cada hora UTC con su mapeo de desfase
         for target_hour in SIG_MAP_UTC_HOURS:
-            mapping = desfase_map.get(target_hour, {})
-            source_d = today + timedelta(days=delta + mapping.get("delta_date", 0))
-            source_h = mapping.get("source_hour", target_hour)
-            
-            url = _direct_sig_map_url(source_d, source_h)
+            valid_dt = datetime(target.year, target.month, target.day,
+                                int(target_hour), tzinfo=timezone.utc)
+            issue_dt = valid_dt - timedelta(hours=12)
+            if issue_dt + timedelta(hours=SIG_MAP_PUBLISH_LAG_H) > now_utc:
+                continue  # todavía no debería estar publicado: no se pide
 
-            status = _check_map_status(url, timeout=5)
-            # Solo descartamos si AEMET confirma 404 (aún no publicado).
-            # Si es 'uncertain' (posible bloqueo de red al hosting) lo incluimos
-            # igualmente: el navegador del usuario carga la URL directamente
-            # (referrerpolicy=no-referrer) y sí suele funcionar aunque el backend
-            # no pueda verificarla; si al final tampoco existe, el <img onerror>
-            # del frontend la oculta.
-            if status == "404":
-                continue
-
-            day_results.append({
+            source_d = issue_dt.date()
+            source_h = f"{issue_dt.hour:02d}"
+            results.append({
                 "date": target.isoformat(),
                 "label": labels[delta],
                 "utc_hour": target_hour,
                 "slot_label": f"{target_hour} UTC",
-                "map_url": url,
+                "map_url": _direct_sig_map_url(source_d, source_h),
                 "map_b64": None,
                 "source_date": source_d.isoformat(),
                 "source_utc_hour": source_h,
-                "verified": status == "ok",
+                "verified": False,
             })
-
-        # "Hoy" (delta=0) solo llega aquí vacío si AEMET confirmó 404 (no
-        # 'uncertain', esos ya se incluyen de forma optimista) en los 4 slots:
-        # señal real de que AEMET no ha publicado nada todavía, no de bloqueo.
-        if delta == 0 and not day_results:
-            from telegram_monitor import send_alert as _tg_alert_maps
-            _tg_alert_maps(
-                "Mapas significativos AEMET: AEMET confirma 404 (no publicado) "
-                "en los 4 slots UTC de HOY. Revisa https://ama.aemet.es manualmente.",
-                source="aemet_sig_maps",
-                level="ERROR",
-            )
-
-        results.extend(day_results)
 
     return results
 
@@ -299,57 +205,99 @@ def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
 
 def get_analysis_map_url() -> Optional[str]:
     """
-    Obtiene la URL temporal del mapa de análisis en superficie (isobaras, frentes).
-    
-    ⚠️ NOTA: Esta URL es temporal y puede tener problemas de CORS en navegadores.
-    Para usar en navegador, usar get_analysis_map_b64() que devuelve base64.
-    Para IA (OpenAI/GitHub Models), esta URL funciona perfectamente.
-    
-    Returns:
-        URL temporal de la API de AEMET (más ligera para IA, ~100 tokens)
+    URL del mapa de análisis en superficie (isobaras, frentes).
+
+    Fuente principal: página pública www.aemet.es (SIN api key, URL estable,
+    válida para el navegador y para la IA). Respaldo: OpenData (requiere key;
+    URL temporal).
     """
+    web = _web_analysis()
+    if web:
+        return web["url"]
+    return _opendata_analysis_url()
+
+
+def get_analysis_map_b64() -> Optional[str]:
+    """
+    Mapa de análisis en superficie como data URI base64 para el navegador
+    (~15k tokens, NO usar para IA). Se descarga una sola vez por publicación.
+    """
+    web = _web_analysis()
+    if web and web.get("b64"):
+        return web["b64"]
+    return _opendata_analysis_b64()
+
+
+# ── Fuente principal: www.aemet.es (sin api key) ──
+# La página publica el análisis como .../mapa_frentes/{YYYYMMDDHH}+000_<sufijo>.gif.
+# El sufijo no es predecible, así que se lee la página (1 petición) y se extrae.
+# robots.txt de www.aemet.es permite esta ruta; con caché hacemos ≤1 lectura/h.
+AEMET_WEB_BASE = "https://www.aemet.es"
+_FRENTES_PAGE = f"{AEMET_WEB_BASE}/es/eltiempo/prediccion/mapa_frentes"
+_FRENTES_RE = re.compile(
+    r"/?(imagenes_d/eltiempo/prediccion/mapa_frentes/\d{10}\+000_[A-Za-z0-9_]+\.gif)"
+)
+_WEB_HEADERS = {"User-Agent": "analisis-meteo-LEMR/1.0"}
+_WEB_ANALYSIS_TTL = 3600  # segundos entre lecturas de la página
+_web_analysis_lock = threading.Lock()
+_web_analysis_cache: Dict = {"checked_at": 0.0, "url": None, "b64": None}
+
+
+def _web_analysis() -> Optional[Dict]:
+    """Devuelve {'url', 'b64'} del último análisis publicado en www.aemet.es."""
+    with _web_analysis_lock:
+        cache = _web_analysis_cache
+        if cache["url"] and time.time() - cache["checked_at"] < _WEB_ANALYSIS_TTL:
+            return dict(cache)
+        try:
+            resp = requests.get(_FRENTES_PAGE, headers=_WEB_HEADERS, timeout=15)
+            match = _FRENTES_RE.search(resp.text) if resp.status_code == 200 else None
+            if not match:
+                print(f"⚠️ Mapa análisis web: patrón no encontrado (HTTP {resp.status_code})")
+                return dict(cache) if cache["url"] else None
+            url = f"{AEMET_WEB_BASE}/{match.group(1)}"
+            if url != cache["url"] or not cache["b64"]:
+                img = requests.get(url, headers=_WEB_HEADERS, timeout=20)
+                ctype = (img.headers.get("Content-Type") or "").lower()
+                if img.status_code != 200 or "image" not in ctype or len(img.content) < 1000:
+                    print(f"⚠️ Mapa análisis web: imagen no válida (HTTP {img.status_code}, {ctype})")
+                    return dict(cache) if cache["url"] else None
+                cache["b64"] = (
+                    f"data:{ctype.split(';')[0]};base64,"
+                    + base64.b64encode(img.content).decode("ascii")
+                )
+                cache["url"] = url
+                print(f"✅ Mapa análisis (www.aemet.es): {url} ({len(img.content)} bytes)")
+            cache["checked_at"] = time.time()
+            return dict(cache)
+        except Exception as exc:
+            print(f"⚠️ Mapa análisis web error: {exc}")
+            return dict(cache) if cache["url"] else None
+
+
+# ── Respaldo: OpenData (requiere api key) ──
+
+def _opendata_analysis_url() -> Optional[str]:
     meta = _aemet_get("/api/mapasygraficos/analisis")
     if meta and meta.get("datos"):
         return meta["datos"]  # URL temporal: https://opendata.aemet.es/opendata/sh/XXX
     return None
 
 
-def get_analysis_map_b64() -> Optional[str]:
-    """
-    Descarga el mapa de análisis en superficie y lo convierte a base64.
-    
-    Se actualiza cada ~12h. Ideal para embedding en navegadores (evita CORS y URLs expiradas).
-    
-    Returns:
-        String data URI base64 o None si hay error (~15k tokens, NO usar para IA)
-    """
-    temp_url = get_analysis_map_url()
+def _opendata_analysis_b64() -> Optional[str]:
+    temp_url = _opendata_analysis_url()
     if not temp_url:
         return None
-    
-    # Descargar la imagen con reintentos (las URLs temporales a veces tardan)
-    max_attempts = 2
-    for attempt in range(max_attempts):
+    for attempt in range(2):
         try:
-            # Paso 2: descargar desde URL temporal con timeout generoso
             raw_bytes = _fetch_datos_url(temp_url, timeout=20, as_bytes=True)
-            
-            if raw_bytes and len(raw_bytes) > 1000:  # Verificar que sea una imagen real
-                # Convertir a base64 para embedding directo
-                b64_str = base64.b64encode(raw_bytes).decode("ascii")
-                print(f"✅ Mapa análisis descargado: {len(raw_bytes)} bytes → {len(b64_str)} chars base64")
-                return f"data:image/png;base64,{b64_str}"
-            else:
-                print(f"⚠️ Mapa análisis: respuesta muy pequeña (intento {attempt+1}/{max_attempts})")
-                
+            if raw_bytes and len(raw_bytes) > 1000:
+                return "data:image/png;base64," + base64.b64encode(raw_bytes).decode("ascii")
+            print(f"⚠️ Mapa análisis OpenData: respuesta muy pequeña (intento {attempt + 1}/2)")
         except Exception as e:
-            print(f"⚠️ Error descargando mapa análisis (intento {attempt+1}/{max_attempts}): {e}")
-            
-        if attempt < max_attempts - 1:
-            import time
-            time.sleep(2)  # Esperar antes de reintentar
-    
-    print(f"❌ No se pudo descargar el mapa de análisis después de {max_attempts} intentos")
+            print(f"⚠️ Error descargando mapa análisis OpenData (intento {attempt + 1}/2): {e}")
+        if attempt == 0:
+            time.sleep(2)
     return None
 
 
@@ -374,18 +322,27 @@ def get_prediccion_llanera() -> Optional[dict]:
 
 # ──────────────── Avisos CAP Asturias ──────────────────────────────────────
 
+AVISOS_NO_DISPONIBLES = (
+    "⚠️ AVISOS AEMET NO DISPONIBLES: no se pudieron consultar (no implica que "
+    "no haya avisos). Indica al piloto que los verifique en "
+    "https://www.aemet.es/es/eltiempo/prediccion/avisos antes de volar."
+)
+
+
 def get_avisos_cap_asturias() -> Optional[str]:
     """
     Obtiene avisos meteorológicos CAP activos para Asturias (área 33).
-    Devuelve cadena compacta con los avisos activos, o None si no hay.
+    Devuelve cadena compacta con los avisos activos, None si AEMET confirma
+    que no hay, o AVISOS_NO_DISPONIBLES si no se pudo consultar (key caducada,
+    error de red...). Nunca hay que confundir "no consultado" con "sin avisos".
     """
     try:
         meta = _aemet_get("/api/avisos_cap/ultimoelaborado/area/33")
         if not meta or not meta.get("datos"):
-            return None
+            return AVISOS_NO_DISPONIBLES
         data = _fetch_datos_url(meta["datos"])
         if not data:
-            return None
+            return AVISOS_NO_DISPONIBLES
 
         # data puede ser lista de avisos o dict con una lista
         avisos = data if isinstance(data, list) else data.get("avisos", []) if isinstance(data, dict) else []
@@ -453,7 +410,7 @@ def get_avisos_cap_asturias() -> Optional[str]:
 
     except Exception as exc:
         print(f"⚠️ get_avisos_cap_asturias error: {exc}")
-        return None
+        return AVISOS_NO_DISPONIBLES
 
 
 
@@ -468,15 +425,9 @@ if __name__ == "__main__":
     url = get_analysis_map_url()
     print(f"   URL: {url}")
 
-    print("\n2) Mapas significativos (ama.aemet.es):")
-    today = datetime.now(MADRID_TZ).date()
-    for h in SIG_MAP_UTC_HOURS:
-        u = _direct_sig_map_url(today, h)
-        try:
-            r = requests.head(u, timeout=8)
-            print(f"   {h} UTC: {'✅' if r.status_code == 200 else '❌'} {u}")
-        except Exception:
-            print(f"   {h} UTC: ❌ error")
+    print("\n2) Mapas significativos (ama.aemet.es, URLs calculadas, sin peticiones):")
+    for m in get_significant_maps_for_three_days():
+        print(f"   {m['label']} {m['utc_hour']} UTC: {m['map_url']}")
 
     print("\n3) Predicción Llanera:")
     pred = get_prediccion_llanera()

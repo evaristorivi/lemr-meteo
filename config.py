@@ -40,6 +40,9 @@ AI_MODEL_CASCADE = [
 
 # AEMET OpenData
 AEMET_API_KEY = os.getenv('AEMET_API_KEY', '')
+# Horas que tarda AEMET en publicar un mapa significativo (ama.aemet.es) tras su
+# hora nominal de emisión. Las URLs se calculan sin sondear (ver aemet_service).
+SIG_MAP_PUBLISH_LAG_H = float(os.getenv('SIG_MAP_PUBLISH_LAG_H', '3'))
 
 # Windy APIs
 WINDY_POINT_FORECAST_API_KEY = os.getenv('WINDY_POINT_FORECAST_API_KEY', '')
