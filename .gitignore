@@ -54,3 +54,6 @@ validate.py
 # Test and demo files (temporary)
 test_*.py
 demo_*.py
+
+# Caché de mapas SIGWX descargados de AEMET
+cache/

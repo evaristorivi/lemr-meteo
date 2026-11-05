@@ -40,6 +40,17 @@ AI_MODEL_CASCADE = [
 
 # AEMET OpenData
 AEMET_API_KEY = os.getenv('AEMET_API_KEY', '')
+# Mapas significativos SIGWX: el servidor los descarga de ama.aemet.es y los
+# sirve desde disco (ver aemet_service). Horas que tarda AEMET en publicar un
+# mapa tras su hora nominal de emisión, y carpeta de la caché (por defecto
+# <repo>/cache/sigwx; el usuario del servicio, www-data, debe poder escribir).
+SIG_MAP_PUBLISH_LAG_H = float(os.getenv('SIG_MAP_PUBLISH_LAG_H', '3'))
+SIGWX_CACHE_DIR = os.getenv('SIGWX_CACHE_DIR', '')
+# Mapas de viento/temperatura en niveles de vuelo (VTPLOT): por defecto
+# <carpeta padre de SIGWX_CACHE_DIR>/vtplot, es decir <repo>/cache/vtplot
+VTPLOT_CACHE_DIR = os.getenv('VTPLOT_CACHE_DIR', '')
+# Mapa de análisis en superficie (www.aemet.es): por defecto <repo>/cache/analisis
+ANALISIS_CACHE_DIR = os.getenv('ANALISIS_CACHE_DIR', '')
 
 # Windy APIs
 WINDY_POINT_FORECAST_API_KEY = os.getenv('WINDY_POINT_FORECAST_API_KEY', '')

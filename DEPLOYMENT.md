@@ -209,6 +209,31 @@ sudo journalctl -u lemr-meteo --no-pager -n 50
 sudo chown -R www-data:www-data /var/www/lemr-meteo
 ```
 
+### Los mapas AEMET no aparecen
+
+Los mapas significativos, de viento por niveles y de análisis los descarga el
+servidor a `/var/www/lemr-meteo/cache/` (ver [README](README.md#-ia-y-mapas)).
+Los scripts de instalación crean esa carpeta; en un despliegue **anterior** a
+este cambio hay que crearla una vez:
+
+```bash
+sudo install -d -o www-data -g www-data -m 750 /var/www/lemr-meteo/cache /var/www/lemr-meteo/cache/sigwx /var/www/lemr-meteo/cache/vtplot /var/www/lemr-meteo/cache/analisis
+sudo -u www-data test -w /var/www/lemr-meteo/cache/sigwx && echo "OK: www-data puede escribir"
+sudo systemctl restart lemr-meteo
+```
+
+Después, con la web abierta al menos una vez (el hilo de descarga arranca con
+la primera visita), el log debe mostrar `✅ SIGWX descargado`,
+`✅ VTPLOT pasada ... publicada` y `✅ Mapa análisis descargado`:
+
+```bash
+sudo journalctl -u lemr-meteo -f | grep -E "SIGWX|VTPLOT|análisis"
+```
+
+- `no se pudo escribir en ...` → permisos de la carpeta (comando de arriba).
+- `HTTP 403` o `no es la imagen esperada` → AEMET está bloqueando la IP del servidor. No suplantar un navegador para saltarlo: contactar con AEMET.
+- `HTTP 404` en la pasada más reciente → normal, AEMET aún no la ha publicado; se reintenta cada 15 min.
+
 ### Apache da error 502 Bad Gateway
 
 - Verifica que el servicio está corriendo: `sudo systemctl status lemr-meteo`
@@ -237,7 +262,9 @@ Puedes recibir alertas en Telegram cuando la app detecta errores en las fuentes 
 | `ERROR` | `openmeteo` | Open-Meteo no responde o devuelve datos inválidos |
 | `WARNING` | `windy` | Windy responde pero sin datos horarios |
 | `WARNING` | `metar` | METAR LEAS (aeropuerto Asturias) no disponible |
-| `WARNING` | `aemet_maps` | Mapa de análisis en superficie AEMET no disponible |
+| `WARNING` | `aemet_maps` | Mapa de análisis en superficie AEMET no disponible o sin actualizar en 24 h |
+| `ERROR` | `aemet_sig_maps` | Mapa significativo de hoy/mañana sin descargar tras 6 h de retraso |
+| `ERROR` | `aemet_vtplot` | Ninguna pasada HMAR (viento/temperatura FL) nueva en 18 h |
 | `WARNING` | `aemet` | Las 3 predicciones textuales de Asturias vacías a la vez |
 | `WARNING` | `ia_<modelo>` | Un modelo IA alcanza su límite de peticiones (429) |
 | `ERROR` | `ia_<modelo>` | Un modelo IA rechaza el prompt por exceso de tokens (context window) |
@@ -303,8 +330,8 @@ No. LEMR Meteo es una app Flask ligera que:
 ### ¿Puedo usar la app sin AEMET_API_KEY?
 
 Sí, pero **perderás funcionalidades**:
-- ✅ **Funcionarán**: METAR, predicción Open-Meteo, análisis IA, mapas significativos AEMET
-- ❌ **NO funcionarán**: Predicciones textuales oficiales de AEMET para Asturias
+- ✅ **Funcionarán**: METAR, predicción Open-Meteo, análisis IA y todos los mapas AEMET (significativos, viento por niveles y análisis: se descargan de la web pública)
+- ❌ **NO funcionarán**: avisos CAP de AEMET para Asturias en el análisis IA, ni el respaldo del mapa de análisis si falla la web de AEMET
 - ✅ **Sí funcionará**: Predicción 4 días La Morgal (usa Open-Meteo, sin AEMET)
 
 La API de AEMET es **gratuita** (regístrate en https://opendata.aemet.es). Se recomienda usarla para obtener todas las funcionalidades.

@@ -50,6 +50,8 @@ Usa este checklist para asegurarte de que no te saltas ningún paso.
 - [ ] He verificado el estado: `sudo systemctl status lemr-meteo`
 - [ ] El servicio muestra "active (running)" ✅
 - [ ] Si hay errores, he revisado los logs: `sudo journalctl -u lemr-meteo -f`
+- [ ] Existe `/var/www/lemr-meteo/cache/` y `www-data` puede escribir en ella (la crean los scripts; en despliegues antiguos ver [DEPLOYMENT.md](DEPLOYMENT.md#los-mapas-aemet-no-aparecen))
+- [ ] Tras abrir la web, el log muestra `✅ SIGWX descargado` y `✅ Mapa análisis descargado`
 
 ## Configuración de Apache (solo si usaste Opción B)
 

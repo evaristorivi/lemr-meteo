@@ -81,9 +81,25 @@ Abre:
 
 ## 🧠 IA y mapas
 
-La web muestra mapas AEMET por día usando la plantilla:
+La web muestra tres tipos de mapas AEMET. El **servidor** los descarga una sola
+vez, los guarda en `cache/` y los sirve desde su propio dominio; el navegador
+del usuario nunca se conecta a AEMET (así no le afecta el anti-bot de
+ama.aemet.es). No necesitan `AEMET_API_KEY`.
 
-- `https://ama.aemet.es/o/estaticos/bbdd/imagenes/QGQE70LEMM1800________YYYYMMDD.png`
+| Mapa | Origen | Se sirve en | Se guarda |
+|------|--------|-------------|-----------|
+| Significativo SIGWX Península (SFC–FL150) | `ama.aemet.es/.../QGQE70LEMM{HH}00________{YYYYMMDD}.png` | `/sigwx/AAAAMMDD/HH.png` | ayer, hoy y mañana (00/06/12/18 UTC) |
+| Viento y temperatura FL020/050/100 (HMAR) | `ama.aemet.es/.../atap/.../VTPLOT_FL{NNN}__.1.png` | `/vtplot/<pasada>/<nivel>/<paso>.png` | hoy y mañana, cada 3 h, pasada más reciente |
+| Análisis en superficie (frentes) | página `www.aemet.es/es/eltiempo/prediccion/mapa_frentes` | `/analisis/AAAAMMDDHH.gif` | solo el último |
+
+- Un hilo de la app revisa cada 5 min qué falta y lo descarga (~4 descargas/día de SIGWX, ~36 por pasada HMAR, la página de frentes como mucho cada 30 min).
+- Lo que ya no se muestra se borra solo: la caché ocupa unos 10 MB estables.
+- Las peticiones se identifican como `LEMR-Meteo/1.0`. Si AEMET bloquea al servidor (HTTP 403), **no** se suplanta un navegador: llega una alerta Telegram y hay que contactar con AEMET.
+- Las imágenes llevan el pie "© AEMET… citando a AEMET como autora": no recortarlo (es la condición de reutilización).
+- La carpeta de caché debe ser escribible por el usuario del servicio (ver [DEPLOYMENT.md](DEPLOYMENT.md#los-mapas-aemet-no-aparecen)). Se puede cambiar con `SIGWX_CACHE_DIR`, `VTPLOT_CACHE_DIR` y `ANALISIS_CACHE_DIR` en `.env`.
+
+La `AEMET_API_KEY` (OpenData) se sigue usando para los avisos CAP de Asturias
+que lee la IA y como respaldo del mapa de análisis.
 
 Además, la IA analiza el mapa para pilotos novatos y lo traduce a impacto operativo ULM en La Morgal.
 

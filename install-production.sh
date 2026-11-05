@@ -70,6 +70,9 @@ fi
 
 # Paso 6: Ajustar permisos
 echo "🔒 Ajustando permisos..."
+# Caché de mapas AEMET (SIGWX, viento FL, análisis): la app escribe aquí
+install -d -m 750 "$INSTALL_DIR/cache" "$INSTALL_DIR/cache/sigwx" \
+    "$INSTALL_DIR/cache/vtplot" "$INSTALL_DIR/cache/analisis"
 chown -R www-data:www-data "$INSTALL_DIR"
 chmod 600 "$INSTALL_DIR/.env"
 

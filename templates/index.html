@@ -431,6 +431,25 @@
       color: #fff;
       font-weight: 600;
     }
+    .utc-btn:disabled,
+    .utc-btn:disabled:hover {
+      opacity: 0.35;
+      cursor: not-allowed;
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+    }
+    .sigwx-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 12px;
+    }
+    .sigwx-row .utc-picker { margin-bottom: 0; }
+    .sigwx-day {
+      min-width: 130px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
     .map-single {
       text-align: center;
     }
@@ -1351,81 +1370,74 @@
       return `<div class="map" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem">Mapa no disponible para este tramo</div>`;
     };
 
-    // ── Datos de slots para el picker UTC ───────────────────
-    window._utcSlots = window._utcSlots || {};
-    window._pickUtc = function (dayId, slotIdx) {
-      const slots = window._utcSlots[dayId];
-      if (!slots || !slots[slotIdx]) return;
-      const slot = slots[slotIdx];
-      document.querySelectorAll('#' + dayId + ' .utc-btn').forEach(function (b, i) {
-        b.classList.toggle('active', i === slotIdx);
+
+    // ── Mapas significativos SIGWX (caché en servidor) ───────
+    // El servidor descarga cada mapa de ama.aemet.es una sola vez y lo sirve
+    // desde /sigwx/AAAAMMDD/HH.png: el navegador nunca toca ama.aemet.es.
+    // Botones = hora UTC de VALIDEZ; gris = aún no disponible.
+    window._sigwxSlots = {};
+    window._pickSigwx = function (key) {
+      const s = window._sigwxSlots[key];
+      if (!s) return;
+      document.querySelectorAll('#sigwx .utc-btn').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.key === key);
       });
-      const labelEl = document.getElementById(dayId + '-label');
-      if (labelEl) labelEl.innerHTML = slot.label;
-      const mapEl = document.getElementById(dayId + '-map');
-      if (mapEl) mapEl.innerHTML = slot.html;
+      document.getElementById('sigwx-label').textContent =
+        `${s.dayLabel} ${fmtDate(s.date)} · válido ${s.utc_hour} UTC`;
+      document.getElementById('sigwx-map').innerHTML =
+        `<a href="${s.url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${s.url}" alt="Mapa significativo AEMET ${s.dayLabel} ${s.utc_hour} UTC" /></a>`;
     };
 
-    const probeMapImg = url => new Promise(res => {
-      const img = new Image();
-      img.onload  = () => res(true);
-      img.onerror = () => res(false);
-      img.referrerPolicy = 'no-referrer';
-      img.src = url;
-    });
+    const SIGWX_STATUS_TITLE = {
+      pending: 'AEMET aún no lo ha publicado',
+      missing: 'Publicado por AEMET pero todavía no descargado; se reintenta solo',
+    };
 
-    const renderDays = async (days) => {
-      const result = [];
+    const renderSigwx = (data) => {
+      const box = document.getElementById("days");
+      const days = (data && data.days) || [];
+      window._sigwxSlots = {};
+      let bestKey = null, bestDist = Infinity;
+      const now = Date.now();
 
-      for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
-        const d = days[dayIdx];
-        if (!d.show_aemet_maps) continue;
-        const rawSlots = d.map_slots || [];
-
-        // El backend puede fallar al verificar ama.aemet.es (bloqueo del hosting),
-        // igual que pasaba con los mapas VTPLOT. Igual que VTPLOT, confirmamos cada
-        // slot cargando la imagen desde el propio navegador antes de mostrarla.
-        const checked = await Promise.all(
-          rawSlots.map(slot => probeMapImg(slot.map_url).then(ok => ok ? slot : null))
-        );
-        const slots = checked.filter(Boolean);
-
-        // Ocultar Mañana (y siguientes) si no tiene mapas publicados
-        if (slots.length === 0 && d.label !== "Hoy") continue;
-
-        const dayId = `day-aemet-${dayIdx}`;
-        window._utcSlots[dayId] = slots.map(slot => ({
-          label: slot.slot_label || (slot.utc_hour + " UTC"),
-          html:  mapImg(slot.map_b64, slot.map_url, `${d.label} ${slot.utc_hour} UTC`),
-        }));
-
-        const slotData = window._utcSlots[dayId];
-        const defaultIdx = slots.length - 1;
-
-        const btnsHtml = slots.map((slot, i) => {
-          const lbl = slot.utc_hour !== undefined ? slot.utc_hour : String(i);
-          return `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${lbl}</button>`;
+      const rows = days.map(d => {
+        const btns = d.slots.map(s => {
+          const key = `${d.date}_${s.utc_hour}`;
+          if (s.status !== 'available') {
+            return `<button class="utc-btn" disabled title="${SIGWX_STATUS_TITLE[s.status] || ''}">${s.utc_hour}</button>`;
+          }
+          window._sigwxSlots[key] = { ...s, date: d.date, dayLabel: d.label };
+          const dist = Math.abs(new Date(s.valid_utc).getTime() - now);
+          if (dist < bestDist) { bestDist = dist; bestKey = key; }
+          return `<button class="utc-btn" data-key="${key}" onclick="window._pickSigwx('${key}')">${s.utc_hour}</button>`;
         }).join("");
+        return `<div class="sigwx-row"><span class="sigwx-day">${d.label} · ${fmtDate(d.date)}</span><div class="utc-picker">${btns}</div></div>`;
+      }).join("");
 
-        const activeHtml  = slotData[defaultIdx]?.html  || `<div class="map" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem">Sin mapas publicados</div>`;
-        const activeLabel = slotData[defaultIdx]?.label || "";
-
-        result.push(`
-          <article class="day" id="${dayId}">
-            <div class="day-head">${d.label} · ${fmtDate(d.date)}</div>
-            <div class="day-body">
-              ${slots.length ? `
-              <div class="utc-picker">${btnsHtml}</div>
-              <div class="map-single">
-                <div class="label" id="${dayId}-label">${activeLabel}</div>
-                <div id="${dayId}-map">${activeHtml}</div>
-              </div>` : `<div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div>`}
+      box.innerHTML = `
+        <article class="day" id="sigwx">
+          <div class="day-head">Península Ibérica · SFC–FL150 · hora UTC de validez</div>
+          <div class="day-body">
+            ${rows}
+            <div class="map-single">
+              <div class="label" id="sigwx-label">${bestKey ? '' : 'Todavía no hay mapas descargados'}</div>
+              <div id="sigwx-map"></div>
             </div>
-          </article>
-        `);
-      }
+            <p class="muted" style="font-size:.72rem;margin:0">© AEMET. Mapa SIGWX reproducido citando a AEMET como autora. Consulta GAMET, AIRMET y SIGMET en vigor.</p>
+          </div>
+        </article>`;
+      if (bestKey) window._pickSigwx(bestKey);
+    };
 
-      document.getElementById("days").innerHTML = result.join("");
+    const loadSigwx = async () => {
+      try {
+        const r = await fetch("/api/sigwx", { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        renderSigwx(await r.json());
+      } catch (e) {
+        document.getElementById("days").innerHTML =
+          '<p class="muted" style="text-align:center">⚠️ No se pudo cargar la lista de mapas significativos.</p>';
+      }
     };
 
     const renderWindy = (windy) => {
@@ -1968,7 +1980,7 @@
           : `<tr><td colspan="6" class="muted">Sin datos horarios Windy en este ciclo</td></tr>`;
       }
 
-      renderDays(data.forecast_days || []);
+      loadSigwx();
       setLoadStatus("");
     };
 
@@ -2037,7 +2049,7 @@
 
         // Cargar datos de Ogimet y mapas FL de forma diferida (no bloquean la carga inicial)
         setTimeout(() => loadOgimetWeek(), 100);
-        setTimeout(() => renderFlMaps('020'), 200);
+        setTimeout(loadFlMaps, 200);
       } catch {
         setLoadStatus("⚠️ Error al cargar datos iniciales.", true);
       }
@@ -2133,181 +2145,80 @@
     // ========================================================================
     // MAPAS VIENTO Y TEMPERATURA EN NIVELES DE VUELO (VTPLOT)
     // ========================================================================
+    // Igual que los SIGWX: el servidor descarga cada imagen de ama.aemet.es una
+    // sola vez y la sirve desde /vtplot/...; aquí solo se pide /api/vtplot.
+    // Para cada hora de validez el servidor ya elige la pasada HMAR más reciente.
 
-    const _flSteps = ['003','006','009','012','015','018','021','024','027','030','033','036'];
-    let _flFoundRuns = null;
-    let _flActive    = '020';
-    const _flStepCache = {}; // key: `${date}_${runH}_${level}` → confirmed step array
+    let _flData   = null;
+    let _flActive = '020';
+    window._flSlots = {};
 
-    const _flUrl = (date, runH, level, step) =>
-      `https://ama.aemet.es/o/estaticos/productos/atap/${date}/HMAR/${runH}/P3/${step}/VTPLOT_FL${level}__.1.png`;
+    window._pickFl = function (key) {
+      const s = window._flSlots[key];
+      if (!s) return;
+      document.querySelectorAll('#fl-maps-container .utc-btn').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.key === key);
+      });
+      document.getElementById('fl-label').innerHTML =
+        `${s.dayLabel} ${fmtDate(s.date)} · válido ${s.utc_hour} UTC <span style="font-size:.8em;opacity:.55">pasada ${s.run}</span>`;
+      document.getElementById('fl-map').innerHTML =
+        `<a href="${s.url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${s.url}" alt="Viento y temperatura FL${_flActive} ${s.utc_hour} UTC" /></a>`;
+    };
 
-    const _flProbeImg = url => new Promise(res => {
-      const img = new Image();
-      img.onload  = () => res(true);
-      img.onerror = () => res(false);
-      img.referrerPolicy = 'no-referrer';
-      img.src = url;
-    });
-
-    async function _flDetectRuns() {
-      if (_flFoundRuns !== null) return;
-      const candidates = [];
-      const now = new Date();
-      for (let d = 0; d <= 1; d++) {
-        const dt = new Date(now);
-        dt.setDate(dt.getDate() - d);
-        const dateStr = dt.toISOString().slice(0, 10).replace(/-/g, '');
-        for (const h of ['18','12','06','00']) {
-          candidates.push({ date: dateStr, runH: h });
-        }
-      }
-      const results = await Promise.all(
-        candidates.map(c =>
-          _flProbeImg(_flUrl(c.date, c.runH, '020', '003')).then(ok => ok ? c : null)
-        )
-      );
-      _flFoundRuns = results.filter(Boolean);
-    }
-
-    async function _flGetConfirmedSteps(date, runH, level) {
-      const key = `${date}_${runH}_${level}`;
-      if (_flStepCache[key]) return _flStepCache[key];
-      // Probe all steps in parallel for this run + level
-      const probes = await Promise.all(
-        _flSteps.map(s => _flProbeImg(_flUrl(date, runH, level, s)).then(ok => ok ? s : null))
-      );
-      _flStepCache[key] = probes.filter(Boolean);
-      return _flStepCache[key];
-    }
-
-    async function renderFlMaps(level) {
+    function renderFlMaps(level) {
       _flActive = level;
       const container = document.getElementById('fl-maps-container');
       const infoEl    = document.getElementById('fl-run-info');
+      if (!_flData) return;
 
-      // Only show spinner on first load (before runs are known)
-      if (_flFoundRuns === null) {
-        container.innerHTML = '<p class="muted" style="text-align:center">⏳ Cargando...</p>';
-        if (infoEl) infoEl.style.display = 'none';
-      }
+      window._flSlots = {};
+      let bestKey = null, bestDist = Infinity;
+      const now  = Date.now();
+      const runs = new Set();
 
-      await _flDetectRuns();
+      const rows = (_flData.days || []).map(d => {
+        const btns = d.slots.map(s => {
+          const m = s.maps[level];
+          if (!m) return `<button class="utc-btn" disabled title="Aún no publicado por AEMET">${s.utc_hour}</button>`;
+          const key = `${d.date}_${s.utc_hour}`;
+          window._flSlots[key] = { ...m, utc_hour: s.utc_hour, date: d.date, dayLabel: d.label };
+          runs.add(m.run);
+          const dist = Math.abs(new Date(s.valid_utc).getTime() - now);
+          if (dist < bestDist) { bestDist = dist; bestKey = key; }
+          return `<button class="utc-btn" data-key="${key}" onclick="window._pickFl('${key}')">${s.utc_hour}</button>`;
+        }).join('');
+        return `<div class="sigwx-row"><span class="sigwx-day">${d.label} · ${fmtDate(d.date)}</span><div class="utc-picker">${btns}</div></div>`;
+      }).join('');
 
-      if (!_flFoundRuns.length) {
-        container.innerHTML = '<p class="muted" style="text-align:center">⚠️ Mapas VTPLOT no disponibles en este momento.</p>';
-        return;
-      }
-
-      const nowUtc   = new Date();
-      const todayStr = nowUtc.toISOString().slice(0, 10).replace(/-/g, '');
-      const tmrwDt   = new Date(nowUtc); tmrwDt.setUTCDate(tmrwDt.getUTCDate() + 1);
-      const tmrwStr  = tmrwDt.toISOString().slice(0, 10).replace(/-/g, '');
-
-      // Build confirmed slot groups by probing each candidate run in parallel
-      const allGroups = await Promise.all(_flFoundRuns.map(async ({ date, runH }) => {
-        const confirmedSteps = await _flGetConfirmedSteps(date, runH, level);
-        const runMs = Date.UTC(
-          parseInt(date.slice(0,4), 10),
-          parseInt(date.slice(4,6), 10) - 1,
-          parseInt(date.slice(6,8), 10),
-          parseInt(runH, 10)
-        );
-        const today = [], tmrw = [];
-        for (const step of confirmedSteps) {
-          const validMs = runMs + parseInt(step, 10) * 3600000;
-          const validDt = new Date(validMs);
-          const validDs = validDt.toISOString().slice(0, 10).replace(/-/g, '');
-          const utcH    = String(validDt.getUTCHours()).padStart(2, '0');
-          if      (validDs === todayStr) today.push({ step, utcH, url: _flUrl(date, runH, level, step) });
-          else if (validDs === tmrwStr)  tmrw.push({ step, utcH, url: _flUrl(date, runH, level, step) });
-        }
-        return { date, runH, today, tmrw };
-      }));
-
-      // Build a merged map: validTime → most-recent run that has it.
-      // _flFoundRuns is ordered most-recent first (18Z today → 12Z today → 06Z today → …)
-      // so the first entry that contains a given valid time wins.
-      const byValidTime = {};  // key: "YYYYMMDD_HH" → { utcH, url, runH, ds }
-      for (const { date, runH, today, tmrw } of allGroups) {
-        for (const slot of [...today, ...tmrw]) {
-          const runMs = Date.UTC(
-            parseInt(date.slice(0,4),10), parseInt(date.slice(4,6),10)-1,
-            parseInt(date.slice(6,8),10), parseInt(runH,10)
-          );
-          const validDt = new Date(runMs + parseInt(slot.step,10)*3600000);
-          const ds   = validDt.toISOString().slice(0,10).replace(/-/g,'');
-          const tkey = `${ds}_${slot.utcH}`;
-          if (!byValidTime[tkey]) {   // first = most recent run
-            byValidTime[tkey] = { utcH: slot.utcH, url: slot.url, runH, ds };
-          }
-        }
-      }
-
-      // Group by day
-      const todaySlots = Object.values(byValidTime).filter(s => s.ds === todayStr).sort((a,b) => a.utcH.localeCompare(b.utcH));
-      const tmrwSlots  = Object.values(byValidTime).filter(s => s.ds === tmrwStr ).sort((a,b) => a.utcH.localeCompare(b.utcH));
-
-      const _fmtDs = (ds) => {
-        const fmt = `${ds.slice(6,8)}-${ds.slice(4,6)}-${ds.slice(0,4)}`;
-        return ds === todayStr ? `Hoy · ${fmt}` : `Mañana · ${fmt}`;
-      };
-
-      const makeCard = (ds, slots) => {
-        if (!slots.length) return ds === todayStr
-          ? `<article class="day"><div class="day-head">${_fmtDs(ds)}</div><div class="day-body"><div class="map-slot"><div class="label">Sin mapas publicados para este día</div></div></div></article>`
-          : '';
-
-        const dayId = `fl-${ds}-${level}`;
-        window._utcSlots = window._utcSlots || {};
-        window._utcSlots[dayId] = slots.map(({ utcH, url, runH }) => ({
-          label: `${utcH} UTC <span style="font-size:.7em;opacity:.55">${runH}Z</span>`,
-          html:  `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="FL${level} ${utcH}Z" loading="lazy" referrerpolicy="no-referrer" /></a>`,
-        }));
-
-        const slotData   = window._utcSlots[dayId];
-        // Default: slot más cercano a las 12 UTC
-        const defaultIdx = (() => {
-          let best = 0, bestDiff = Infinity;
-          slots.forEach(({ utcH }, i) => {
-            const diff = Math.abs(parseInt(utcH, 10) - 12);
-            if (diff < bestDiff) { bestDiff = diff; best = i; }
-          });
-          return best;
-        })();
-
-        const btnsHtml    = slots.map(({ utcH }, i) =>
-          `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${utcH}</button>`
-        ).join('');
-        const activeHtml  = slotData[defaultIdx]?.html  || '';
-        const activeLabel = slotData[defaultIdx]?.label || '';
-
-        return `
-          <article class="day" id="${dayId}">
-            <div class="day-head">${_fmtDs(ds)}</div>
-            <div class="day-body">
-              <div class="utc-picker">${btnsHtml}</div>
-              <div class="map-single">
-                <div class="label" id="${dayId}-label">${activeLabel}</div>
-                <div id="${dayId}-map">${activeHtml}</div>
-              </div>
-            </div>
-          </article>`;
-      };
-
-      const todayCard = makeCard(todayStr, todaySlots);
-      const tmrwCard  = makeCard(tmrwStr,  tmrwSlots);
-
-      // Run info chip
       if (infoEl) {
-        const runLabels = allGroups
-          .filter(g => g.today.length > 0 || g.tmrw.length > 0)
-          .map(g => `Run ${g.runH}Z`);
-        infoEl.style.display = '';
-        const baseDate = allGroups[0];
-        infoEl.textContent = `📡 ${baseDate.date.slice(0,4)}-${baseDate.date.slice(4,6)}-${baseDate.date.slice(6,8)} · ` + runLabels.join(' · ');
+        infoEl.style.display = runs.size ? '' : 'none';
+        infoEl.textContent = `📡 HMAR · pasadas ${[...runs].sort().join(' · ')}`;
       }
-      container.innerHTML = `<div class="days">${todayCard}${tmrwCard}</div>`;
+      container.innerHTML = `
+        <article class="day">
+          <div class="day-head">FL${level} · hora UTC de validez</div>
+          <div class="day-body">
+            ${rows}
+            <div class="map-single">
+              <div class="label" id="fl-label">${bestKey ? '' : 'Todavía no hay mapas descargados para este nivel'}</div>
+              <div id="fl-map"></div>
+            </div>
+            <p class="muted" style="font-size:.72rem;margin:0">© AEMET. Mapas reproducidos citando a AEMET como autora.</p>
+          </div>
+        </article>`;
+      if (bestKey) window._pickFl(bestKey);
+    }
+
+    async function loadFlMaps() {
+      try {
+        const r = await fetch('/api/vtplot', { cache: 'no-store' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        _flData = await r.json();
+        renderFlMaps(_flActive);
+      } catch (e) {
+        document.getElementById('fl-maps-container').innerHTML =
+          '<p class="muted" style="text-align:center">⚠️ No se pudo cargar la lista de mapas de niveles de vuelo.</p>';
+      }
     }
 
     // Tab clicks for FL maps

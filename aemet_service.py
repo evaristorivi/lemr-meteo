@@ -7,8 +7,12 @@ Flujo AEMET en dos pasos:
   2) GET a esa URL temporal → contenido real (imagen PNG, JSON, etc.)
 """
 import base64
+import os
+import re
+import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Optional, Dict, List
 from zoneinfo import ZoneInfo
 
@@ -50,10 +54,7 @@ def _aemet_get(endpoint: str, timeout: int = 15) -> Optional[dict]:
     Añade delay automático entre peticiones para evitar bloqueos.
     """
     global _LAST_AEMET_REQUEST_TIME, _AEMET_REQUEST_COUNT
-    
-    # Limpiar caché si es necesario
-    _clear_cache_if_needed()
-    
+
     # Protección rate-limit: esperar si la última petición fue muy reciente
     time_since_last = time.time() - _LAST_AEMET_REQUEST_TIME
     if time_since_last < _MIN_REQUEST_INTERVAL:
@@ -115,44 +116,50 @@ def _fetch_datos_url(datos_url: str, timeout: int = 15, as_bytes: bool = False):
         return None
 
 
-# ─────── Mapas significativos (vía URL directa ama.aemet.es) ───────
-# ⚠️ NO se usa la API OpenData autenticada para los mapas significativos.
-# El endpoint /api/mapasygraficos/mapassignificativos/... existe pero AEMET
-# no publica datos por él de forma fiable (devuelve 404 "No hay datos que
-# satisfagan esos criterios" la mayoría del tiempo, verificado 2026-03-23).
-# En cambio, ama.aemet.es publica las imágenes con el patrón:
-#   QGQE70LEMM{HH}00________{YYYYMMDD}.png
-# donde HH = 00, 06, 12, 18 (horas UTC)
+# ──────── Mapas significativos SIGWX (caché en servidor) ────────
+# El SERVIDOR descarga cada mapa UNA sola vez de ama.aemet.es, lo guarda en
+# disco y lo sirve desde nuestro propio dominio (/sigwx/AAAAMMDD/HH.png). El
+# navegador del usuario nunca toca ama.aemet.es, así que no le afecta el WAF
+# anti-bot ni sus cookies.
+#
+# Patrón de AEMET:  QGQE70LEMM{HH}00________{YYYYMMDD}.png  (HH = emisión UTC)
+# Validez = emisión + 12 h (verificado 2026-11-05 con el pie del propio mapa).
+# Los botones son horas de VALIDEZ: 12 UTC del día D = fichero 0000 del día D, 00 UTC del día D =
+# fichero 1200 del día D-1, etc.
+#
+# ⚠️ NO se usa la API OpenData para estos mapas: su endpoint
+# /api/mapasygraficos/mapassignificativos/ devuelve 404 casi siempre
+# (verificado 2026-03-23).
+#
+# Peticiones honestas: User-Agent identificativo y sin seguir redirecciones.
+# Si AEMET bloquea al servidor (403 / redirección al reto del WAF) NO se
+# intenta esquivar suplantando un navegador: se registra y se avisa por
+# Telegram. ~4 descargas al día en total.
 AMA_MAP_BASE = "https://ama.aemet.es/o/estaticos/bbdd/imagenes"
-SIG_MAP_UTC_HOURS = ["00", "06", "12", "18"]
+SIG_MAP_UTC_HOURS = ("00", "06", "12", "18")
+SIGWX_DAYS = ((-1, "Ayer"), (0, "Hoy"), (1, "Mañana"))
 
-# Cabeceras de navegador real: algunos hostings (datacenter) reciben 403/redirect
-# de ama.aemet.es con el User-Agent por defecto de requests (anti-bot).
-_BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
-    ),
-    "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8",
-}
+# Horas que tarda AEMET en publicar un mapa tras su hora nominal de emisión.
+SIG_MAP_PUBLISH_LAG_H = float(getattr(config, "SIG_MAP_PUBLISH_LAG_H", 3))
+SIGWX_CACHE_DIR = Path(getattr(config, "SIGWX_CACHE_DIR", "")
+                       or Path(__file__).resolve().parent / "cache" / "sigwx")
 
-# Caché de URLs verificadas (evita verificar la misma URL múltiples veces)
-# valores: 'ok' | '404' | 'uncertain'
-_URL_AVAILABILITY_CACHE: Dict[str, str] = {}
-_CACHE_LAST_CLEAR_TIME = time.time()
-_CACHE_CLEAR_INTERVAL = 1800  # Limpiar caché cada 30 minutos
+_SIGWX_USER_AGENT = "LEMR-Meteo/1.0 (+https://lemr-meteo.evaristorivieccio.com/)"
+_SIGWX_SYNC_INTERVAL_S = 5 * 60   # cada cuánto mira si hay mapas nuevos
+_SIGWX_RETRY_S = 15 * 60          # espera entre reintentos de un mismo mapa
+_SIGWX_ALERT_AFTER_H = 6          # retraso tras el que se avisa por Telegram
+_SIGWX_ALERT_EVERY_S = 6 * 3600   # como mucho un aviso cada 6 h
+_SIGWX_MAX_BYTES = 5 * 1024 * 1024
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_SIGWX_FILE_RE = re.compile(r"^(\d{8})_(\d{2})\.png$")
 
-# Contador de peticiones AEMET (para monitoring)
+_SIGWX_LOCK = threading.Lock()
+_SIGWX_LAST_ATTEMPT: Dict[str, float] = {}
+_SIGWX_LAST_ERROR: Dict[str, str] = {}
+_SIGWX_LAST_ALERT = 0.0
+
+# Contador de peticiones AEMET OpenData (para monitoring)
 _AEMET_REQUEST_COUNT = 0
-
-
-def _clear_cache_if_needed():
-    """Limpia el caché de URLs si ha pasado el intervalo de tiempo."""
-    global _URL_AVAILABILITY_CACHE, _CACHE_LAST_CLEAR_TIME
-    if time.time() - _CACHE_LAST_CLEAR_TIME > _CACHE_CLEAR_INTERVAL:
-        _URL_AVAILABILITY_CACHE.clear()
-        _CACHE_LAST_CLEAR_TIME = time.time()
-        print("🧹 Caché de URLs AEMET limpiado")
 
 
 def get_aemet_request_count() -> int:
@@ -160,197 +167,557 @@ def get_aemet_request_count() -> int:
     return _AEMET_REQUEST_COUNT
 
 
-def _check_map_status(url: str, timeout: int = 5) -> str:
-    """Clasifica la disponibilidad de una URL de mapa significativo.
-
-    Devuelve 'ok' (imagen confirmada), '404' (AEMET confirma que aún no lo ha
-    publicado — normal, sobre todo para 'Mañana') o 'uncertain' (403/5xx/
-    timeout/error de red — no podemos confiar en que el mapa no exista, puede
-    ser un bloqueo del hosting hacia ama.aemet.es, no un 404 real).
-    """
-    if url in _URL_AVAILABILITY_CACHE:
-        return _URL_AVAILABILITY_CACHE[url]
-
-    status: str = "uncertain"
-    last_info = None
-    try:
-        resp = requests.head(url, timeout=timeout, allow_redirects=True, headers=_BROWSER_HEADERS)
-        last_info = resp.status_code
-        if resp.status_code == 200:
-            content_type = (resp.headers.get("Content-Type") or "").lower()
-            if "image" in content_type or "png" in content_type or not content_type:
-                status = "ok"
-        elif resp.status_code == 404:
-            status = "404"
-    except Exception as exc:
-        last_info = f"EXC:{exc}"
-
-    if status == "uncertain":
-        try:
-            resp = requests.get(url, timeout=timeout, stream=True, headers=_BROWSER_HEADERS)
-            last_info = resp.status_code
-            if resp.status_code == 200:
-                status = "ok"
-            elif resp.status_code == 404:
-                status = "404"
-            resp.close()
-        except Exception as exc:
-            last_info = f"EXC:{exc}"
-
-    if status != "ok":
-        print(f"⚠️ Mapa significativo [{status}] ({last_info}): {url}")
-
-    # Cachear resultado (evita verificar de nuevo en este ciclo)
-    _URL_AVAILABILITY_CACHE[url] = status
-    return status
-
-
-def _direct_sig_map_url(target_date: date, utc_hour: str) -> str:
-    """Construye la URL directa ama.aemet.es para un mapa significativo."""
+def _direct_sig_map_url(issue_date: date, issue_hour: str) -> str:
+    """URL de ama.aemet.es de un mapa significativo, por fecha/hora de EMISIÓN."""
     return (
-        f"{AMA_MAP_BASE}/QGQE70LEMM{utc_hour}00________"
-        f"{target_date.strftime('%Y%m%d')}.png"
+        f"{AMA_MAP_BASE}/QGQE70LEMM{issue_hour}00________"
+        f"{issue_date.strftime('%Y%m%d')}.png"
     )
 
 
-def get_significant_maps_for_three_days(ambito: str = "esp") -> List[Dict]:
-    """
-    Obtiene los mapas significativos para hoy y mañana por slots UTC reales
-    (00, 06, 12, 18). Se sirve la URL directa (map_url) y el frontend la carga
-    con referrerpolicy="no-referrer" para esquivar el anti-hotlinking de
-    ama.aemet.es; map_b64 se deja reservado por si algún día hace falta volver
-    a incrustar en base64.
-
-    Returns:
-        Lista de dicts con keys: date, label, utc_hour, slot_label, map_url,
-        map_b64, source_date, source_utc_hour, verified (bool, True si el
-        backend pudo confirmar la imagen con HTTP 200).
-    """
+def _sigwx_slots(now_utc: Optional[datetime] = None) -> List[Dict]:
+    """Slots de ayer/hoy/mañana por hora UTC de validez (sin peticiones HTTP)."""
+    now_utc = now_utc or datetime.now(timezone.utc)
     today = datetime.now(MADRID_TZ).date()
-    labels = ["Hoy", "Mañana"]
-    results = []
-
-    # Mapeo de desfase conocido para AEMET (verificado con AerBrava):
-    # AEMET publica mapas con anticipación. La fuente de verdad es este mapeo:
-    # - 00 UTC: QGQE70LEMM1200________{fecha_anterior}
-    # - 06 UTC: QGQE70LEMM1800________{fecha_anterior}
-    # - 12 UTC: QGQE70LEMM0000________{fecha_actual}
-    # - 18 UTC: QGQE70LEMM0600________{fecha_actual}
-    desfase_map = {
-        "00": {"delta_date": -1, "source_hour": "12"},
-        "06": {"delta_date": -1, "source_hour": "18"},
-        "12": {"delta_date": 0, "source_hour": "00"},
-        "18": {"delta_date": 0, "source_hour": "06"},
-    }
-
-    for delta in range(2):
-        target = today + timedelta(days=delta)
-        day_results: List[Dict] = []
-
-        # Intentar cada hora UTC con su mapeo de desfase
-        for target_hour in SIG_MAP_UTC_HOURS:
-            mapping = desfase_map.get(target_hour, {})
-            source_d = today + timedelta(days=delta + mapping.get("delta_date", 0))
-            source_h = mapping.get("source_hour", target_hour)
-            
-            url = _direct_sig_map_url(source_d, source_h)
-
-            status = _check_map_status(url, timeout=5)
-            # Solo descartamos si AEMET confirma 404 (aún no publicado).
-            # Si es 'uncertain' (posible bloqueo de red al hosting) lo incluimos
-            # igualmente: el navegador del usuario carga la URL directamente
-            # (referrerpolicy=no-referrer) y sí suele funcionar aunque el backend
-            # no pueda verificarla; si al final tampoco existe, el <img onerror>
-            # del frontend la oculta.
-            if status == "404":
-                continue
-
-            day_results.append({
-                "date": target.isoformat(),
-                "label": labels[delta],
-                "utc_hour": target_hour,
-                "slot_label": f"{target_hour} UTC",
-                "map_url": url,
-                "map_b64": None,
-                "source_date": source_d.isoformat(),
-                "source_utc_hour": source_h,
-                "verified": status == "ok",
+    slots = []
+    for offset, label in SIGWX_DAYS:
+        d = today + timedelta(days=offset)
+        for hh in SIG_MAP_UTC_HOURS:
+            valid = datetime(d.year, d.month, d.day, int(hh), tzinfo=timezone.utc)
+            issue = valid - timedelta(hours=12)
+            due_at = issue + timedelta(hours=SIG_MAP_PUBLISH_LAG_H)
+            slots.append({
+                "key": f"{d:%Y%m%d}_{hh}",
+                "date": d,
+                "label": label,
+                "offset": offset,
+                "utc_hour": hh,
+                "valid": valid,
+                "due_at": due_at,
+                "due": due_at <= now_utc,
+                "source_url": _direct_sig_map_url(issue.date(), f"{issue.hour:02d}"),
             })
+    return slots
 
-        # "Hoy" (delta=0) solo llega aquí vacío si AEMET confirmó 404 (no
-        # 'uncertain', esos ya se incluyen de forma optimista) en los 4 slots:
-        # señal real de que AEMET no ha publicado nada todavía, no de bloqueo.
-        if delta == 0 and not day_results:
+
+def _sigwx_path(key: str) -> Path:
+    return SIGWX_CACHE_DIR / f"{key}.png"
+
+
+def _ama_download(url: str, dest: Path, signature: bytes = _PNG_SIGNATURE) -> Optional[str]:
+    """Descarga una imagen de AEMET a dest (escritura atómica), comprobando que
+    empieza por `signature` (PNG por defecto). None si OK o el motivo del fallo."""
+    try:
+        resp = requests.get(
+            url,
+            headers={"User-Agent": _SIGWX_USER_AGENT, "Accept": "image/*"},
+            timeout=20,
+            stream=True,
+            allow_redirects=False,  # una redirección = reto del WAF, no un mapa
+        )
+    except Exception as exc:
+        return f"error de red: {exc}"
+    try:
+        if resp.status_code != 200:
+            return f"HTTP {resp.status_code}"
+        data = bytearray()
+        for chunk in resp.iter_content(64 * 1024):
+            data.extend(chunk)
+            if len(data) > _SIGWX_MAX_BYTES:
+                return "respuesta demasiado grande"
+    finally:
+        resp.close()
+    if not bytes(data).startswith(signature):
+        return "la respuesta no es la imagen esperada (¿página del WAF?)"
+
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(dest.name + ".tmp")
+        tmp.write_bytes(bytes(data))
+        os.replace(tmp, dest)  # atómico: nunca se sirve un fichero a medias
+    except OSError as exc:
+        return f"no se pudo escribir en {dest.parent}: {exc}"
+    return None
+
+
+def _sigwx_purge(keep_keys: set) -> None:
+    """Borra de la caché lo que ya no pertenece a ayer/hoy/mañana."""
+    if not SIGWX_CACHE_DIR.is_dir():
+        return
+    for f in SIGWX_CACHE_DIR.iterdir():
+        if f.name.endswith(".tmp") or (
+            _SIGWX_FILE_RE.match(f.name) and f.stem not in keep_keys
+        ):
+            try:
+                f.unlink()
+            except OSError as exc:
+                print(f"⚠️ SIGWX: no se pudo borrar {f.name}: {exc}")
+
+
+def sync_sigwx_cache() -> Dict[str, int]:
+    """Descarga los mapas ya publicados que falten en la caché y purga los viejos."""
+    global _SIGWX_LAST_ALERT
+    if not _SIGWX_LOCK.acquire(blocking=False):
+        return {"skipped": 1}
+    try:
+        now = time.time()
+        slots = _sigwx_slots()
+        stats = {"downloaded": 0, "failed": 0, "cached": 0}
+        overdue = []
+        for slot in slots:
+            if _sigwx_path(slot["key"]).exists():
+                stats["cached"] += 1
+                continue
+            if not slot["due"]:
+                continue
+            if now - _SIGWX_LAST_ATTEMPT.get(slot["key"], 0) < _SIGWX_RETRY_S:
+                continue
+            _SIGWX_LAST_ATTEMPT[slot["key"]] = now
+            err = _ama_download(slot["source_url"], _sigwx_path(slot["key"]))
+            if err is None:
+                stats["downloaded"] += 1
+                _SIGWX_LAST_ERROR.pop(slot["key"], None)
+                print(f"✅ SIGWX descargado {slot['key']} ← {slot['source_url']}")
+                continue
+            stats["failed"] += 1
+            _SIGWX_LAST_ERROR[slot["key"]] = err
+            print(f"⚠️ SIGWX {slot['key']}: {err} ({slot['source_url']})")
+            late = datetime.now(timezone.utc) - slot["due_at"]
+            if slot["offset"] >= 0 and late > timedelta(hours=_SIGWX_ALERT_AFTER_H):
+                overdue.append(f"{slot['key']} ({err})")
+
+        _sigwx_purge({s["key"] for s in slots})
+
+        if overdue and now - _SIGWX_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
+            _SIGWX_LAST_ALERT = now
             from telegram_monitor import send_alert as _tg_alert_maps
             _tg_alert_maps(
-                "Mapas significativos AEMET: AEMET confirma 404 (no publicado) "
-                "en los 4 slots UTC de HOY. Revisa https://ama.aemet.es manualmente.",
+                "Mapas significativos AEMET sin descargar tras "
+                f"{_SIGWX_ALERT_AFTER_H} h de retraso: " + ", ".join(overdue)
+                + ". Si es HTTP 403 o 'no es un PNG', ama.aemet.es está "
+                "bloqueando al servidor: no suplantar navegador, contactar con AEMET.",
                 source="aemet_sig_maps",
                 level="ERROR",
             )
+        return stats
+    except Exception as exc:
+        print(f"❌ SIGWX sync error: {exc}")
+        return {"error": 1}
+    finally:
+        _SIGWX_LOCK.release()
 
-        results.extend(day_results)
 
-    return results
+def get_sigwx_listing() -> List[Dict]:
+    """
+    Estado actual de los mapas SIGWX (lee el disco, sin peticiones HTTP).
+
+    Returns:
+        [{date, label, slots: [{utc_hour, valid_utc, status, url, source_url}]}]
+        status: 'available' (en caché, url = /sigwx/AAAAMMDD/HH.png),
+                'pending' (AEMET aún no lo ha publicado) o
+                'missing' (debería estar publicado pero no se pudo descargar).
+    """
+    days: Dict[str, Dict] = {}
+    for slot in _sigwx_slots():
+        day = days.setdefault(slot["date"].isoformat(), {
+            "date": slot["date"].isoformat(),
+            "label": slot["label"],
+            "slots": [],
+        })
+        cached = _sigwx_path(slot["key"]).exists()
+        status = "available" if cached else ("missing" if slot["due"] else "pending")
+        day["slots"].append({
+            "utc_hour": slot["utc_hour"],
+            "valid_utc": slot["valid"].isoformat(),
+            "status": status,
+            "url": f"/sigwx/{slot['date']:%Y%m%d}/{slot['utc_hour']}.png" if cached else None,
+            "source_url": slot["source_url"],
+        })
+    return list(days.values())
+
+
+def sigwx_file_path(yyyymmdd: str, utc_hour: str) -> Optional[Path]:
+    """Ruta en disco de un mapa en caché, validando la entrada (sin path traversal)."""
+    if not re.fullmatch(r"\d{8}", yyyymmdd or "") or utc_hour not in SIG_MAP_UTC_HOURS:
+        return None
+    path = _sigwx_path(f"{yyyymmdd}_{utc_hour}")
+    return path if path.is_file() else None
+
+
+# ───── Viento y temperatura en niveles de vuelo (VTPLOT, modelo HMAR) ─────
+# Misma estrategia que los SIGWX: el servidor descarga cada imagen UNA vez y
+# la sirve desde /vtplot/<pasada>/<nivel>/<paso>.png. Antes el navegador de
+# cada visitante sondeaba cientos de URLs de ama.aemet.es (8 pasadas x 12
+# pasos x nivel), justo lo que dispara el WAF anti-bot.
+#
+# Patrón: atap/{YYYYMMDD}/HMAR/{HH}/P3/{PPP}/VTPLOT_FL{NNN}__.1.png
+#   HH  = pasada del modelo (00, 06, 12, 18 UTC)
+#   PPP = alcance en horas (003..036 de 3 en 3) → validez = pasada + PPP
+# AEMET publica cada pasada por partes (verificado 2026-11-05 18:20 UTC: la
+# de 12Z tenía +003 pero aún no +036; la de 18Z, nada). Por eso, para cada
+# hora de validez se usa la pasada MÁS RECIENTE que ya tenga esa imagen y, si
+# aún no está, la anterior.
+VTPLOT_LEVELS = ("020", "050", "100")
+VTPLOT_STEPS = tuple(f"{h:03d}" for h in range(3, 37, 3))
+VTPLOT_RUN_HOURS = (0, 6, 12, 18)
+VTPLOT_DAYS = ((0, "Hoy"), (1, "Mañana"))
+VTPLOT_CACHE_DIR = Path(getattr(config, "VTPLOT_CACHE_DIR", "")
+                        or SIGWX_CACHE_DIR.parent / "vtplot")
+_VTPLOT_RUN_LAG_H = 3            # antes de esto ni se pregunta por una pasada
+_VTPLOT_ALERT_AFTER_H = 18       # sin ninguna pasada nueva en este tiempo → aviso
+_VTPLOT_FILE_RE = re.compile(r"^(\d{10})$")
+
+_VTPLOT_LOCK = threading.Lock()
+_VTPLOT_RUN_PUBLISHED: set = set()          # pasadas confirmadas (YYYYMMDDHH)
+_VTPLOT_LAST_ATTEMPT: Dict[str, float] = {}  # pasada o fichero → último intento
+_VTPLOT_LAST_ALERT = 0.0
+
+
+def _vtplot_source_url(run: datetime, level: str, step: str) -> str:
+    return (
+        "https://ama.aemet.es/o/estaticos/productos/atap/"
+        f"{run:%Y%m%d}/HMAR/{run:%H}/P3/{step}/VTPLOT_FL{level}__.1.png"
+    )
+
+
+def _vtplot_path(run_key: str, level: str, step: str) -> Path:
+    return VTPLOT_CACHE_DIR / run_key / f"{level}_{step}.png"
+
+
+def _vtplot_valid_times() -> List[datetime]:
+    today = datetime.now(MADRID_TZ).date()
+    out = []
+    for offset, _ in VTPLOT_DAYS:
+        d = today + timedelta(days=offset)
+        for h in range(0, 24, 3):
+            out.append(datetime(d.year, d.month, d.day, h, tzinfo=timezone.utc))
+    return out
+
+
+def _vtplot_candidate_runs(now_utc: datetime) -> List[datetime]:
+    """Pasadas que pueden cubrir hoy/mañana y que ya podrían estar publicadas."""
+    first_valid = _vtplot_valid_times()[0]
+    start = first_valid - timedelta(hours=36)
+    start = start.replace(hour=(start.hour // 6) * 6, minute=0, second=0, microsecond=0)
+    runs, r = [], start
+    while r + timedelta(hours=_VTPLOT_RUN_LAG_H) <= now_utc:
+        runs.append(r)
+        r += timedelta(hours=6)
+    return list(reversed(runs))  # la más reciente primero
+
+
+def _vtplot_run_published(run: datetime, now: float) -> bool:
+    """¿Ha empezado AEMET a publicar la pasada? 1 petición, con reintento cada 15 min."""
+    key = f"{run:%Y%m%d%H}"
+    if key in _VTPLOT_RUN_PUBLISHED:
+        return True
+    probe = _vtplot_path(key, VTPLOT_LEVELS[0], VTPLOT_STEPS[0])
+    if probe.exists():
+        _VTPLOT_RUN_PUBLISHED.add(key)
+        return True
+    if now - _VTPLOT_LAST_ATTEMPT.get(key, 0) < _SIGWX_RETRY_S:
+        return False
+    _VTPLOT_LAST_ATTEMPT[key] = now
+    err = _ama_download(_vtplot_source_url(run, VTPLOT_LEVELS[0], VTPLOT_STEPS[0]), probe)
+    if err is None:
+        _VTPLOT_RUN_PUBLISHED.add(key)
+        print(f"✅ VTPLOT pasada {key} publicada")
+        return True
+    return False
+
+
+def _vtplot_select(now_utc: datetime, download: bool) -> Dict:
+    """
+    Para cada (validez, nivel) elige la pasada más reciente con imagen. Si
+    download=True descarga lo que falte (solo de pasadas ya publicadas).
+    Devuelve {(valid, level): (run_key, step)}.
+    """
+    now = time.time()
+    runs = _vtplot_candidate_runs(now_utc)
+    if download:
+        published = [r for r in runs if _vtplot_run_published(r, now)]
+        # olvida pasadas que ya no pueden cubrir hoy/mañana
+        _VTPLOT_RUN_PUBLISHED.intersection_update(f"{r:%Y%m%d%H}" for r in runs)
+    else:
+        published = runs  # solo lectura: basta con lo que haya en disco
+    selection = {}
+    for valid in _vtplot_valid_times():
+        for level in VTPLOT_LEVELS:
+            for run in published:
+                hours = int((valid - run).total_seconds() // 3600)
+                step = f"{hours:03d}"
+                if step not in VTPLOT_STEPS:
+                    continue
+                run_key = f"{run:%Y%m%d%H}"
+                path = _vtplot_path(run_key, level, step)
+                if path.exists():
+                    selection[(valid, level)] = (run_key, step)
+                    break
+                if not download:
+                    continue
+                fkey = f"{run_key}/{level}_{step}"
+                if now - _VTPLOT_LAST_ATTEMPT.get(fkey, 0) < _SIGWX_RETRY_S:
+                    continue  # falló hace poco (p. ej. aún no publicado): usar la anterior
+                _VTPLOT_LAST_ATTEMPT[fkey] = now
+                if _ama_download(_vtplot_source_url(run, level, step), path) is None:
+                    selection[(valid, level)] = (run_key, step)
+                    break
+    return selection
+
+
+def sync_vtplot_cache() -> Dict[str, int]:
+    """Descarga las imágenes VTPLOT que falten para hoy/mañana y purga las demás."""
+    global _VTPLOT_LAST_ALERT
+    if not _VTPLOT_LOCK.acquire(blocking=False):
+        return {"skipped": 1}
+    try:
+        now_utc = datetime.now(timezone.utc)
+        selection = _vtplot_select(now_utc, download=True)
+
+        # Purga: solo se conservan los ficheros que se están usando
+        keep = {(rk, f"{lv}_{st}.png") for (_, lv), (rk, st) in selection.items()}
+        if VTPLOT_CACHE_DIR.is_dir():
+            for run_dir in VTPLOT_CACHE_DIR.iterdir():
+                if not (run_dir.is_dir() and _VTPLOT_FILE_RE.match(run_dir.name)):
+                    continue
+                for f in run_dir.iterdir():
+                    if (run_dir.name, f.name) not in keep:
+                        try:
+                            f.unlink()
+                        except OSError as exc:
+                            print(f"⚠️ VTPLOT: no se pudo borrar {f}: {exc}")
+                try:
+                    run_dir.rmdir()  # solo si ha quedado vacía
+                except OSError:
+                    pass
+
+        newest = max((datetime.strptime(k, "%Y%m%d%H").replace(tzinfo=timezone.utc)
+                      for k in _VTPLOT_RUN_PUBLISHED), default=None)
+        stale = newest is None or now_utc - newest > timedelta(hours=_VTPLOT_ALERT_AFTER_H)
+        if stale and time.time() - _VTPLOT_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
+            _VTPLOT_LAST_ALERT = time.time()
+            from telegram_monitor import send_alert as _tg_alert_fl
+            last = f"{newest:%Y-%m-%d %HZ}" if newest else "ninguna"
+            _tg_alert_fl(
+                "Mapas VTPLOT (viento/temperatura FL) AEMET: ninguna pasada HMAR "
+                f"nueva descargada en {_VTPLOT_ALERT_AFTER_H} h (última: {last}). "
+                "Si el log muestra HTTP 403 o 'no es un PNG', ama.aemet.es "
+                "bloquea al servidor: no suplantar navegador, contactar con AEMET.",
+                source="aemet_vtplot",
+                level="ERROR",
+            )
+        return {"maps": len(selection), "runs": len(_VTPLOT_RUN_PUBLISHED)}
+    except Exception as exc:
+        print(f"❌ VTPLOT sync error: {exc}")
+        return {"error": 1}
+    finally:
+        _VTPLOT_LOCK.release()
+
+
+def get_vtplot_listing() -> Dict:
+    """
+    Estado de los mapas VTPLOT en caché (sin peticiones HTTP).
+
+    Returns:
+        {levels: [...], days: [{date, label, slots: [{utc_hour, valid_utc,
+         maps: {nivel: {url, run} | None}}]}]}
+    """
+    selection = _vtplot_select(datetime.now(timezone.utc), download=False)
+    labels = dict(VTPLOT_DAYS)
+    today = datetime.now(MADRID_TZ).date()
+    days: Dict[str, Dict] = {}
+    for valid in _vtplot_valid_times():
+        offset = (valid.date() - today).days
+        day = days.setdefault(valid.date().isoformat(), {
+            "date": valid.date().isoformat(), "label": labels.get(offset, ""), "slots": [],
+        })
+        maps = {}
+        for level in VTPLOT_LEVELS:
+            sel = selection.get((valid, level))
+            maps[level] = None if sel is None else {
+                "url": f"/vtplot/{sel[0]}/{level}/{sel[1]}.png",
+                "run": f"{sel[0][-2:]}Z",
+            }
+        day["slots"].append({
+            "utc_hour": f"{valid:%H}", "valid_utc": valid.isoformat(), "maps": maps,
+        })
+    return {"levels": list(VTPLOT_LEVELS), "days": list(days.values())}
+
+
+def vtplot_file_path(run_key: str, level: str, step: str) -> Optional[Path]:
+    """Ruta en disco de una imagen VTPLOT en caché, validando la entrada."""
+    if (not _VTPLOT_FILE_RE.match(run_key or "") or level not in VTPLOT_LEVELS
+            or step not in VTPLOT_STEPS):
+        return None
+    path = _vtplot_path(run_key, level, step)
+    return path if path.is_file() else None
+
+
+def _ama_sync_loop() -> None:
+    while True:
+        sync_sigwx_cache()
+        sync_vtplot_cache()
+        sync_analysis_cache()  # lee la página de frentes como mucho cada 30 min
+        time.sleep(_SIGWX_SYNC_INTERVAL_S)
+
+
+def start_ama_sync_thread() -> None:
+    """Arranca (una vez por proceso) el hilo que mantiene las cachés SIGWX y VTPLOT."""
+    global _AMA_THREAD_STARTED
+    if _AMA_THREAD_STARTED:
+        return
+    _AMA_THREAD_STARTED = True
+    threading.Thread(target=_ama_sync_loop, name="ama-sync", daemon=True).start()
+
+
+_AMA_THREAD_STARTED = False
 
 
 # ─────────────────────────── Mapa de análisis ──────────────────────────────
+# Fuente principal: página pública www.aemet.es/es/eltiempo/prediccion/mapa_frentes
+# (sin api key). Publica el análisis como
+#   /imagenes_d/eltiempo/prediccion/mapa_frentes/{YYYYMMDDHH}+000_<sufijo>.gif
+# El sufijo no es predecible, así que se lee la página como mucho cada 30 min
+# (robots.txt permite la ruta) y, si hay un análisis nuevo, se descarga UNA vez
+# a disco y se sirve desde /analisis/{YYYYMMDDHH}.gif, igual que los SIGWX.
+# Respaldo: OpenData con AEMET_API_KEY, solo si la web falla y no hay caché.
+AEMET_WEB_BASE = "https://www.aemet.es"
+_FRENTES_PAGE = f"{AEMET_WEB_BASE}/es/eltiempo/prediccion/mapa_frentes"
+_FRENTES_RE = re.compile(
+    r"/?(imagenes_d/eltiempo/prediccion/mapa_frentes/(\d{10})\+000_[A-Za-z0-9_]+\.gif)"
+)
+_GIF_SIGNATURE = b"GIF8"
+ANALISIS_CACHE_DIR = Path(getattr(config, "ANALISIS_CACHE_DIR", "")
+                          or SIGWX_CACHE_DIR.parent / "analisis")
+_ANALISIS_PAGE_TTL_S = 30 * 60
+_ANALISIS_ALERT_AFTER_H = 24
+_ANALISIS_KEY_RE = re.compile(r"^\d{10}$")
+
+_ANALISIS_LOCK = threading.Lock()
+_ANALISIS_STATE: Dict = {"checked_at": 0.0, "key": None, "source_url": None}
+_ANALISIS_LAST_ALERT = 0.0
+
+
+def _analisis_cached_key() -> Optional[str]:
+    """Clave (YYYYMMDDHH) del análisis más reciente en disco, o None."""
+    if not ANALISIS_CACHE_DIR.is_dir():
+        return None
+    keys = sorted(f.stem for f in ANALISIS_CACHE_DIR.glob("*.gif")
+                  if _ANALISIS_KEY_RE.match(f.stem))
+    return keys[-1] if keys else None
+
+
+def sync_analysis_cache() -> Dict[str, object]:
+    """Lee la página de frentes (máx. cada 30 min) y descarga el análisis si es nuevo."""
+    global _ANALISIS_LAST_ALERT
+    if not _ANALISIS_LOCK.acquire(blocking=False):
+        return {"skipped": 1}
+    try:
+        now = time.time()
+        if now - _ANALISIS_STATE["checked_at"] < _ANALISIS_PAGE_TTL_S:
+            return {"cached": _analisis_cached_key()}
+        _ANALISIS_STATE["checked_at"] = now
+
+        error = None
+        try:
+            resp = requests.get(_FRENTES_PAGE, headers={"User-Agent": _SIGWX_USER_AGENT},
+                                timeout=15, allow_redirects=False)
+            match = _FRENTES_RE.search(resp.text) if resp.status_code == 200 else None
+        except Exception as exc:
+            match, error = None, f"error de red: {exc}"
+        if match:
+            key = match.group(2)
+            source_url = f"{AEMET_WEB_BASE}/{match.group(1)}"
+            dest = ANALISIS_CACHE_DIR / f"{key}.gif"
+            if not dest.exists():
+                error = _ama_download(source_url, dest, signature=_GIF_SIGNATURE)
+                if error is None:
+                    print(f"✅ Mapa análisis descargado {key} ← {source_url}")
+            if dest.exists():
+                _ANALISIS_STATE.update(key=key, source_url=source_url)
+                for f in ANALISIS_CACHE_DIR.glob("*.gif*"):  # solo se guarda el último
+                    if f != dest:
+                        try:
+                            f.unlink()
+                        except OSError as exc:
+                            print(f"⚠️ Análisis: no se pudo borrar {f.name}: {exc}")
+        elif error is None:
+            error = f"patrón no encontrado en la página (HTTP {resp.status_code})"
+        if error:
+            print(f"⚠️ Mapa análisis (www.aemet.es): {error}")
+
+        cached = _analisis_cached_key()
+        age_h = (None if cached is None else
+                 (datetime.now(timezone.utc) - datetime.strptime(cached, "%Y%m%d%H")
+                  .replace(tzinfo=timezone.utc)).total_seconds() / 3600)
+        if (age_h is None or age_h > _ANALISIS_ALERT_AFTER_H) and \
+                now - _ANALISIS_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
+            _ANALISIS_LAST_ALERT = now
+            from telegram_monitor import send_alert as _tg_alert_an
+            _tg_alert_an(
+                "Mapa de análisis AEMET (www.aemet.es) sin actualizar"
+                + (f" desde hace {age_h:.0f} h" if age_h is not None else "")
+                + f": {error or 'sin análisis nuevo'}. Se usa OpenData como respaldo.",
+                source="aemet_maps",
+                level="WARNING",
+            )
+        return {"cached": cached, "error": error}
+    finally:
+        _ANALISIS_LOCK.release()
 
 
 def get_analysis_map_url() -> Optional[str]:
     """
-    Obtiene la URL temporal del mapa de análisis en superficie (isobaras, frentes).
-    
-    ⚠️ NOTA: Esta URL es temporal y puede tener problemas de CORS en navegadores.
-    Para usar en navegador, usar get_analysis_map_b64() que devuelve base64.
-    Para IA (OpenAI/GitHub Models), esta URL funciona perfectamente.
-    
-    Returns:
-        URL temporal de la API de AEMET (más ligera para IA, ~100 tokens)
+    URL pública del mapa de análisis, para la IA (OpenAI la descarga ella misma).
+    Principal: GIF de www.aemet.es. Respaldo: URL temporal de OpenData (api key).
     """
+    if _ANALISIS_STATE["source_url"] and _analisis_cached_key() == _ANALISIS_STATE["key"]:
+        return _ANALISIS_STATE["source_url"]
+    return _opendata_analysis_url()
+
+
+def get_analysis_map_display() -> Optional[str]:
+    """
+    Lo que el navegador pone en el <img> del mapa de análisis: nuestra ruta
+    /analisis/{YYYYMMDDHH}.gif si está en caché; si no, data URI de OpenData.
+    """
+    if _analisis_cached_key() is None:
+        sync_analysis_cache()  # p. ej. recién arrancado, antes de que pase el hilo
+    key = _analisis_cached_key()
+    if key:
+        return f"/analisis/{key}.gif"
+    print("⚠️ Mapa análisis: sin caché de www.aemet.es, usando OpenData (api key)")
+    return _opendata_analysis_b64()
+
+
+def analysis_file_path(key: str) -> Optional[Path]:
+    """Ruta en disco del análisis en caché, validando la entrada."""
+    if not _ANALISIS_KEY_RE.match(key or ""):
+        return None
+    path = ANALISIS_CACHE_DIR / f"{key}.gif"
+    return path if path.is_file() else None
+
+
+# ── Respaldo: OpenData (requiere api key) ──
+
+def _opendata_analysis_url() -> Optional[str]:
     meta = _aemet_get("/api/mapasygraficos/analisis")
     if meta and meta.get("datos"):
         return meta["datos"]  # URL temporal: https://opendata.aemet.es/opendata/sh/XXX
     return None
 
 
-def get_analysis_map_b64() -> Optional[str]:
-    """
-    Descarga el mapa de análisis en superficie y lo convierte a base64.
-    
-    Se actualiza cada ~12h. Ideal para embedding en navegadores (evita CORS y URLs expiradas).
-    
-    Returns:
-        String data URI base64 o None si hay error (~15k tokens, NO usar para IA)
-    """
-    temp_url = get_analysis_map_url()
+def _opendata_analysis_b64() -> Optional[str]:
+    """Mapa de análisis de OpenData como data URI (1 llamada + 1 descarga)."""
+    temp_url = _opendata_analysis_url()
     if not temp_url:
         return None
-    
-    # Descargar la imagen con reintentos (las URLs temporales a veces tardan)
-    max_attempts = 2
-    for attempt in range(max_attempts):
-        try:
-            # Paso 2: descargar desde URL temporal con timeout generoso
-            raw_bytes = _fetch_datos_url(temp_url, timeout=20, as_bytes=True)
-            
-            if raw_bytes and len(raw_bytes) > 1000:  # Verificar que sea una imagen real
-                # Convertir a base64 para embedding directo
-                b64_str = base64.b64encode(raw_bytes).decode("ascii")
-                print(f"✅ Mapa análisis descargado: {len(raw_bytes)} bytes → {len(b64_str)} chars base64")
-                return f"data:image/png;base64,{b64_str}"
-            else:
-                print(f"⚠️ Mapa análisis: respuesta muy pequeña (intento {attempt+1}/{max_attempts})")
-                
-        except Exception as e:
-            print(f"⚠️ Error descargando mapa análisis (intento {attempt+1}/{max_attempts}): {e}")
-            
-        if attempt < max_attempts - 1:
-            import time
-            time.sleep(2)  # Esperar antes de reintentar
-    
-    print(f"❌ No se pudo descargar el mapa de análisis después de {max_attempts} intentos")
-    return None
+    raw_bytes = _fetch_datos_url(temp_url, timeout=20, as_bytes=True)
+    if not raw_bytes or len(raw_bytes) < 1000:
+        print("❌ No se pudo descargar el mapa de análisis de OpenData")
+        return None
+    print(f"✅ Mapa análisis (OpenData): {len(raw_bytes)} bytes")
+    return "data:image/png;base64," + base64.b64encode(raw_bytes).decode("ascii")
 
 
 # ──────────────── Predicción municipal Llanera ─────────────────────────────
@@ -468,15 +835,18 @@ if __name__ == "__main__":
     url = get_analysis_map_url()
     print(f"   URL: {url}")
 
-    print("\n2) Mapas significativos (ama.aemet.es):")
-    today = datetime.now(MADRID_TZ).date()
-    for h in SIG_MAP_UTC_HOURS:
-        u = _direct_sig_map_url(today, h)
-        try:
-            r = requests.head(u, timeout=8)
-            print(f"   {h} UTC: {'✅' if r.status_code == 200 else '❌'} {u}")
-        except Exception:
-            print(f"   {h} UTC: ❌ error")
+    print(f"\n2) Mapas significativos SIGWX (caché en {SIGWX_CACHE_DIR}):")
+    print(f"   sync: {sync_sigwx_cache()}")
+    for day in get_sigwx_listing():
+        estado = " ".join(f"{s['utc_hour']}:{s['status']}" for s in day["slots"])
+        print(f"   {day['label']:7} {day['date']}  {estado}")
+
+    print(f"\n2b) VTPLOT viento/temperatura FL (caché en {VTPLOT_CACHE_DIR}):")
+    print(f"   sync: {sync_vtplot_cache()}")
+    for day in get_vtplot_listing()["days"]:
+        for lv in VTPLOT_LEVELS:
+            estado = " ".join(f"{s['utc_hour']}:{(s['maps'][lv] or {}).get('run', '--')}" for s in day["slots"])
+            print(f"   {day['label']:7} FL{lv}  {estado}")
 
     print("\n3) Predicción Llanera:")
     pred = get_prediccion_llanera()

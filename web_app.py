@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from threading import Lock, Thread
 import time as _time
 from zoneinfo import ZoneInfo
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -17,9 +17,14 @@ from ai_service import (
     get_last_ai_execution,
 )
 from aemet_service import (
-    get_significant_maps_for_three_days,
+    get_sigwx_listing,
+    sigwx_file_path,
+    get_vtplot_listing,
+    vtplot_file_path,
+    start_ama_sync_thread,
     get_analysis_map_url,
-    get_analysis_map_b64,
+    get_analysis_map_display,
+    analysis_file_path,
     get_avisos_cap_asturias,
 )
 from metar_service import get_metar, classify_flight_category
@@ -396,17 +401,18 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             level="WARNING",
         )
 
-    # ── Mapas significativos AEMET (hoy/mañana/pasado, AM y PM) ──
-    sig_maps = get_significant_maps_for_three_days(ambito="esp")
+    # Los mapas significativos (SIGWX) NO van en este payload horario: los
+    # descarga a disco un hilo propio y el frontend los lista en /api/sigwx.
 
     # ── Mapa de análisis en superficie (isobaras, frentes) ──
-    # URL temporal: para pasar a la IA (ligera, ~100 tokens)
-    analysis_map_url = get_analysis_map_url()
-    # Base64: para mostrar en navegador (evita CORS, pesada ~400KB)
-    analysis_map_b64 = get_analysis_map_b64() if analysis_map_url else None
-    
-    if analysis_map_b64:
-        print(f"✅ Mapa análisis obtenido (URL para IA + base64 para navegador)")
+    # Navegador: /analisis/{YYYYMMDDHH}.gif desde caché (www.aemet.es, sin key);
+    # solo si no hay caché, data URI de OpenData (api key).
+    analysis_map_display = get_analysis_map_display()
+    # IA: URL pública del GIF de www.aemet.es (o temporal de OpenData)
+    analysis_map_url = get_analysis_map_url() if analysis_map_display else None
+
+    if analysis_map_display:
+        print("✅ Mapa análisis obtenido")
     else:
         print("⚠️ No se pudo obtener mapa de análisis de AEMET")
         _tg_alert(
@@ -419,28 +425,13 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
     avisos_cap = get_avisos_cap_asturias()
     if avisos_cap:
         print(f"⚠️ AEMET AVISOS CAP activos: {avisos_cap[:80]}")
-    # ── Construir días con mapas AEMET integrados (slots UTC reales disponibles) ──
-    sig_index = {}
-    for m in sig_maps:
-        sig_index.setdefault(m["date"], []).append(m)
-
     days = []
     labels = ["Hoy", "Mañana", "Pasado mañana", "Dentro de 3 días"]
     for index, day in enumerate(daily):
-        target_date = datetime.fromisoformat(day["date"]).date()
-        day_iso = target_date.isoformat()
-        show_aemet_maps = index < 2
-
-        map_slots = sorted(sig_index.get(day_iso, []), key=lambda item: item.get("utc_hour", "99")) if show_aemet_maps else []
-        available_hours = [f"{slot.get('utc_hour')}" for slot in map_slots if slot.get("utc_hour")]
-
         days.append(
             {
                 "label": labels[index] if index < len(labels) else day["date"],
                 "date": day["date"],
-                "show_aemet_maps": show_aemet_maps,
-                "available_utc_hours": available_hours,
-                "map_slots": map_slots,
             }
         )
 
@@ -468,9 +459,15 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             # Solo para OpenAI con gpt-4o: incluir URL del mapa análisis + mapas significativos
             if analysis_map_url:
                 map_urls_for_ai.append(analysis_map_url)
-            for m in sig_maps[:1]:  # Solo 1 mapa significativo
-                u = m.get("map_url")
-                if u and u not in map_urls_for_ai:
+            # Solo 1 mapa significativo: el último ya en caché (URL original de
+            # AEMET, que es la que puede descargar OpenAI; la nuestra es relativa)
+            sig_available = [
+                s for d in get_sigwx_listing() for s in d["slots"]
+                if s["status"] == "available"
+            ]
+            if sig_available:
+                u = sig_available[-1]["source_url"]
+                if u not in map_urls_for_ai:
                     map_urls_for_ai.append(u)
 
         # Calcular clasificaciones de condiciones de vuelo antes de pasarlas a la IA
@@ -592,7 +589,7 @@ def _generate_report_payload(windy_model: str | None = None, include_ai: bool = 
             },
         },
         "forecast_days": days,
-        "analysis_map_url": analysis_map_b64,  # Base64 para navegador (evita CORS)
+        "analysis_map_url": analysis_map_display,  # /analisis/...gif o data URI de respaldo
 
         "windy": windy_section,
         "ai": {
@@ -670,6 +667,7 @@ def _cycle_warmer_loop():
 
 def _start_cycle_warmer_once():
     global _WARMER_STARTED
+    start_ama_sync_thread()  # idempotente: mantiene las cachés SIGWX y VTPLOT
     if _WARMER_STARTED:
         return
     with _CACHE_LOCK:
@@ -837,6 +835,52 @@ def api_current():
     return jsonify(data)
 
 
+@app.get("/api/sigwx")
+@limiter.limit("30 per minute")
+def api_sigwx():
+    """Mapas significativos SIGWX de ayer/hoy/mañana: qué hay en caché (lee disco)."""
+    _start_cycle_warmer_once()
+    return jsonify({"days": get_sigwx_listing()})
+
+
+@app.get("/sigwx/<yyyymmdd>/<utc_hour>.png")
+@limiter.limit("120 per minute")
+def sigwx_image(yyyymmdd, utc_hour):
+    """Sirve un mapa SIGWX desde la caché local (copia del PNG de AEMET)."""
+    path = sigwx_file_path(yyyymmdd, utc_hour)
+    if path is None:
+        abort(404)
+    return send_file(path, mimetype="image/png", conditional=True)
+
+
+@app.get("/api/vtplot")
+@limiter.limit("30 per minute")
+def api_vtplot():
+    """Mapas de viento/temperatura FL020/050/100 de hoy/mañana en caché (lee disco)."""
+    _start_cycle_warmer_once()
+    return jsonify(get_vtplot_listing())
+
+
+@app.get("/vtplot/<run_key>/<level>/<step>.png")
+@limiter.limit("120 per minute")
+def vtplot_image(run_key, level, step):
+    """Sirve un mapa VTPLOT desde la caché local (copia del PNG de AEMET)."""
+    path = vtplot_file_path(run_key, level, step)
+    if path is None:
+        abort(404)
+    return send_file(path, mimetype="image/png", conditional=True)
+
+
+@app.get("/analisis/<key>.gif")
+@limiter.limit("120 per minute")
+def analysis_image(key):
+    """Sirve el mapa de análisis en superficie desde la caché local (GIF de AEMET)."""
+    path = analysis_file_path(key)
+    if path is None:
+        abort(404)
+    return send_file(path, mimetype="image/gif", conditional=True)
+
+
 @app.get("/api/windy")
 @limiter.limit("10 per minute")
 def api_windy():
@@ -959,6 +1003,9 @@ def set_security_headers(response):
     #   3 horas sirviendo la versión de las 20:00 aunque sean las 23:00.
     if request.path.startswith('/static/'):
         response.headers['Cache-Control'] = 'public, max-age=86400'
+    elif request.path.startswith(('/sigwx/', '/vtplot/', '/analisis/')) and response.status_code == 200:
+        # Mapas AEMET en caché: no cambian una vez publicados (1 h por si AEMET los corrige)
+        response.headers['Cache-Control'] = 'public, max-age=3600'
     else:
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
