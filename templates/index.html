@@ -1342,7 +1342,7 @@
 
     const mapImg = (b64, url, alt) => {
       if (url) {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" onerror="window._imgFallback(this)" /></a>`;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" onerror="if(!this.dataset.failed){this.dataset.failed='1';this.closest('a').style.display='none';const err=document.createElement('div');err.className='map';err.style.cssText='display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem';err.textContent='⚠️ Imagen no disponible';this.closest('a').insertAdjacentElement('afterend',err);}" /></a>`;
       }
       if (b64) {
         const src = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
@@ -1366,40 +1366,29 @@
       if (mapEl) mapEl.innerHTML = slot.html;
     };
 
-    // ── Imágenes ama.aemet.es SIN sondeo ─────────────────────
-    // ama.aemet.es está detrás de un WAF anti-bot que bloquea por IP ante
-    // patrones de sondeo (muchas peticiones/404). Las URLs se calculan de forma
-    // determinista y solo se carga la imagen visible. Si falla, se prueba como
-    // mucho la URL alternativa de data-alts (ciclo anterior) y se para.
-    window._imgFallback = function (img) {
-      const alts = (img.dataset.alts || '').split('|').filter(Boolean);
-      if (alts.length) {
-        const next = alts.shift();
-        img.dataset.alts = alts.join('|');
-        const a = img.closest('a');
-        if (a) a.href = next;
-        img.src = next;
-        return;
-      }
-      if (img.dataset.failed) return;
-      img.dataset.failed = '1';
-      const holder = img.closest('a') || img;
-      holder.style.display = 'none';
-      const err = document.createElement('div');
-      err.className = 'map';
-      err.style.cssText = 'display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:.8rem;padding:8px';
-      err.textContent = '⚠️ AEMET no sirve esta imagen ahora (aún no publicada o acceso bloqueado por ama.aemet.es)';
-      holder.insertAdjacentElement('afterend', err);
-    };
+    const probeMapImg = url => new Promise(res => {
+      const img = new Image();
+      img.onload  = () => res(true);
+      img.onerror = () => res(false);
+      img.referrerPolicy = 'no-referrer';
+      img.src = url;
+    });
 
-    const renderDays = (days) => {
+    const renderDays = async (days) => {
       const result = [];
 
       for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
         const d = days[dayIdx];
         if (!d.show_aemet_maps) continue;
-        // Slots calculados por el backend sin peticiones a AEMET.
-        const slots = d.map_slots || [];
+        const rawSlots = d.map_slots || [];
+
+        // El backend puede fallar al verificar ama.aemet.es (bloqueo del hosting),
+        // igual que pasaba con los mapas VTPLOT. Igual que VTPLOT, confirmamos cada
+        // slot cargando la imagen desde el propio navegador antes de mostrarla.
+        const checked = await Promise.all(
+          rawSlots.map(slot => probeMapImg(slot.map_url).then(ok => ok ? slot : null))
+        );
+        const slots = checked.filter(Boolean);
 
         // Ocultar Mañana (y siguientes) si no tiene mapas publicados
         if (slots.length === 0 && d.label !== "Hoy") continue;
@@ -2145,52 +2134,119 @@
     // MAPAS VIENTO Y TEMPERATURA EN NIVELES DE VUELO (VTPLOT)
     // ========================================================================
 
-    // Rutas CALCULADAS, sin sondeo (ama.aemet.es bloquea por IP ante sondeos).
-    // Modelo HMAR: pasadas 00/06/12/18Z, pasos P3 de 003 a 036 h.
-    // _FL_PUBLISH_LAG_H = horas desde la hora nominal de la pasada hasta que
-    // AEMET publica sus mapas. Se usa la pasada más reciente que ya debería
-    // estar publicada; si una imagen falla, se prueba UNA vez la pasada anterior.
-    const _FL_PUBLISH_LAG_H = 5;
-    const _FL_MAX_STEP_H    = 36;
+    const _flSteps = ['003','006','009','012','015','018','021','024','027','030','033','036'];
+    let _flFoundRuns = null;
+    let _flActive    = '020';
+    const _flStepCache = {}; // key: `${date}_${runH}_${level}` → confirmed step array
 
     const _flUrl = (date, runH, level, step) =>
       `https://ama.aemet.es/o/estaticos/productos/atap/${date}/HMAR/${runH}/P3/${step}/VTPLOT_FL${level}__.1.png`;
 
-    const _flYmd = ms => new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-    const _flHH  = ms => String(new Date(ms).getUTCHours()).padStart(2, '0');
+    const _flProbeImg = url => new Promise(res => {
+      const img = new Image();
+      img.onload  = () => res(true);
+      img.onerror = () => res(false);
+      img.referrerPolicy = 'no-referrer';
+      img.src = url;
+    });
 
-    // URL de la pasada runMs para la validez validMs, o null si el paso no existe.
-    const _flUrlFor = (runMs, validMs, level) => {
-      const stepH = Math.round((validMs - runMs) / 3600000);
-      if (stepH < 3 || stepH > _FL_MAX_STEP_H || stepH % 3) return null;
-      return _flUrl(_flYmd(runMs), _flHH(runMs), level, String(stepH).padStart(3, '0'));
-    };
+    async function _flDetectRuns() {
+      if (_flFoundRuns !== null) return;
+      const candidates = [];
+      const now = new Date();
+      for (let d = 0; d <= 1; d++) {
+        const dt = new Date(now);
+        dt.setDate(dt.getDate() - d);
+        const dateStr = dt.toISOString().slice(0, 10).replace(/-/g, '');
+        for (const h of ['18','12','06','00']) {
+          candidates.push({ date: dateStr, runH: h });
+        }
+      }
+      const results = await Promise.all(
+        candidates.map(c =>
+          _flProbeImg(_flUrl(c.date, c.runH, '020', '003')).then(ok => ok ? c : null)
+        )
+      );
+      _flFoundRuns = results.filter(Boolean);
+    }
 
-    function renderFlMaps(level) {
+    async function _flGetConfirmedSteps(date, runH, level) {
+      const key = `${date}_${runH}_${level}`;
+      if (_flStepCache[key]) return _flStepCache[key];
+      // Probe all steps in parallel for this run + level
+      const probes = await Promise.all(
+        _flSteps.map(s => _flProbeImg(_flUrl(date, runH, level, s)).then(ok => ok ? s : null))
+      );
+      _flStepCache[key] = probes.filter(Boolean);
+      return _flStepCache[key];
+    }
+
+    async function renderFlMaps(level) {
+      _flActive = level;
       const container = document.getElementById('fl-maps-container');
       const infoEl    = document.getElementById('fl-run-info');
 
-      const H6 = 6 * 3600000;
-      const nowMs = Date.now();
-      // Pasada más reciente que ya debería estar publicada
-      const latestRunMs = Math.floor((nowMs - _FL_PUBLISH_LAG_H * 3600000) / H6) * H6;
-
-      const todayStr = _flYmd(nowMs);
-      const tmrwStr  = _flYmd(nowMs + 24 * 3600000);
-      const dayStart = Date.UTC(+todayStr.slice(0,4), +todayStr.slice(4,6) - 1, +todayStr.slice(6,8));
-
-      const bySlot = { [todayStr]: [], [tmrwStr]: [] };
-      const runsUsed = new Set();
-      for (let h = 0; h < 48; h += 3) {
-        const validMs = dayStart + h * 3600000;
-        // Pasada más reciente publicada con paso >= 3h para esta validez
-        let runMs = Math.min(latestRunMs, Math.floor((validMs - 3 * 3600000) / H6) * H6);
-        const url = _flUrlFor(runMs, validMs, level);
-        if (!url) continue;
-        const alt = _flUrlFor(runMs - H6, validMs, level);
-        runsUsed.add(runMs);
-        bySlot[_flYmd(validMs)].push({ utcH: _flHH(validMs), url, alt, runH: _flHH(runMs) });
+      // Only show spinner on first load (before runs are known)
+      if (_flFoundRuns === null) {
+        container.innerHTML = '<p class="muted" style="text-align:center">⏳ Cargando...</p>';
+        if (infoEl) infoEl.style.display = 'none';
       }
+
+      await _flDetectRuns();
+
+      if (!_flFoundRuns.length) {
+        container.innerHTML = '<p class="muted" style="text-align:center">⚠️ Mapas VTPLOT no disponibles en este momento.</p>';
+        return;
+      }
+
+      const nowUtc   = new Date();
+      const todayStr = nowUtc.toISOString().slice(0, 10).replace(/-/g, '');
+      const tmrwDt   = new Date(nowUtc); tmrwDt.setUTCDate(tmrwDt.getUTCDate() + 1);
+      const tmrwStr  = tmrwDt.toISOString().slice(0, 10).replace(/-/g, '');
+
+      // Build confirmed slot groups by probing each candidate run in parallel
+      const allGroups = await Promise.all(_flFoundRuns.map(async ({ date, runH }) => {
+        const confirmedSteps = await _flGetConfirmedSteps(date, runH, level);
+        const runMs = Date.UTC(
+          parseInt(date.slice(0,4), 10),
+          parseInt(date.slice(4,6), 10) - 1,
+          parseInt(date.slice(6,8), 10),
+          parseInt(runH, 10)
+        );
+        const today = [], tmrw = [];
+        for (const step of confirmedSteps) {
+          const validMs = runMs + parseInt(step, 10) * 3600000;
+          const validDt = new Date(validMs);
+          const validDs = validDt.toISOString().slice(0, 10).replace(/-/g, '');
+          const utcH    = String(validDt.getUTCHours()).padStart(2, '0');
+          if      (validDs === todayStr) today.push({ step, utcH, url: _flUrl(date, runH, level, step) });
+          else if (validDs === tmrwStr)  tmrw.push({ step, utcH, url: _flUrl(date, runH, level, step) });
+        }
+        return { date, runH, today, tmrw };
+      }));
+
+      // Build a merged map: validTime → most-recent run that has it.
+      // _flFoundRuns is ordered most-recent first (18Z today → 12Z today → 06Z today → …)
+      // so the first entry that contains a given valid time wins.
+      const byValidTime = {};  // key: "YYYYMMDD_HH" → { utcH, url, runH, ds }
+      for (const { date, runH, today, tmrw } of allGroups) {
+        for (const slot of [...today, ...tmrw]) {
+          const runMs = Date.UTC(
+            parseInt(date.slice(0,4),10), parseInt(date.slice(4,6),10)-1,
+            parseInt(date.slice(6,8),10), parseInt(runH,10)
+          );
+          const validDt = new Date(runMs + parseInt(slot.step,10)*3600000);
+          const ds   = validDt.toISOString().slice(0,10).replace(/-/g,'');
+          const tkey = `${ds}_${slot.utcH}`;
+          if (!byValidTime[tkey]) {   // first = most recent run
+            byValidTime[tkey] = { utcH: slot.utcH, url: slot.url, runH, ds };
+          }
+        }
+      }
+
+      // Group by day
+      const todaySlots = Object.values(byValidTime).filter(s => s.ds === todayStr).sort((a,b) => a.utcH.localeCompare(b.utcH));
+      const tmrwSlots  = Object.values(byValidTime).filter(s => s.ds === tmrwStr ).sort((a,b) => a.utcH.localeCompare(b.utcH));
 
       const _fmtDs = (ds) => {
         const fmt = `${ds.slice(6,8)}-${ds.slice(4,6)}-${ds.slice(0,4)}`;
@@ -2204,17 +2260,21 @@
 
         const dayId = `fl-${ds}-${level}`;
         window._utcSlots = window._utcSlots || {};
-        window._utcSlots[dayId] = slots.map(({ utcH, url, alt, runH }) => ({
+        window._utcSlots[dayId] = slots.map(({ utcH, url, runH }) => ({
           label: `${utcH} UTC <span style="font-size:.7em;opacity:.55">${runH}Z</span>`,
-          html:  `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" data-alts="${alt || ''}" alt="FL${level} ${utcH}Z" loading="lazy" referrerpolicy="no-referrer" onerror="window._imgFallback(this)" /></a>`,
+          html:  `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="map" src="${url}" alt="FL${level} ${utcH}Z" loading="lazy" referrerpolicy="no-referrer" /></a>`,
         }));
 
         const slotData   = window._utcSlots[dayId];
-        // Por defecto: el próximo slot a partir de ahora (hoy) o el de las 12 UTC (mañana)
-        const nowH = new Date(nowMs).getUTCHours();
-        const target = ds === todayStr ? nowH : 12;
-        let defaultIdx = slots.findIndex(({ utcH }) => parseInt(utcH, 10) >= target);
-        if (defaultIdx < 0) defaultIdx = slots.length - 1;
+        // Default: slot más cercano a las 12 UTC
+        const defaultIdx = (() => {
+          let best = 0, bestDiff = Infinity;
+          slots.forEach(({ utcH }, i) => {
+            const diff = Math.abs(parseInt(utcH, 10) - 12);
+            if (diff < bestDiff) { bestDiff = diff; best = i; }
+          });
+          return best;
+        })();
 
         const btnsHtml    = slots.map(({ utcH }, i) =>
           `<button class="utc-btn${i === defaultIdx ? ' active' : ''}" onclick="window._pickUtc('${dayId}',${i})">${utcH}</button>`
@@ -2235,12 +2295,19 @@
           </article>`;
       };
 
+      const todayCard = makeCard(todayStr, todaySlots);
+      const tmrwCard  = makeCard(tmrwStr,  tmrwSlots);
+
+      // Run info chip
       if (infoEl) {
-        const runs = [...runsUsed].sort((a, b) => b - a);
+        const runLabels = allGroups
+          .filter(g => g.today.length > 0 || g.tmrw.length > 0)
+          .map(g => `Run ${g.runH}Z`);
         infoEl.style.display = '';
-        infoEl.textContent = '📡 HMAR · ' + runs.map(r => `${_flYmd(r).slice(6,8)}/${_flYmd(r).slice(4,6)} ${_flHH(r)}Z`).join(' · ');
+        const baseDate = allGroups[0];
+        infoEl.textContent = `📡 ${baseDate.date.slice(0,4)}-${baseDate.date.slice(4,6)}-${baseDate.date.slice(6,8)} · ` + runLabels.join(' · ');
       }
-      container.innerHTML = `<div class="days">${makeCard(todayStr, bySlot[todayStr])}${makeCard(tmrwStr, bySlot[tmrwStr])}</div>`;
+      container.innerHTML = `<div class="days">${todayCard}${tmrwCard}</div>`;
     }
 
     // Tab clicks for FL maps
