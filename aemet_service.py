@@ -9,6 +9,7 @@ Flujo AEMET en dos pasos:
 import base64
 import os
 import re
+import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -145,9 +146,13 @@ SIGWX_CACHE_DIR = Path(getattr(config, "SIGWX_CACHE_DIR", "")
                        or Path(__file__).resolve().parent / "cache" / "sigwx")
 
 _SIGWX_USER_AGENT = "LEMR-Meteo/1.0 (+https://lemr-meteo.evaristorivieccio.com/)"
-_SIGWX_SYNC_INTERVAL_S = 5 * 60   # cada cuánto mira si hay mapas nuevos
-_SIGWX_RETRY_S = 15 * 60          # espera entre reintentos de un mismo mapa
-_SIGWX_ALERT_AFTER_H = 6          # retraso tras el que se avisa por Telegram
+# La sincronización va alineada con el ciclo horario del informe (ver
+# start_ama_sync_thread): una vez por hora, solo en las horas del ciclo, este
+# margen después de la hora en punto.
+_AMA_SLOT_DELAY_S = 60
+_DEFAULT_SYNC_SLOTS = tuple(range(6, 24))  # = web_app.UPDATE_SLOTS (06:00-23:00 Madrid)
+_SIGWX_RETRY_S = 15 * 60          # espera mínima entre reintentos de un mismo mapa
+_SIGWX_ALERT_AFTER_H = 3          # falta un mapa X h después de su publicación → aviso
 _SIGWX_ALERT_EVERY_S = 6 * 3600   # como mucho un aviso cada 6 h
 _SIGWX_MAX_BYTES = 5 * 1024 * 1024
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -240,6 +245,58 @@ def _ama_download(url: str, dest: Path, signature: bytes = _PNG_SIGNATURE) -> Op
     return None
 
 
+# ── Estado de conexión con ama.aemet.es ──
+# Si las descargas dejan de obtener respuesta y más tarde vuelven a obtenerla,
+# se avisa una vez por Telegram. El estado se guarda en disco para que un
+# reinicio del servicio no lo pierda.
+_AMA_STATUS_FILE = Path(tempfile.gettempdir()) / "lemr_ama_status"
+_AMA_STATUS_LOCK = threading.Lock()
+_AMA_LAST_ERROR: Optional[str] = None
+
+
+def _ama_responded(err: Optional[str]) -> Optional[bool]:
+    """¿Contestó ama.aemet.es? True/False, o None si el resultado no lo aclara."""
+    if err is None or err == "HTTP 404" or err.startswith(
+            ("no se pudo escribir", "respuesta demasiado grande")):
+        return True   # hubo respuesta del servidor (aunque no hubiera fichero)
+    if err.startswith(("error de red", "la respuesta no es")) or \
+            re.fullmatch(r"HTTP (3\d\d|403)", err):
+        return False
+    return None       # p. ej. 5xx: no indica nada sobre la conexión
+
+
+def _ama_fetch(url: str, dest: Path) -> Optional[str]:
+    """_ama_download para ama.aemet.es, registrando el estado de la conexión."""
+    global _AMA_LAST_ERROR
+    err = _ama_download(url, dest)
+    if err is not None and err != "HTTP 404":
+        _AMA_LAST_ERROR = err
+    ok = _ama_responded(err)
+    if ok is None:
+        return err
+    new = "ok" if ok else "ko"
+    with _AMA_STATUS_LOCK:
+        try:
+            prev = _AMA_STATUS_FILE.read_text().strip()
+        except OSError:
+            prev = ""
+        if new == prev:
+            return err
+        try:
+            _AMA_STATUS_FILE.write_text(new)
+        except OSError:
+            pass
+    print(f"ℹ️ ama.aemet.es: {'responde' if ok else 'sin respuesta'} ({err or 'OK'})")
+    if ok and prev == "ko":
+        from telegram_monitor import send_alert as _tg_alert_ama
+        _tg_alert_ama(
+            "✅ ama.aemet.es vuelve a responder a las descargas del servidor.",
+            source="aemet_ama",
+            level="WARNING",
+        )
+    return err
+
+
 def _sigwx_purge(keep_keys: set) -> None:
     """Borra de la caché lo que ya no pertenece a ayer/hoy/mañana."""
     if not SIGWX_CACHE_DIR.is_dir():
@@ -263,7 +320,6 @@ def sync_sigwx_cache() -> Dict[str, int]:
         now = time.time()
         slots = _sigwx_slots()
         stats = {"downloaded": 0, "failed": 0, "cached": 0}
-        overdue = []
         for slot in slots:
             if _sigwx_path(slot["key"]).exists():
                 stats["cached"] += 1
@@ -273,7 +329,7 @@ def sync_sigwx_cache() -> Dict[str, int]:
             if now - _SIGWX_LAST_ATTEMPT.get(slot["key"], 0) < _SIGWX_RETRY_S:
                 continue
             _SIGWX_LAST_ATTEMPT[slot["key"]] = now
-            err = _ama_download(slot["source_url"], _sigwx_path(slot["key"]))
+            err = _ama_fetch(slot["source_url"], _sigwx_path(slot["key"]))
             if err is None:
                 stats["downloaded"] += 1
                 _SIGWX_LAST_ERROR.pop(slot["key"], None)
@@ -282,23 +338,26 @@ def sync_sigwx_cache() -> Dict[str, int]:
             stats["failed"] += 1
             _SIGWX_LAST_ERROR[slot["key"]] = err
             print(f"⚠️ SIGWX {slot['key']}: {err} ({slot['source_url']})")
-            late = datetime.now(timezone.utc) - slot["due_at"]
-            if slot["offset"] >= 0 and late > timedelta(hours=_SIGWX_ALERT_AFTER_H):
-                overdue.append(f"{slot['key']} ({err})")
 
         _sigwx_purge({s["key"] for s in slots})
 
-        if overdue and now - _SIGWX_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
+        # Aviso si faltan mapas de hoy/mañana que ya deberían estar disponibles
+        late_limit = datetime.now(timezone.utc) - timedelta(hours=_SIGWX_ALERT_AFTER_H)
+        missing = [s["key"] for s in slots
+                   if s["offset"] >= 0 and s["due_at"] < late_limit
+                   and not _sigwx_path(s["key"]).exists()]
+        if missing and now - _SIGWX_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
             _SIGWX_LAST_ALERT = now
             from telegram_monitor import send_alert as _tg_alert_maps
             _tg_alert_maps(
-                "Mapas significativos AEMET sin descargar tras "
-                f"{_SIGWX_ALERT_AFTER_H} h de retraso: " + ", ".join(overdue)
-                + ". Si es HTTP 403 o 'no es un PNG', ama.aemet.es está "
-                "bloqueando al servidor: no suplantar navegador, contactar con AEMET.",
+                "Mapas significativos AEMET no disponibles "
+                f"{_SIGWX_ALERT_AFTER_H} h después de su publicación: "
+                + ", ".join(missing)
+                + (f". Último error de descarga: {_AMA_LAST_ERROR}" if _AMA_LAST_ERROR else ""),
                 source="aemet_sig_maps",
                 level="ERROR",
             )
+        stats["missing"] = len(missing)
         return stats
     except Exception as exc:
         print(f"❌ SIGWX sync error: {exc}")
@@ -364,7 +423,7 @@ VTPLOT_DAYS = ((0, "Hoy"), (1, "Mañana"))
 VTPLOT_CACHE_DIR = Path(getattr(config, "VTPLOT_CACHE_DIR", "")
                         or SIGWX_CACHE_DIR.parent / "vtplot")
 _VTPLOT_RUN_LAG_H = 3            # antes de esto ni se pregunta por una pasada
-_VTPLOT_ALERT_AFTER_H = 18       # sin ninguna pasada nueva en este tiempo → aviso
+_VTPLOT_STALE_H = 9              # imagen más reciente con más de X h → aviso (pasada nueva cada 6 h)
 _VTPLOT_FILE_RE = re.compile(r"^(\d{10})$")
 
 _VTPLOT_LOCK = threading.Lock()
@@ -412,13 +471,14 @@ def _vtplot_run_published(run: datetime, now: float) -> bool:
     if key in _VTPLOT_RUN_PUBLISHED:
         return True
     probe = _vtplot_path(key, VTPLOT_LEVELS[0], VTPLOT_STEPS[0])
-    if probe.exists():
-        _VTPLOT_RUN_PUBLISHED.add(key)
+    run_dir = VTPLOT_CACHE_DIR / key
+    if probe.exists() or (run_dir.is_dir() and any(run_dir.glob("*.png"))):
+        _VTPLOT_RUN_PUBLISHED.add(key)  # ya hay imágenes suyas en caché: no hace falta preguntar
         return True
     if now - _VTPLOT_LAST_ATTEMPT.get(key, 0) < _SIGWX_RETRY_S:
         return False
     _VTPLOT_LAST_ATTEMPT[key] = now
-    err = _ama_download(_vtplot_source_url(run, VTPLOT_LEVELS[0], VTPLOT_STEPS[0]), probe)
+    err = _ama_fetch(_vtplot_source_url(run, VTPLOT_LEVELS[0], VTPLOT_STEPS[0]), probe)
     if err is None:
         _VTPLOT_RUN_PUBLISHED.add(key)
         print(f"✅ VTPLOT pasada {key} publicada")
@@ -459,7 +519,7 @@ def _vtplot_select(now_utc: datetime, download: bool) -> Dict:
                 if now - _VTPLOT_LAST_ATTEMPT.get(fkey, 0) < _SIGWX_RETRY_S:
                     continue  # falló hace poco (p. ej. aún no publicado): usar la anterior
                 _VTPLOT_LAST_ATTEMPT[fkey] = now
-                if _ama_download(_vtplot_source_url(run, level, step), path) is None:
+                if _ama_fetch(_vtplot_source_url(run, level, step), path) is None:
                     selection[(valid, level)] = (run_key, step)
                     break
     return selection
@@ -491,22 +551,23 @@ def sync_vtplot_cache() -> Dict[str, int]:
                 except OSError:
                     pass
 
-        newest = max((datetime.strptime(k, "%Y%m%d%H").replace(tzinfo=timezone.utc)
-                      for k in _VTPLOT_RUN_PUBLISHED), default=None)
-        stale = newest is None or now_utc - newest > timedelta(hours=_VTPLOT_ALERT_AFTER_H)
-        if stale and time.time() - _VTPLOT_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
+        # Aviso si la imagen más reciente de la caché está desactualizada
+        mtimes = [f.stat().st_mtime for f in VTPLOT_CACHE_DIR.glob("*/*.png")] \
+            if VTPLOT_CACHE_DIR.is_dir() else []
+        age_h = (time.time() - max(mtimes)) / 3600 if mtimes else None
+        if (age_h is None or age_h > _VTPLOT_STALE_H) and \
+                time.time() - _VTPLOT_LAST_ALERT > _SIGWX_ALERT_EVERY_S:
             _VTPLOT_LAST_ALERT = time.time()
             from telegram_monitor import send_alert as _tg_alert_fl
-            last = f"{newest:%Y-%m-%d %HZ}" if newest else "ninguna"
             _tg_alert_fl(
-                "Mapas VTPLOT (viento/temperatura FL) AEMET: ninguna pasada HMAR "
-                f"nueva descargada en {_VTPLOT_ALERT_AFTER_H} h (última: {last}). "
-                "Si el log muestra HTTP 403 o 'no es un PNG', ama.aemet.es "
-                "bloquea al servidor: no suplantar navegador, contactar con AEMET.",
+                "Mapas de viento/temperatura FL AEMET sin actualizar"
+                + (f" desde hace {age_h:.0f} h" if age_h is not None else " (no hay ninguno)")
+                + (f". Último error de descarga: {_AMA_LAST_ERROR}" if _AMA_LAST_ERROR else ""),
                 source="aemet_vtplot",
                 level="ERROR",
             )
-        return {"maps": len(selection), "runs": len(_VTPLOT_RUN_PUBLISHED)}
+        return {"maps": len(selection), "runs": len(_VTPLOT_RUN_PUBLISHED),
+                "age_h": None if age_h is None else round(age_h, 1)}
     except Exception as exc:
         print(f"❌ VTPLOT sync error: {exc}")
         return {"error": 1}
@@ -553,21 +614,53 @@ def vtplot_file_path(run_key: str, level: str, step: str) -> Optional[Path]:
     return path if path.is_file() else None
 
 
-def _ama_sync_loop() -> None:
+def _ama_sync_once() -> None:
+    """Una pasada de sincronización de los tres mapas (nunca lanza excepción)."""
+    for sync in (sync_sigwx_cache, sync_vtplot_cache, sync_analysis_cache):
+        try:
+            sync()
+        except Exception as exc:  # el hilo debe sobrevivir a cualquier fallo
+            print(f"❌ {sync.__name__} error: {exc}")
+
+
+def _seconds_until_next_slot(slots) -> float:
+    """Segundos hasta la próxima hora de `slots` (Europe/Madrid) + _AMA_SLOT_DELAY_S."""
+    now = datetime.now(MADRID_TZ)
+    for add_days in range(3):
+        d = now.date() + timedelta(days=add_days)
+        for h in sorted(slots):
+            t = (datetime(d.year, d.month, d.day, h, tzinfo=MADRID_TZ)
+                 + timedelta(seconds=_AMA_SLOT_DELAY_S))
+            if t > now:
+                return t.timestamp() - time.time()  # vía timestamp: correcto en cambios de hora
+    return 3600.0
+
+
+def _ama_sync_loop(slots) -> None:
+    # Al arrancar (despliegue/reinicio) dentro del horario: rellena la caché ya,
+    # sin esperar a la próxima hora en punto. Fuera del horario no hace nada.
+    if datetime.now(MADRID_TZ).hour in slots:
+        _ama_sync_once()
     while True:
-        sync_sigwx_cache()
-        sync_vtplot_cache()
-        sync_analysis_cache()  # lee la página de frentes como mucho cada 30 min
-        time.sleep(_SIGWX_SYNC_INTERVAL_S)
+        wait = max(1.0, _seconds_until_next_slot(slots))
+        time.sleep(wait)
+        _ama_sync_once()
 
 
-def start_ama_sync_thread() -> None:
-    """Arranca (una vez por proceso) el hilo que mantiene las cachés SIGWX y VTPLOT."""
+def start_ama_sync_thread(slots=None) -> None:
+    """
+    Arranca (una vez por proceso) el hilo que mantiene las cachés de mapas.
+    Sincroniza una vez por hora, alineado con el ciclo del informe: en cada
+    hora de `slots` (por defecto 06-23, Europe/Madrid) + 1 min. Fuera de esas
+    horas no hace ninguna petición a AEMET.
+    """
     global _AMA_THREAD_STARTED
     if _AMA_THREAD_STARTED:
         return
     _AMA_THREAD_STARTED = True
-    threading.Thread(target=_ama_sync_loop, name="ama-sync", daemon=True).start()
+    slots = tuple(slots) if slots else _DEFAULT_SYNC_SLOTS
+    threading.Thread(target=_ama_sync_loop, args=(slots,), name="ama-sync",
+                     daemon=True).start()
 
 
 _AMA_THREAD_STARTED = False
@@ -577,9 +670,9 @@ _AMA_THREAD_STARTED = False
 # Fuente principal: página pública www.aemet.es/es/eltiempo/prediccion/mapa_frentes
 # (sin api key). Publica el análisis como
 #   /imagenes_d/eltiempo/prediccion/mapa_frentes/{YYYYMMDDHH}+000_<sufijo>.gif
-# El sufijo no es predecible, así que se lee la página como mucho cada 30 min
-# (robots.txt permite la ruta) y, si hay un análisis nuevo, se descarga UNA vez
-# a disco y se sirve desde /analisis/{YYYYMMDDHH}.gif, igual que los SIGWX.
+# El sufijo no es predecible, así que se lee la página una vez por ciclo horario
+# del informe (robots.txt permite la ruta) y, si hay un análisis nuevo, se
+# descarga UNA vez a disco y se sirve desde /analisis/{YYYYMMDDHH}.gif.
 # Respaldo: OpenData con AEMET_API_KEY, solo si la web falla y no hay caché.
 AEMET_WEB_BASE = "https://www.aemet.es"
 _FRENTES_PAGE = f"{AEMET_WEB_BASE}/es/eltiempo/prediccion/mapa_frentes"
@@ -589,7 +682,9 @@ _FRENTES_RE = re.compile(
 _GIF_SIGNATURE = b"GIF8"
 ANALISIS_CACHE_DIR = Path(getattr(config, "ANALISIS_CACHE_DIR", "")
                           or SIGWX_CACHE_DIR.parent / "analisis")
-_ANALISIS_PAGE_TTL_S = 30 * 60
+# < 1 h: como mucho una lectura por ciclo horario aunque la pidan el informe
+# y el hilo de mapas en el mismo ciclo.
+_ANALISIS_PAGE_TTL_S = 50 * 60
 _ANALISIS_ALERT_AFTER_H = 24
 _ANALISIS_KEY_RE = re.compile(r"^\d{10}$")
 
@@ -608,7 +703,7 @@ def _analisis_cached_key() -> Optional[str]:
 
 
 def sync_analysis_cache() -> Dict[str, object]:
-    """Lee la página de frentes (máx. cada 30 min) y descarga el análisis si es nuevo."""
+    """Lee la página de frentes (máx. una vez por ciclo) y descarga el análisis si es nuevo."""
     global _ANALISIS_LAST_ALERT
     if not _ANALISIS_LOCK.acquire(blocking=False):
         return {"skipped": 1}
@@ -680,9 +775,12 @@ def get_analysis_map_display() -> Optional[str]:
     """
     Lo que el navegador pone en el <img> del mapa de análisis: nuestra ruta
     /analisis/{YYYYMMDDHH}.gif si está en caché; si no, data URI de OpenData.
+
+    Se llama al generar el informe de cada ciclo horario: antes comprueba si
+    hay un análisis nuevo (máx. una lectura de la página por ciclo gracias al
+    TTL), para que el informe no salga con el de la hora anterior.
     """
-    if _analisis_cached_key() is None:
-        sync_analysis_cache()  # p. ej. recién arrancado, antes de que pase el hilo
+    sync_analysis_cache()
     key = _analisis_cached_key()
     if key:
         return f"/analisis/{key}.gif"

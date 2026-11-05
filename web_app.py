@@ -667,7 +667,9 @@ def _cycle_warmer_loop():
 
 def _start_cycle_warmer_once():
     global _WARMER_STARTED
-    start_ama_sync_thread()  # idempotente: mantiene las cachés SIGWX y VTPLOT
+    # Idempotente: mantiene las cachés de mapas AEMET, alineado con el ciclo
+    # horario del informe (mismas horas, UPDATE_SLOTS)
+    start_ama_sync_thread(UPDATE_SLOTS)
     if _WARMER_STARTED:
         return
     with _CACHE_LOCK:
