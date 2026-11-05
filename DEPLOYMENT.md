@@ -263,8 +263,9 @@ Puedes recibir alertas en Telegram cuando la app detecta errores en las fuentes 
 | `WARNING` | `windy` | Windy responde pero sin datos horarios |
 | `WARNING` | `metar` | METAR LEAS (aeropuerto Asturias) no disponible |
 | `WARNING` | `aemet_maps` | Mapa de análisis en superficie AEMET no disponible o sin actualizar en 24 h |
-| `ERROR` | `aemet_sig_maps` | Mapa significativo de hoy/mañana sin descargar tras 6 h de retraso |
-| `ERROR` | `aemet_vtplot` | Ninguna pasada HMAR (viento/temperatura FL) nueva en 18 h |
+| `ERROR` | `aemet_sig_maps` | Mapa significativo de hoy/mañana no disponible 3 h después de su publicación |
+| `ERROR` | `aemet_vtplot` | Mapas de viento/temperatura FL sin actualizar en 9 h |
+| `WARNING` | `aemet_ama` | ✅ ama.aemet.es vuelve a responder a las descargas del servidor tras un periodo sin respuesta |
 | `WARNING` | `aemet` | Las 3 predicciones textuales de Asturias vacías a la vez |
 | `WARNING` | `ia_<modelo>` | Un modelo IA alcanza su límite de peticiones (429) |
 | `ERROR` | `ia_<modelo>` | Un modelo IA rechaza el prompt por exceso de tokens (context window) |

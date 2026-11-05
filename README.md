@@ -92,7 +92,7 @@ ama.aemet.es). No necesitan `AEMET_API_KEY`.
 | Viento y temperatura FL020/050/100 (HMAR) | `ama.aemet.es/.../atap/.../VTPLOT_FL{NNN}__.1.png` | `/vtplot/<pasada>/<nivel>/<paso>.png` | hoy y mañana, cada 3 h, pasada más reciente |
 | Análisis en superficie (frentes) | página `www.aemet.es/es/eltiempo/prediccion/mapa_frentes` | `/analisis/AAAAMMDDHH.gif` | solo el último |
 
-- Un hilo de la app revisa cada 5 min qué falta y lo descarga (~4 descargas/día de SIGWX, ~36 por pasada HMAR, la página de frentes como mucho cada 30 min).
+- Un hilo de la app descarga lo que falta **una vez por hora, alineado con el ciclo del informe** (cada hora de 06:00 a 23:00 Europe/Madrid, 1 min después de la hora en punto; de noche no hace peticiones): ~4 descargas/día de SIGWX, ~36 por pasada HMAR y una lectura de la página de frentes por ciclo.
 - Lo que ya no se muestra se borra solo: la caché ocupa unos 10 MB estables.
 - Las peticiones se identifican como `LEMR-Meteo/1.0`. Si AEMET bloquea al servidor (HTTP 403), **no** se suplanta un navegador: llega una alerta Telegram y hay que contactar con AEMET.
 - Las imágenes llevan el pie "© AEMET… citando a AEMET como autora": no recortarlo (es la condición de reutilización).
